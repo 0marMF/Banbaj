@@ -1,0 +1,21 @@
+{
+  "cliente": "486",
+  "_nota": "Rutas tomadas de los .prg. Ajustarlas si cambian. Una fuente con ruta vacía se omite.",
+  "fuentes": {
+    "DAT":          "O:\\DAT\\GPO1\\486\\DAT.DBF",
+    "PURGA":        "O:\\HISTORIA\\GPO1\\486\\PURGA.DBF",
+    "TAB7":         "O:\\DAT\\GPO1\\486\\TAB7.DBF",
+    "ETI486":       "O:\\PRG\\MEXGPO1\\ASI486\\ETI486.DBF",
+    "ETI":          "O:\\PRG\\MEXGPO1\\ASI486\\ETI.DBF",
+    "DM1":          "O:\\PRG\\MEXGPO1\\ASI486\\DM1.DBF",
+    "TOP":          "O:\\PRG\\MEXGPO1\\ASI486\\TOP.DBF",
+    "STATUS":       "O:\\PRG\\MEXGPO1\\ASI486\\STATUS.DBF",
+    "EXC486":       "O:\\PRG\\GPO1\\486\\EXC486.DBF",
+    "DIRMAL":       "O:\\ASIGNA\\DIRMAL.DBF",
+    "EMAILMALO":    "O:\\ASIGNA\\EMAILMALO.DBF",
+    "BLACKLIST":    "O:\\PRG\\MEXGPO1\\ASI486\\BLACKLIST_486.DBF",
+    "TELBAJ":       "\\\\192.168.50.108\\T\\CYBER_SISTEMAS\\CYBER\\TELEFONOS\\TELBAJ_G1.DBF",
+    "LADA":         "O:\\PRG\\MEXGPO1\\ASI486\\LADA.DBF",
+    "PNC":          "\\\\192.168.50.108\\T\\CYBER_SISTEMAS\\CYBER\\PNM\\PNC.DBF"
+  }
+}

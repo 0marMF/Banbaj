@@ -324,11 +324,11 @@ HOMOLOGACION = (
         ("DIRECC3", "LEFT(cfg.fn_solo_digitos(t.DIRECC3), 5)", "t.DIRECC3 LIKE '%[^0-9]%'", "CP sin letras", None),
         ("DIRECC3", "'0' + t.DIRECC3", "LEN(t.DIRECC3) = 4", "CP a 5 dígitos", None),
         ("DIRECC4", "REPLACE(t.DIRECC4, '\\', '')", "t.DIRECC4 LIKE '%\\%'", "Quita '\\' de la ciudad", None),
-        ("DIRECC2", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR = t.CUENTA AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
-        ("DIRECC3", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR = t.CUENTA AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
-        ("DIRECC4", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR = t.CUENTA AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
-        ("EDO", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR = t.CUENTA AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
-        ("DIRECC1", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR = t.CUENTA AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal); va al final porque DIRECC1 es parte de la condición", None),
+        ("DIRECC2", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
+        ("DIRECC3", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
+        ("DIRECC4", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
+        ("EDO", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
+        ("DIRECC1", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal); va al final porque DIRECC1 es parte de la condición", None),
     ]]
 )
 

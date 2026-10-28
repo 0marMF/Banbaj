@@ -28,13 +28,13 @@ jobs:
           echo "::add-mask::$SA"
           echo "SA=$SA" >> "$GITHUB_ENV"
           chmod -R a+rX tests/datos
-          docker run -d --name sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA" \
+          docker run -d --name sql -p 1433:1433 -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA" \
             -v "$GITHUB_WORKSPACE/tests/datos:/datos:ro" mcr.microsoft.com/mssql/server:2022-latest
           for i in $(seq 1 60); do
             docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -Q "SELECT 1" > /dev/null 2>&1 && break
             sleep 2
           done
-          docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -b -Q "CREATE DATABASE Banbaj; SELECT @@VERSION;"
+          docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -b -Q "CREATE DATABASE Banbaj; CREATE DATABASE BanbajMig; SELECT @@VERSION;"
 
       - name: Crear objetos (sql/*.sql en orden)
         run: |
@@ -42,10 +42,12 @@ jobs:
           docker cp sql sql:/tmp/sql
           docker cp tests sql:/tmp/tests
           : > resultado.txt
-          for f in $(ls sql/*.sql | sort); do
-            echo "== $f" | tee -a resultado.txt
-            docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d Banbaj -I -b -f 65001 \
-              -i "/tmp/$f" 2>&1 | tee -a resultado.txt
+          for db in Banbaj BanbajMig; do
+            for f in $(ls sql/*.sql | sort); do
+              echo "== $db $f" | tee -a resultado.txt
+              docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d $db -I -b -f 65001 \
+                -i "/tmp/$f" 2>&1 | tee -a resultado.txt
+            done
           done
 
       - name: Pruebas de punta a punta
@@ -54,6 +56,19 @@ jobs:
           echo "== tests/pruebas.sql" | tee -a resultado.txt
           docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d Banbaj -I -b -f 65001 -W -s " | " \
             -i /tmp/tests/pruebas.sql 2>&1 | tee -a resultado.txt
+
+      - name: Prueba de migración DBF -> SQL Server
+        if: always()
+        run: |
+          set -o pipefail
+          if ! odbcinst -q -d 2>/dev/null | grep -q "ODBC Driver 18"; then
+            curl -sSL -O https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
+            sudo dpkg -i packages-microsoft-prod.deb && sudo apt-get update -qq
+            sudo ACCEPT_EULA=Y apt-get install -y -qq msodbcsql18 unixodbc-dev
+          fi
+          pip install -q dbf dbfread pyodbc
+          echo "== tests/prueba_migracion.py" | tee -a resultado.txt
+          python3 tests/prueba_migracion.py "DRIVER={ODBC Driver 18 for SQL Server};SERVER=localhost,1433;DATABASE=BanbajMig;UID=sa;PWD=$SA;TrustServerCertificate=yes" 2>&1 | tee -a resultado.txt
 
       - name: Publicar resultado en la rama ci-resultados
         if: always()
