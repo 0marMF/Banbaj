@@ -37,9 +37,9 @@ GO
 /* ---------------------------------------------------------------------
    Preparación: rutas de prueba, consecutivo, DAT inicial, histórico, exclusión
    --------------------------------------------------------------------- */
-UPDATE cfg.ARCHIVO SET RUTA = '/datos/asig/', PATRON_NOMBRE = REPLACE(PATRON_NOMBRE, '.csv', '%'), CODEPAGE = '65001'
+UPDATE cfg.ARCHIVO SET RUTA = '/datos/asig/', PATRON_NOMBRE = REPLACE(PATRON_NOMBRE, '.csv', '%'), CODEPAGE = ''
 WHERE CLIENTE = '486' AND PROCESO = 'ASIG';
-UPDATE cfg.ARCHIVO SET RUTA = '/datos/act_ok/', CODEPAGE = '65001' WHERE CLIENTE = '486' AND PROCESO = 'ACT';
+UPDATE cfg.ARCHIVO SET RUTA = '/datos/act_ok/', CODEPAGE = '' WHERE CLIENTE = '486' AND PROCESO = 'ACT';
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR) VALUES ('486', 'DMSTATUS_RETIRO', 'R');
 INSERT INTO dat.FOLIO_CONSECUTIVO (CLIENTE, ULTIMO_FOLIO) VALUES ('486', 100000);
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO) VALUES ('486', 'CUENTA', '20000008', 'Prueba de exclusión');
