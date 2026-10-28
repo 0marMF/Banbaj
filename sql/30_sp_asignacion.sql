@@ -319,11 +319,11 @@ BEGIN
 
     /* Cuentas sin histórico (cargadas antes de la migración): se registra la baja */
     INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA,
-                                    MOTIVO_BAJA, ID_CORRIDA_BAJA, DATOS_BAJA)
+                                    MOTIVO_BAJA, ID_CORRIDA_BAJA, DATOS_BAJA, ID_CORRIDA_ALTA)
     SELECT @cliente, d.CUENTA, ISNULL(TRY_CONVERT(INT, d.FOLIO), 0), ISNULL(d.CUENTA2, ''), d.SEGMENTO2,
            CASE WHEN LEFT(d.SUB_CTE, 3) IN ('NVA', 'REA') THEN LEFT(d.SUB_CTE, 3) ELSE 'NVA' END, 'B',
            ISNULL(d.FE_ASIG, @fecha), @fecha, LEFT(v.MOTIVO, 60), @id_corrida,
-           (SELECT d.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+           (SELECT d.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER), 0     -- 0 = sin alta registrada (para el retroceso)
     FROM ops.DEVOLUCION v
     JOIN dat.DAT_486 d ON d.CUENTA = v.CUENTA
     WHERE v.ID_CORRIDA = @id_corrida AND v.PROCESADA = 0

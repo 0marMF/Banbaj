@@ -44,7 +44,7 @@ jobs:
           : > resultado.txt
           for f in $(ls sql/*.sql | sort); do
             echo "== $f" | tee -a resultado.txt
-            docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d Banbaj -I -b \
+            docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d Banbaj -I -b -f 65001 \
               -i "/tmp/$f" 2>&1 | tee -a resultado.txt
           done
 
@@ -52,7 +52,7 @@ jobs:
         run: |
           set -o pipefail
           echo "== tests/pruebas.sql" | tee -a resultado.txt
-          docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d Banbaj -I -b -W -s " | " \
+          docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d Banbaj -I -b -f 65001 -W -s " | " \
             -i /tmp/tests/pruebas.sql 2>&1 | tee -a resultado.txt
 
       - name: Publicar resultado en la rama ci-resultados

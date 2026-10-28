@@ -47,6 +47,7 @@ BEGIN
     EXEC ops.sp_corrida_iniciar '486', 'ASIG', @fecha, @hora_llegada, @id_corrida OUTPUT;
 
     BEGIN TRY
+        EXEC ops.sp_respaldo           @id_corrida;
         EXEC ops.sp_cargar_proceso     @id_corrida, @recibidos OUTPUT;
         EXEC ops.sp_homologar_entradas @id_corrida;
         EXEC ops.sp_validar            @id_corrida, 'POST_CARGA';
@@ -92,6 +93,7 @@ BEGIN
     EXEC ops.sp_corrida_iniciar '486', 'ACT', @fecha, @hora_llegada, @id_corrida OUTPUT;
 
     BEGIN TRY
+        EXEC ops.sp_respaldo           @id_corrida;
         EXEC ops.sp_cargar_proceso     @id_corrida, @recibidos OUTPUT;
         EXEC ops.sp_homologar_entradas @id_corrida;
         EXEC ops.sp_validar            @id_corrida, 'POST_CARGA';     -- pagos negativos (cancela), pagos a T-1 (alerta)

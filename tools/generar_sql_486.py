@@ -83,6 +83,13 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DAT_486_DES_PROD')
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DAT_486_RIESGO')
     CREATE INDEX IX_DAT_486_RIESGO ON dat.DAT_486 (RIESGO, SEGMENTO2);
 GO
+/* Copia del DAT por corrida (retroceso). Misma estructura + ID_CORRIDA_RESPALDO. */
+IF OBJECT_ID('ops.RESPALDO_DAT_486') IS NULL
+BEGIN
+    SELECT TOP (0) CAST(0 AS INT) AS ID_CORRIDA_RESPALDO, * INTO ops.RESPALDO_DAT_486 FROM dat.DAT_486;
+    CREATE CLUSTERED INDEX CX_RESPALDO_DAT_486 ON ops.RESPALDO_DAT_486 (ID_CORRIDA_RESPALDO);
+END;
+GO
 """
 
 
@@ -135,7 +142,8 @@ def tel_dom(extra_tels):
 # (CAMPO, ENCABEZADO o None si es derivado, (TIPO, TRANSFORMACION), OBLIGATORIO, ENCABEZADO_CON_FECHA, COMENTARIO)
 COLUMNAS = {
     "MAESTRA_TDC": [
-        ("CUENTA", "PRIME+4DIG", C(20), 1, False, "ACC_NUM + 4 dígitos de la tarjeta; coincide con CYBER del archivo de saldos"),
+        ("PRIME4DIG", "PRIME+4DIG", C(30), 1, False, "Base para armar la CUENTA"),
+        ("CUENTA", None, ("VARCHAR(20)", "{v}"), 0, False, "Derivado: últimos 4 dígitos de PRIME+4DIG + RFC (regla del mapeo, la aplicaba la macro)"),
         ("RIESGO", "ACC_NUM", C(35), 1, False, None),
         ("NOMBRE1", "NAME2", C(50), 0, False, None),
         ("ESTRA3", "Tipo de TDC", C(15), 0, False, None),
@@ -256,6 +264,8 @@ AI = "COLLATE Latin1_General_CI_AI"
 HOMOLOGACION = (
     [("stg.ENT_MAESTRA_TDC",) + x for x in [
         ("SEGMENTO2", "'TDC'", None, "Segmento", None),
+        ("CUENTA", "LEFT(RIGHT(LTRIM(RTRIM(t.PRIME4DIG)), 4) + LTRIM(RTRIM(ISNULL(t.RFC, ''))), 20)", None,
+         "Cuenta TDC = últimos 4 dígitos de PRIME+4DIG + RFC (regla del mapeo)", None),
         ("DES_PROD", "t.CUENTA", None, "DES_PROD = CUENTA (paso.prg)", None),
         ("GARAN", "'GARANTIZADA'", "t.GARAN = '1'", "Garantizada", "REQ 2021-024042"),
         ("GARAN", "''", "t.GARAN = '0'", "No garantizada", "REQ 2021-024042"),
@@ -346,7 +356,8 @@ REGLAS = [
 
 PARAMETROS = [
     ("PREFIJO_CUENTA2", "486-", "Prefijo de la cuenta en CYBER"),
-    ("TOPE_DEVOLUCION_PCT", "10", "PROPUESTA: si la devolución de un segmento supera este % se detiene la asignación"),
+    ("TOPE_DEVOLUCION_PCT", "", "Vacío = sin tope: la base maestra se trabaja como llega. Con un número (ej. 10) se detiene si la devolución de un segmento supera ese %"),
+    ("RESPALDOS_A_CONSERVAR", "15", "Corridas con respaldo del DAT que se conservan para retroceso"),
     ("ALERTA_NUEVAS", "100", "Más cuentas nuevas que esto dispara la alerta (aem_alerta)"),
     ("DIAS_FE_REG", "30", "FE_REG = FE_REC + días"),
     ("NEGATIVO_MODO", "ABS_LEGADO", "ABS_LEGADO (como hoy) | CERO | SIGNO. Pendiente de decidir (H-01)"),
