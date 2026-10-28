@@ -1,0 +1,76 @@
+name: Pruebas SQL
+
+on:
+  push:
+    paths:
+      - "sql/**"
+      - "tests/**"
+      - "tools/**"
+      - ".github/workflows/pruebas-sql.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Datos de prueba (ficticios)
+        run: python3 tests/generar_datos_prueba.py tests/datos
+
+      - name: Levantar SQL Server 2022
+        run: |
+          SA="Ba$(openssl rand -hex 12)!9z"
+          echo "::add-mask::$SA"
+          echo "SA=$SA" >> "$GITHUB_ENV"
+          chmod -R a+rX tests/datos
+          docker run -d --name sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA" \
+            -v "$GITHUB_WORKSPACE/tests/datos:/datos:ro" mcr.microsoft.com/mssql/server:2022-latest
+          for i in $(seq 1 60); do
+            docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -Q "SELECT 1" > /dev/null 2>&1 && break
+            sleep 2
+          done
+          docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -b -Q "CREATE DATABASE Banbaj; SELECT @@VERSION;"
+
+      - name: Crear objetos (sql/*.sql en orden)
+        run: |
+          set -o pipefail
+          docker cp sql sql:/tmp/sql
+          docker cp tests sql:/tmp/tests
+          : > resultado.txt
+          for f in $(ls sql/*.sql | sort); do
+            echo "== $f" | tee -a resultado.txt
+            docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d Banbaj -I -b \
+              -i "/tmp/$f" 2>&1 | tee -a resultado.txt
+          done
+
+      - name: Pruebas de punta a punta
+        run: |
+          set -o pipefail
+          echo "== tests/pruebas.sql" | tee -a resultado.txt
+          docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d Banbaj -I -b -W -s " | " \
+            -i /tmp/tests/pruebas.sql 2>&1 | tee -a resultado.txt
+
+      - name: Publicar resultado en la rama ci-resultados
+        if: always()
+        run: |
+          {
+            echo "commit: $GITHUB_SHA"
+            echo "fecha: $(date -u +%FT%TZ)"
+            echo "estado del job: ${{ job.status }}"
+            echo
+          } > encabezado.txt
+          cat encabezado.txt resultado.txt > final.txt 2>/dev/null || cp encabezado.txt final.txt
+          tmp=$(mktemp -d)
+          cp final.txt "$tmp/resultado.txt"
+          cd "$tmp"
+          git init -q
+          git config user.name "ci-banbaj"
+          git config user.email "ci-banbaj@users.noreply.github.com"
+          git add resultado.txt
+          git commit -q -m "Resultado de pruebas para $GITHUB_SHA"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:ci-resultados
