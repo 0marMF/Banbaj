@@ -20,7 +20,7 @@ def escribir(ruta, encabezados, filas):
     ruta.parent.mkdir(parents=True, exist_ok=True)
     # SQL Server en Linux no admite CODEPAGE en BULK INSERT y lee los archivos como OEM (437; no tiene Ó mayúscula).
     # En producción (Windows) los CSV de Excel vienen en Windows-1252 y se leen con CODEPAGE='ACP'.
-    with open(ruta, "w", encoding="cp437", newline="") as f:
+    with open(ruta, "w", encoding="cp437", errors="replace", newline="") as f:
         w = csv.writer(f, lineterminator="\n")
         w.writerow(encabezados)
         for fila in filas:
