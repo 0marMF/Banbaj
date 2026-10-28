@@ -105,6 +105,14 @@ def main(destino):
     escribir(destino / "act_neg" / "SERTEC_Pagos.csv", pagos_h, [
         {"CREDITO": "20000001", "IMPORTE": "-100.00", "FECHA": "2026-11-02", "TRX": "AJUSTE", "EMPRESA": "CONSUMO", "DESPACHO": "SERTEC"},
     ])
+    # Etiquetas TOP que comparte Operación: folio + etiqueta
+    escribir(destino / "etiquetas" / "TOP.csv", ["FOLIO", "ETIQUETA"], [
+        {"FOLIO": "100001", "ETIQUETA": "REE"},
+        {"FOLIO": "486-100003", "ETIQUETA": "REE"},
+        {"FOLIO": "999999", "ETIQUETA": "REE"},
+        {"FOLIO": "100002", "ETIQUETA": ""},
+        {"FOLIO": "100001", "ETIQUETA": "REE"},
+    ])
     print("datos de prueba en", destino)
 
 

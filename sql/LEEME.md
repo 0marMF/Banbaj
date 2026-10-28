@@ -15,6 +15,7 @@ Requiere SQL Server 2017 o superior y Database Mail configurado.
 | `10_funciones.sql` | Limpieza de importes y fechas, formato de ancho fijo, CP → estado |
 | `20_sp_comunes.sql` | Corrida, bitácora, carga dinámica de archivos, homologación, validación |
 | `25_sp_correo.sql` | Envío de correo dinámico y alta / baja de destinatarios |
+| `27_sp_etiquetas.sql` | Carga de etiquetas externas (TOP: folio + etiqueta de Operación) |
 | `30_sp_asignacion.sql` | Unión de bases, devolución, existentes, folios y alta, retiro |
 | `35_sp_respaldo.sql` | Respaldo del DAT por corrida y retroceso (`ops.sp_revertir_corrida`) |
 | `40_sp_actualizacion.sql` | Saldos, scripts para CYBER, pagos |
@@ -53,6 +54,19 @@ Exportar los archivos (paso de SQL Agent tipo CmdExec):
 bcp "SELECT LINEA FROM Banbaj.ops.SALIDA_LINEA WHERE ID_CORRIDA = 123 AND ARCHIVO = 'SCBSDOS' ORDER BY NUM" queryout SCBSDOS.TXT -c -C 1252 -T -S <servidor>
 bcp "SELECT SENTENCIA FROM Banbaj.ops.CYBER_SCRIPT WHERE ID_CORRIDA = 123 AND SCRIPT = 'ACT_SALDOS' ORDER BY NUM" queryout act486.sql -c -C 1252 -T -S <servidor>
 ```
+
+## Etiquetas TOP
+
+Operación comparte folio y etiqueta; Asignaciones las carga:
+
+```sql
+EXEC cfg.sp_etiqueta_cargar '486', 'TOP', 'D:\Banbaj\486\etiquetas\TOP.csv';   -- CSV FOLIO,ETIQUETA; reemplaza la lista
+EXEC cfg.sp_etiqueta_cargar '486', 'TOP', 'D:\Banbaj\486\etiquetas\TOP.csv', 'AGREGAR';
+EXEC cfg.sp_etiqueta_alta '486', 'TOP', '100146', 'REE';      -- folio con o sin '486-'
+EXEC cfg.sp_etiqueta_baja '486', 'TOP', '100146';
+```
+
+La salida SCBSDOS toma la etiqueta en U1EXT2 por CUENTA2 (`486-` + folio).
 
 ## Listas de correo
 

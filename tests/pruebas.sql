@@ -198,6 +198,30 @@ FROM (SELECT N'SCBSDOS: U1MINASIG con signo' AS p, CAST(N'000000000400.00' AS NV
 GO
 
 /* ---------------------------------------------------------------------
+   ETIQUETAS TOP (las alimenta Asignaciones con folio + etiqueta de Operación)
+   --------------------------------------------------------------------- */
+DECLARE @r TABLE (TIPO VARCHAR(20), MODO VARCHAR(10), LEIDOS INT, CARGADOS INT, SIN_DATO INT, REPETIDOS INT, NO_DAT INT);
+INSERT INTO @r EXEC cfg.sp_etiqueta_cargar '486', 'TOP', '/datos/etiquetas/TOP.csv', 'REEMPLAZAR', 'FOLIO', '';
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'TOP: leídos|cargados|sin dato|repetidos|fuera del DAT' AS p, N'5|3|1|1|1' AS e,
+             (SELECT CONCAT(LEIDOS, '|', CARGADOS, '|', SIN_DATO, '|', REPETIDOS, '|', NO_DAT) FROM @r) AS o) x;
+
+DECLARE @id INT = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ASIG' AND ESTATUS = 'OK');
+EXEC ops.sp_generar_salida @id, 'SCBSDOS';
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'TOP: U1EXT2 en SCBSDOS por folio (con y sin 486-)' AS p, N'REE|REE|' AS e,
+             CONCAT((SELECT pru.fn_campo(LINEA, 'U1EXT2') FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS' AND LINEA LIKE N'____486-100001 %'), '|',
+                    (SELECT pru.fn_campo(LINEA, 'U1EXT2') FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS' AND LINEA LIKE N'____486-100003 %'), '|',
+                    (SELECT pru.fn_campo(LINEA, 'U1EXT2') FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS' AND LINEA LIKE N'____486-100002 %')) AS o) x;
+
+EXEC cfg.sp_etiqueta_baja '486', 'TOP', '100003';
+EXEC cfg.sp_etiqueta_alta '486', 'TOP', '486-100002', 'REE';
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'TOP: baja y alta sueltas' AS p, N'486-100001,486-100002,486-999999' AS e,
+             (SELECT STRING_AGG(LLAVE, ',') WITHIN GROUP (ORDER BY LLAVE) FROM cfg.ETIQUETA WHERE TIPO = 'TOP' AND ACTIVO = 1) AS o) x;
+GO
+
+/* ---------------------------------------------------------------------
    ACTUALIZACIÓN: saldos, pagos y retiros
    --------------------------------------------------------------------- */
 DECLARE @id INT;
