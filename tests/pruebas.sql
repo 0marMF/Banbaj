@@ -18,7 +18,7 @@ CREATE OR ALTER PROCEDURE pru.sp_igual @prueba NVARCHAR(200), @esperado NVARCHAR
 AS
 BEGIN
     DECLARE @ok BIT = CASE WHEN @esperado = @obtenido OR (@esperado IS NULL AND @obtenido IS NULL) THEN 1 ELSE 0 END;
-    EXEC pru.sp_ok @prueba, @ok, CONCAT(N'esperado=[', @esperado, N'] obtenido=[', @obtenido, N']');
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT @prueba, ISNULL(@ok, 0), CAST(CONCAT(N'esperado=[', @esperado, N'] obtenido=[', @obtenido, N']') AS NVARCHAR(4000));
 END;
 GO
 /* Campo de una línea de salida por nombre */
@@ -74,15 +74,24 @@ GO
 /* ---------------------------------------------------------------------
    Funciones
    --------------------------------------------------------------------- */
-EXEC pru.sp_igual N'fn_importe con $ y miles', N'1234.50', CONVERT(NVARCHAR(30), cfg.fn_importe(N'$1,234.50'));
-EXEC pru.sp_igual N'fn_importe cero contable de Excel', N'0.00', CONVERT(NVARCHAR(30), cfg.fn_importe(N' -   '));
-EXEC pru.sp_igual N'fn_importe con espacios', N'12345.67', CONVERT(NVARCHAR(30), cfg.fn_importe(N' 12,345.67 '));
-EXEC pru.sp_igual N'fn_importe inválido -> NULL', NULL, CONVERT(NVARCHAR(30), cfg.fn_importe(N'abc'));
-EXEC pru.sp_igual N'fn_fecha AAAA-MM-DD con hora', N'2026-10-25', CONVERT(NVARCHAR(10), cfg.fn_fecha(N'2026-10-25 00:00:00.0', 'AAAA-MM-DD'), 23);
-EXEC pru.sp_igual N'fn_fecha AAAAMMDD', N'2026-11-02', CONVERT(NVARCHAR(10), cfg.fn_fecha(N'20261102', 'AAAAMMDD'), 23);
-EXEC pru.sp_igual N'fn_pad_importe legado (negativo sale positivo)', N'000000000012.50', cfg.fn_pad_importe(-12.50, 15, 'ABS_LEGADO');
-EXEC pru.sp_igual N'fn_pad_importe con signo', N'-00000000012.50', cfg.fn_pad_importe(-12.50, 15, 'SIGNO');
-EXEC pru.sp_igual N'fn_cp_estado', N'GTO', cfg.fn_cp_estado('37236');
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'fn_importe con $ y miles' AS p, CAST(N'1234.50' AS NVARCHAR(4000)) AS e, CAST(CONVERT(NVARCHAR(30), cfg.fn_importe(N'$1,234.50')) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'fn_importe cero contable de Excel' AS p, CAST(N'0.00' AS NVARCHAR(4000)) AS e, CAST(CONVERT(NVARCHAR(30), cfg.fn_importe(N' -   ')) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'fn_importe con espacios' AS p, CAST(N'12345.67' AS NVARCHAR(4000)) AS e, CAST(CONVERT(NVARCHAR(30), cfg.fn_importe(N' 12,345.67 ')) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'fn_importe inválido -> NULL' AS p, CAST(NULL AS NVARCHAR(4000)) AS e, CAST(CONVERT(NVARCHAR(30), cfg.fn_importe(N'abc')) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'fn_fecha AAAA-MM-DD con hora' AS p, CAST(N'2026-10-25' AS NVARCHAR(4000)) AS e, CAST(CONVERT(NVARCHAR(10), cfg.fn_fecha(N'2026-10-25 00:00:00.0', 'AAAA-MM-DD'), 23) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'fn_fecha AAAAMMDD' AS p, CAST(N'2026-11-02' AS NVARCHAR(4000)) AS e, CAST(CONVERT(NVARCHAR(10), cfg.fn_fecha(N'20261102', 'AAAAMMDD'), 23) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'fn_pad_importe legado (negativo sale positivo)' AS p, CAST(N'000000000012.50' AS NVARCHAR(4000)) AS e, CAST(cfg.fn_pad_importe(-12.50, 15, 'ABS_LEGADO') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'fn_pad_importe con signo' AS p, CAST(N'-00000000012.50' AS NVARCHAR(4000)) AS e, CAST(cfg.fn_pad_importe(-12.50, 15, 'SIGNO') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'fn_cp_estado' AS p, CAST(N'GTO' AS NVARCHAR(4000)) AS e, CAST(cfg.fn_cp_estado('37236') AS NVARCHAR(4000)) AS o) x;
 GO
 
 /* ---------------------------------------------------------------------
@@ -92,16 +101,16 @@ DECLARE @r TABLE (PARA NVARCHAR(MAX), CC NVARCHAR(MAX), CCO NVARCHAR(MAX), ASUNT
 INSERT INTO @r EXEC mail.sp_enviar @plantilla = 'PAGOS_NO_ACTUALIZADOS_486', @solo_prueba = 1;
 DECLARE @para NVARCHAR(MAX), @cco NVARCHAR(MAX), @cuerpo NVARCHAR(MAX);
 SELECT @para = PARA, @cco = CCO, @cuerpo = CUERPO_HTML FROM @r;
-EXEC pru.sp_ok N'Correo: TO armado desde la tabla', CASE WHEN @para LIKE N'%erika.ramos@sertec.com.mx%' THEN 1 ELSE 0 END, @para;
-EXEC pru.sp_ok N'Correo: BCC armado desde la tabla', CASE WHEN @cco LIKE N'%asig.cdmx@sertec.com.mx%' THEN 1 ELSE 0 END, @cco;
-EXEC pru.sp_ok N'Correo: firma y aviso insertados', CASE WHEN @cuerpo NOT LIKE N'%{{%' AND @cuerpo LIKE N'%SERTEC%' THEN 1 ELSE 0 END, LEFT(@cuerpo, 300);
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Correo: TO armado desde la tabla', ISNULL(CASE WHEN @para LIKE N'%erika.ramos@sertec.com.mx%' THEN 1 ELSE 0 END, 0), CAST(@para AS NVARCHAR(4000));
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Correo: BCC armado desde la tabla', ISNULL(CASE WHEN @cco LIKE N'%asig.cdmx@sertec.com.mx%' THEN 1 ELSE 0 END, 0), CAST(@cco AS NVARCHAR(4000));
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Correo: firma y aviso insertados', ISNULL(CASE WHEN @cuerpo NOT LIKE N'%{{%' AND @cuerpo LIKE N'%SERTEC%' THEN 1 ELSE 0 END, 0), CAST(LEFT(@cuerpo, 300) AS NVARCHAR(4000));
 
 EXEC mail.sp_destinatario_alta 'PAGOS_NO_ACTUALIZADOS_486', 'Nuevo.Correo@Sertec.com.mx', 'CC';
-EXEC pru.sp_igual N'Correo: alta de destinatario', N'nuevo.correo@sertec.com.mx',
-     (SELECT CC FROM mail.v_LISTA_RESUELTA WHERE LISTA = 'PAGOS_NO_ACTUALIZADOS_486');
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'Correo: alta de destinatario' AS p, CAST(N'nuevo.correo@sertec.com.mx' AS NVARCHAR(4000)) AS e, CAST((SELECT CC FROM mail.v_LISTA_RESUELTA WHERE LISTA = 'PAGOS_NO_ACTUALIZADOS_486') AS NVARCHAR(4000)) AS o) x;
 EXEC mail.sp_destinatario_baja 'PAGOS_NO_ACTUALIZADOS_486', 'nuevo.correo@sertec.com.mx';
-EXEC pru.sp_igual N'Correo: baja de destinatario', NULL,
-     (SELECT CC FROM mail.v_LISTA_RESUELTA WHERE LISTA = 'PAGOS_NO_ACTUALIZADOS_486');
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'Correo: baja de destinatario' AS p, CAST(NULL AS NVARCHAR(4000)) AS e, CAST((SELECT CC FROM mail.v_LISTA_RESUELTA WHERE LISTA = 'PAGOS_NO_ACTUALIZADOS_486') AS NVARCHAR(4000)) AS o) x;
 GO
 
 /* ---------------------------------------------------------------------
@@ -110,14 +119,16 @@ GO
 DECLARE @id INT;
 BEGIN TRY
     EXEC ops.sp_asignacion_486 @fecha = '2026-11-02', @hora_llegada = '09:15', @id_corrida = @id OUTPUT;
-    EXEC pru.sp_ok N'Asignación con devolución masiva debe detenerse', 0, N'No se detuvo';
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Asignación con devolución masiva debe detenerse', ISNULL(0, 0), CAST(N'No se detuvo' AS NVARCHAR(4000));
 END TRY
 BEGIN CATCH
-    EXEC pru.sp_igual N'Asignación con devolución masiva: error 50100', N'50100', CAST(ERROR_NUMBER() AS NVARCHAR(10));
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+    FROM (SELECT N'Asignación con devolución masiva: error 50100' AS p, CAST(N'50100' AS NVARCHAR(4000)) AS e, CAST(CAST(ERROR_NUMBER() AS NVARCHAR(10)) AS NVARCHAR(4000)) AS o) x;
 END CATCH;
-EXEC pru.sp_igual N'Asignación cancelada: estatus de la corrida', N'CANCELADA',
-     (SELECT TOP (1) ESTATUS FROM ops.CORRIDA WHERE PROCESO = 'ASIG' ORDER BY ID_CORRIDA DESC);
-EXEC pru.sp_igual N'Asignación cancelada: el DAT no cambió', N'5', (SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.DAT_486);
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'Asignación cancelada: estatus de la corrida' AS p, CAST(N'CANCELADA' AS NVARCHAR(4000)) AS e, CAST((SELECT TOP (1) ESTATUS FROM ops.CORRIDA WHERE PROCESO = 'ASIG' ORDER BY ID_CORRIDA DESC) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'Asignación cancelada: el DAT no cambió' AS p, CAST(N'5' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.DAT_486) AS NVARCHAR(4000)) AS o) x;
 GO
 
 /* ---------------------------------------------------------------------
@@ -127,54 +138,61 @@ DECLARE @id INT;
 BEGIN TRY
     EXEC ops.sp_asignacion_486 @fecha = '2026-11-02', @hora_llegada = '09:15', @forzar_devolucion = 1, @aplicar_retiro = 1,
          @id_corrida = @id OUTPUT;
-    EXEC pru.sp_ok N'Asignación forzada termina OK', 1;
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Asignación forzada termina OK', ISNULL(1, 0), CAST(NULL AS NVARCHAR(4000));
 END TRY
 BEGIN CATCH
-    EXEC pru.sp_ok N'Asignación forzada termina OK', 0, ERROR_MESSAGE();
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Asignación forzada termina OK', ISNULL(0, 0), CAST(ERROR_MESSAGE() AS NVARCHAR(4000));
 END CATCH;
 SET @id = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ASIG');
 
-EXEC pru.sp_igual N'ASIG: archivos cargados', N'2',
-     (SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.ARCHIVO_CARGADO WHERE ID_CORRIDA = @id AND ESTATUS = 'CARGADO');
-EXEC pru.sp_ok N'ASIG: rechazo por saldo inválido (abc)',
-     CASE WHEN EXISTS (SELECT 1 FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'MAESTRA_TDC' AND MOTIVO LIKE N'%SDO_ACT%') THEN 1 ELSE 0 END;
-EXEC pru.sp_ok N'ASIG: rechazo por cuenta duplicada',
-     CASE WHEN EXISTS (SELECT 1 FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND MOTIVO LIKE N'%duplicada%') THEN 1 ELSE 0 END;
-EXEC pru.sp_ok N'ASIG: cuenta excluida (exc486)',
-     CASE WHEN EXISTS (SELECT 1 FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'EXCLUSION_CUENTAS')
-           AND NOT EXISTS (SELECT 1 FROM dat.DAT_486 WHERE CUENTA = '20000008') THEN 1 ELSE 0 END;
-EXEC pru.sp_ok N'ASIG: alerta por saldo <= 0 en Consumo',
-     CASE WHEN EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'SDO_ACT_CONSUMO_CERO') THEN 1 ELSE 0 END;
-EXEC pru.sp_igual N'ASIG: devoluciones por segmento (T2 y C2)', N'10000000022222,20000002',
-     (SELECT STRING_AGG(CUENTA, ',') WITHIN GROUP (ORDER BY CUENTA) FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id);
-EXEC pru.sp_igual N'ASIG: DAT final (3 existentes + 4 NVA + 1 REA)', N'8', (SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.DAT_486);
-EXEC pru.sp_igual N'ASIG: folios NVA consecutivos', N'20000004:100001,20000005:100002,10000000033333:100003,10000000044444:100004',
-     (SELECT STRING_AGG(CONCAT(CUENTA, ':', FOLIO), ',') WITHIN GROUP (ORDER BY FOLIO) FROM dat.DAT_486 WHERE SUB_CTE = 'NVA' AND ID_CORRIDA_ALTA = @id);
-EXEC pru.sp_igual N'ASIG: consecutivo actualizado', N'100004', (SELECT CAST(ULTIMO_FOLIO AS NVARCHAR(10)) FROM dat.FOLIO_CONSECUTIVO WHERE CLIENTE = '486');
-EXEC pru.sp_igual N'ASIG: REA reutiliza folio del histórico', N'REA|486-500', (SELECT CONCAT(SUB_CTE, '|', CUENTA2) FROM dat.DAT_486 WHERE CUENTA = '20000009');
-EXEC pru.sp_igual N'ASIG: existente actualiza teléfono y etiqueta', N'5599999999|MORA 2', (SELECT CONCAT(TEL1, '|', ETIQUETA1) FROM dat.DAT_486 WHERE CUENTA = '10000000011111');
-EXEC pru.sp_igual N'ASIG: existente sin cambios no se toca', NULL, (SELECT CAST(ID_CORRIDA_ULT AS NVARCHAR(10)) FROM dat.DAT_486 WHERE CUENTA = '20000003');
-EXEC pru.sp_igual N'ASIG: TDC saldo <= 0 toma SDO_VDO y TIPO por tramo', N'750.00|TDC_VEN',
-     (SELECT CONCAT(SDO_ACT, '|', TIPO) FROM dat.DAT_486 WHERE CUENTA = '10000000033333');
-EXEC pru.sp_igual N'ASIG: TDC castigada', N'TDC_CAS', (SELECT TIPO FROM dat.DAT_486 WHERE CUENTA = '10000000044444');
-EXEC pru.sp_igual N'ASIG: Consumo importe con $, CP de 4 dígitos, homologación', N'1234.50|06600|NOMINA|NOMINA_VIG|400.00',
-     (SELECT CONCAT(SDO_ACT, '|', DIRECC3, '|', ESTRA3, '|', TIPO, '|', SALDO3) FROM dat.DAT_486 WHERE CUENTA = '20000004');
-EXEC pru.sp_igual N'ASIG: histórico de bajas (retiro)', N'2',
-     (SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.HISTORIA_FOLIO WHERE ID_CORRIDA_BAJA = @id AND ESTATUS = 'B' AND DATOS_BAJA IS NOT NULL);
-EXEC pru.sp_igual N'ASIG: script de retiro para CYBER', N'update RCVRY.delqmst set dmstatus=''R'' where dmacctg=''1'' and dmacct=''486-101'';',
-     (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'RETIRO' AND NUM = 1);
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: archivos cargados' AS p, CAST(N'2' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.ARCHIVO_CARGADO WHERE ID_CORRIDA = @id AND ESTATUS = 'CARGADO') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'ASIG: rechazo por saldo inválido (abc)', ISNULL(CASE WHEN EXISTS (SELECT 1 FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'MAESTRA_TDC' AND MOTIVO LIKE N'%SDO_ACT%') THEN 1 ELSE 0 END, 0), CAST(NULL AS NVARCHAR(4000));
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'ASIG: rechazo por cuenta duplicada', ISNULL(CASE WHEN EXISTS (SELECT 1 FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND MOTIVO LIKE N'%duplicada%') THEN 1 ELSE 0 END, 0), CAST(NULL AS NVARCHAR(4000));
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'ASIG: cuenta excluida (exc486)', ISNULL(CASE WHEN EXISTS (SELECT 1 FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'EXCLUSION_CUENTAS')
+           AND NOT EXISTS (SELECT 1 FROM dat.DAT_486 WHERE CUENTA = '20000008') THEN 1 ELSE 0 END, 0), CAST(NULL AS NVARCHAR(4000));
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'ASIG: alerta por saldo <= 0 en Consumo', ISNULL(CASE WHEN EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'SDO_ACT_CONSUMO_CERO') THEN 1 ELSE 0 END, 0), CAST(NULL AS NVARCHAR(4000));
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: devoluciones por segmento (T2 y C2)' AS p, CAST(N'10000000022222,20000002' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(CUENTA, ',') WITHIN GROUP (ORDER BY CUENTA) FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: DAT final (3 existentes + 4 NVA + 1 REA)' AS p, CAST(N'8' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.DAT_486) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: folios NVA consecutivos' AS p, CAST(N'20000004:100001,20000005:100002,10000000033333:100003,10000000044444:100004' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(CONCAT(CUENTA, ':', FOLIO), ',') WITHIN GROUP (ORDER BY FOLIO) FROM dat.DAT_486 WHERE SUB_CTE = 'NVA' AND ID_CORRIDA_ALTA = @id) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: consecutivo actualizado' AS p, CAST(N'100004' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(ULTIMO_FOLIO AS NVARCHAR(10)) FROM dat.FOLIO_CONSECUTIVO WHERE CLIENTE = '486') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: REA reutiliza folio del histórico' AS p, CAST(N'REA|486-500' AS NVARCHAR(4000)) AS e, CAST((SELECT CONCAT(SUB_CTE, '|', CUENTA2) FROM dat.DAT_486 WHERE CUENTA = '20000009') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: existente actualiza teléfono y etiqueta' AS p, CAST(N'5599999999|MORA 2' AS NVARCHAR(4000)) AS e, CAST((SELECT CONCAT(TEL1, '|', ETIQUETA1) FROM dat.DAT_486 WHERE CUENTA = '10000000011111') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: existente sin cambios no se toca' AS p, CAST(NULL AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(ID_CORRIDA_ULT AS NVARCHAR(10)) FROM dat.DAT_486 WHERE CUENTA = '20000003') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: TDC saldo <= 0 toma SDO_VDO y TIPO por tramo' AS p, CAST(N'750.00|TDC_VEN' AS NVARCHAR(4000)) AS e, CAST((SELECT CONCAT(SDO_ACT, '|', TIPO) FROM dat.DAT_486 WHERE CUENTA = '10000000033333') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: TDC castigada' AS p, CAST(N'TDC_CAS' AS NVARCHAR(4000)) AS e, CAST((SELECT TIPO FROM dat.DAT_486 WHERE CUENTA = '10000000044444') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: Consumo importe con $, CP de 4 dígitos, homologación' AS p, CAST(N'1234.50|06600|NOMINA|NOMINA_VIG|400.00' AS NVARCHAR(4000)) AS e, CAST((SELECT CONCAT(SDO_ACT, '|', DIRECC3, '|', ESTRA3, '|', TIPO, '|', SALDO3) FROM dat.DAT_486 WHERE CUENTA = '20000004') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: histórico de bajas (retiro)' AS p, CAST(N'2' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.HISTORIA_FOLIO WHERE ID_CORRIDA_BAJA = @id AND ESTATUS = 'B' AND DATOS_BAJA IS NOT NULL) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: script de retiro para CYBER' AS p, CAST(N'update RCVRY.delqmst set dmstatus=''R'' where dmacctg=''1'' and dmacct=''486-101'';' AS NVARCHAR(4000)) AS e, CAST((SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'RETIRO' AND NUM = 1) AS NVARCHAR(4000)) AS o) x;
 
 DECLARE @lin NVARCHAR(4000) = (SELECT l.LINEA FROM ops.SALIDA_LINEA l WHERE l.ID_CORRIDA = @id AND l.ARCHIVO = 'SCBSDOS'
                                AND l.LINEA LIKE N'____486-100001 %');
-EXEC pru.sp_igual N'SCBSDOS: líneas generadas', N'8',
-     (SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS');
-EXEC pru.sp_igual N'SCBSDOS: todas miden 1559', N'0',
-     (SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS' AND DATALENGTH(LINEA) / 2 <> 1559));
-EXEC pru.sp_igual N'SCBSDOS: DMCURBAL', N'000000001234.50', pru.fn_campo(@lin, 'DMCURBAL');
-EXEC pru.sp_igual N'SCBSDOS: DMZIP y DMSTATE', N'06600|CDMX', CONCAT(pru.fn_campo(@lin, 'DMZIP'), '|', pru.fn_campo(@lin, 'DMSTATE'));
-EXEC pru.sp_igual N'SCBSDOS: U1ASIGDTE MMDDAAAA', N'11022026', pru.fn_campo(@lin, 'U1ASIGDTE');
-EXEC pru.sp_igual N'SCBSDOS: U1FTECAR y DMCOMPANY', N'BANCO BAJIO|486', CONCAT(pru.fn_campo(@lin, 'U1FTECAR'), '|', pru.fn_campo(@lin, 'DMCOMPANY'));
-EXEC pru.sp_igual N'SCBSDOS: U1MINASIG con signo', N'000000000400.00', pru.fn_campo(@lin, 'U1MINASIG');
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'SCBSDOS: líneas generadas' AS p, CAST(N'8' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'SCBSDOS: todas miden 1559' AS p, CAST(N'0' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS' AND DATALENGTH(LINEA) / 2 <> 1559)) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'SCBSDOS: DMCURBAL' AS p, CAST(N'000000001234.50' AS NVARCHAR(4000)) AS e, CAST(pru.fn_campo(@lin, 'DMCURBAL') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'SCBSDOS: DMZIP y DMSTATE' AS p, CAST(N'06600|CDMX' AS NVARCHAR(4000)) AS e, CAST(CONCAT(pru.fn_campo(@lin, 'DMZIP'), '|', pru.fn_campo(@lin, 'DMSTATE')) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'SCBSDOS: U1ASIGDTE MMDDAAAA' AS p, CAST(N'11022026' AS NVARCHAR(4000)) AS e, CAST(pru.fn_campo(@lin, 'U1ASIGDTE') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'SCBSDOS: U1FTECAR y DMCOMPANY' AS p, CAST(N'BANCO BAJIO|486' AS NVARCHAR(4000)) AS e, CAST(CONCAT(pru.fn_campo(@lin, 'U1FTECAR'), '|', pru.fn_campo(@lin, 'DMCOMPANY')) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'SCBSDOS: U1MINASIG con signo' AS p, CAST(N'000000000400.00' AS NVARCHAR(4000)) AS e, CAST(pru.fn_campo(@lin, 'U1MINASIG') AS NVARCHAR(4000)) AS o) x;
 GO
 
 /* ---------------------------------------------------------------------
@@ -183,33 +201,32 @@ GO
 DECLARE @id INT;
 BEGIN TRY
     EXEC ops.sp_actualizacion_486 @fecha = '2026-11-03', @aplicar_retiro = 1, @id_corrida = @id OUTPUT;
-    EXEC pru.sp_ok N'Actualización termina OK', 1;
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Actualización termina OK', ISNULL(1, 0), CAST(NULL AS NVARCHAR(4000));
 END TRY
 BEGIN CATCH
-    EXEC pru.sp_ok N'Actualización termina OK', 0, ERROR_MESSAGE();
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Actualización termina OK', ISNULL(0, 0), CAST(ERROR_MESSAGE() AS NVARCHAR(4000));
 END CATCH;
 SET @id = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ACT');
 
-EXEC pru.sp_ok N'ACT: no hay alerta de pagos T-1 (sí vienen pagos de ayer)',
-     CASE WHEN NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'PAGOS_T1') THEN 1 ELSE 0 END;
-EXEC pru.sp_ok N'ACT: saldo de cuenta que no está en el DAT va a rechazos',
-     CASE WHEN EXISTS (SELECT 1 FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'SALDOS_TDC' AND MOTIVO LIKE N'%DAT%') THEN 1 ELSE 0 END;
-EXEC pru.sp_igual N'ACT: devoluciones (T1 NORM, C3 tramo 0, C4 saldo 0, C5 DAT en 0)', N'10000000011111,20000003,20000004,20000005',
-     (SELECT STRING_AGG(CUENTA, ',') WITHIN GROUP (ORDER BY CUENTA) FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id);
-EXEC pru.sp_igual N'ACT: Consumo actualizado (saldo con miles, vencido, PVS)', N'12345.67|2000.00|120|90+',
-     (SELECT CONCAT(SDO_ACT, '|', SDO_VDO, '|', PVS, '|', SEG) FROM dat.DAT_486 WHERE CUENTA = '20000001');
-EXEC pru.sp_igual N'ACT: TDC actualiza saldo y conserva SDO_VDO (el archivo no lo trae)', N'900.50|750.00|VEN4',
-     (SELECT CONCAT(SDO_ACT, '|', SDO_VDO, '|', SEG) FROM dat.DAT_486 WHERE CUENTA = '10000000033333');
-EXEC pru.sp_igual N'ACT: script DMCURBAL', N'update RCVRY.delqmst set DMCURBAL=''000000012345.67'' ,dmbphone=''90+'' Where dmacctg=''1'' And dmacct=''486-102'';',
-     (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'ACT_SALDOS' AND SENTENCIA LIKE N'%486-102''%'));
-EXEC pru.sp_igual N'ACT: dmamtdlq solo para quien trae vencido (3 + commit + exit)', N'5',
-     (SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'ACT_VENCIDO');
-EXEC pru.sp_igual N'ACT: cada script termina en commit y exit', N'commit;|exit;',
-     (SELECT STRING_AGG(SENTENCIA, '|') WITHIN GROUP (ORDER BY NUM) FROM (SELECT TOP (2) SENTENCIA, NUM FROM ops.CYBER_SCRIPT
-      WHERE ID_CORRIDA = @id AND SCRIPT = 'ACT_PAGMIN' ORDER BY NUM DESC) x);
-EXEC pru.sp_igual N'ACT: pagos nuevos (duplicado y crédito inexistente fuera)', N'486-100001:500.00,486-102:1000.00',
-     (SELECT STRING_AGG(CONCAT(CUENTA2, ':', IMPORTE), ',') WITHIN GROUP (ORDER BY CUENTA2) FROM ops.PAGO WHERE ID_CORRIDA = @id);
-EXEC pru.sp_igual N'ACT: DAT después del retiro', N'4', (SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.DAT_486);
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'ACT: no hay alerta de pagos T-1 (sí vienen pagos de ayer)', ISNULL(CASE WHEN NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'PAGOS_T1') THEN 1 ELSE 0 END, 0), CAST(NULL AS NVARCHAR(4000));
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'ACT: saldo de cuenta que no está en el DAT va a rechazos', ISNULL(CASE WHEN EXISTS (SELECT 1 FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'SALDOS_TDC' AND MOTIVO LIKE N'%DAT%') THEN 1 ELSE 0 END, 0), CAST(NULL AS NVARCHAR(4000));
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ACT: devoluciones (T1 NORM, C3 tramo 0, C4 saldo 0, C5 DAT en 0)' AS p, CAST(N'10000000011111,20000003,20000004,20000005' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(CUENTA, ',') WITHIN GROUP (ORDER BY CUENTA) FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ACT: Consumo actualizado (saldo con miles, vencido, PVS)' AS p, CAST(N'12345.67|2000.00|120|90+' AS NVARCHAR(4000)) AS e, CAST((SELECT CONCAT(SDO_ACT, '|', SDO_VDO, '|', PVS, '|', SEG) FROM dat.DAT_486 WHERE CUENTA = '20000001') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ACT: TDC actualiza saldo y conserva SDO_VDO (el archivo no lo trae)' AS p, CAST(N'900.50|750.00|VEN4' AS NVARCHAR(4000)) AS e, CAST((SELECT CONCAT(SDO_ACT, '|', SDO_VDO, '|', SEG) FROM dat.DAT_486 WHERE CUENTA = '10000000033333') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ACT: script DMCURBAL' AS p, CAST(N'update RCVRY.delqmst set DMCURBAL=''000000012345.67'' ,dmbphone=''90+'' Where dmacctg=''1'' And dmacct=''486-102'';' AS NVARCHAR(4000)) AS e, CAST((SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'ACT_SALDOS' AND SENTENCIA LIKE N'%486-102''%')) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ACT: dmamtdlq solo para quien trae vencido (3 + commit + exit)' AS p, CAST(N'5' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'ACT_VENCIDO') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ACT: cada script termina en commit y exit' AS p, CAST(N'commit;|exit;' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(SENTENCIA, '|') WITHIN GROUP (ORDER BY NUM) FROM (SELECT TOP (2) SENTENCIA, NUM FROM ops.CYBER_SCRIPT
+      WHERE ID_CORRIDA = @id AND SCRIPT = 'ACT_PAGMIN' ORDER BY NUM DESC) x) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ACT: pagos nuevos (duplicado y crédito inexistente fuera)' AS p, CAST(N'486-100001:500.00,486-102:1000.00' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(CONCAT(CUENTA2, ':', IMPORTE), ',') WITHIN GROUP (ORDER BY CUENTA2) FROM ops.PAGO WHERE ID_CORRIDA = @id) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ACT: DAT después del retiro' AS p, CAST(N'4' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.DAT_486) AS NVARCHAR(4000)) AS o) x;
 GO
 
 /* Segunda actualización con los mismos pagos: no se duplican */
@@ -218,9 +235,10 @@ BEGIN TRY
     EXEC ops.sp_actualizacion_486 @fecha = '2026-11-03', @id_corrida = @id OUTPUT;
 END TRY
 BEGIN CATCH
-    EXEC pru.sp_ok N'Segunda actualización termina OK', 0, ERROR_MESSAGE();
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Segunda actualización termina OK', ISNULL(0, 0), CAST(ERROR_MESSAGE() AS NVARCHAR(4000));
 END CATCH;
-EXEC pru.sp_igual N'ACT 2: pagos no se registran dos veces', N'2', (SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.PAGO);
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ACT 2: pagos no se registran dos veces' AS p, CAST(N'2' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.PAGO) AS NVARCHAR(4000)) AS o) x;
 GO
 
 /* Pagos negativos: la actualización se cancela */
@@ -228,11 +246,11 @@ UPDATE cfg.ARCHIVO SET RUTA = '/datos/act_neg/' WHERE CLIENTE = '486' AND PROCES
 DECLARE @id INT;
 BEGIN TRY
     EXEC ops.sp_actualizacion_486 @fecha = '2026-11-03', @id_corrida = @id OUTPUT;
-    EXEC pru.sp_ok N'Pagos negativos deben cancelar', 0, N'No se canceló';
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Pagos negativos deben cancelar', ISNULL(0, 0), CAST(N'No se canceló' AS NVARCHAR(4000));
 END TRY
 BEGIN CATCH
-    EXEC pru.sp_igual N'Pagos negativos cancelan la actualización', N'CANCELADA',
-         (SELECT TOP (1) ESTATUS FROM ops.CORRIDA WHERE PROCESO = 'ACT' ORDER BY ID_CORRIDA DESC);
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+    FROM (SELECT N'Pagos negativos cancelan la actualización' AS p, CAST(N'CANCELADA' AS NVARCHAR(4000)) AS e, CAST((SELECT TOP (1) ESTATUS FROM ops.CORRIDA WHERE PROCESO = 'ACT' ORDER BY ID_CORRIDA DESC) AS NVARCHAR(4000)) AS o) x;
 END CATCH;
 GO
 

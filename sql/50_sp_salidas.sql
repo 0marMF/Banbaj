@@ -52,10 +52,12 @@ BEGIN
 
     IF @malas > 0
     BEGIN
-        EXEC ops.sp_log @id_corrida, 'SALIDA', 'ERROR', @malas, CONCAT(@archivo, N': líneas con ancho distinto de ', @ancho);
+        SET @sql = CONCAT(@archivo, N': líneas con ancho distinto de ', @ancho);
+        EXEC ops.sp_log @id_corrida, 'SALIDA', 'ERROR', @malas, @sql;
         THROW 50201, 'Hay líneas con ancho incorrecto; revisa ANCHO y EXPRESION en cfg.SALIDA.', 1;
     END;
 
-    EXEC ops.sp_log @id_corrida, 'SALIDA', 'OK', @n, CONCAT(@archivo, N' · ', @ancho, N' caracteres por línea');
+    SET @sql = CONCAT(@archivo, N' · ', @ancho, N' caracteres por línea');
+    EXEC ops.sp_log @id_corrida, 'SALIDA', 'OK', @n, @sql;
 END;
 GO

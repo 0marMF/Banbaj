@@ -71,7 +71,8 @@ BEGIN
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
         SET @msg = ERROR_MESSAGE();
-        EXEC ops.sp_corrida_finalizar @id_corrida, CASE WHEN ERROR_NUMBER() IN (50040, 50100) THEN 'CANCELADA' ELSE 'ERROR' END, @msg;
+        DECLARE @estatus VARCHAR(15) = CASE WHEN ERROR_NUMBER() IN (50040, 50100) THEN 'CANCELADA' ELSE 'ERROR' END;
+        EXEC ops.sp_corrida_finalizar @id_corrida, @estatus, @msg;
         SET @json = (SELECT @id_corrida AS CORRIDA, N'Asignación 486' AS PROCESO, @msg AS ERROR FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
         EXEC mail.sp_enviar @plantilla = 'ERROR_PROCESO_486', @id_corrida = @id_corrida, @valores = @json;
         THROW;
@@ -110,7 +111,8 @@ BEGIN
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
         SET @msg = ERROR_MESSAGE();
-        EXEC ops.sp_corrida_finalizar @id_corrida, CASE WHEN ERROR_NUMBER() IN (50040, 50100) THEN 'CANCELADA' ELSE 'ERROR' END, @msg;
+        DECLARE @estatus VARCHAR(15) = CASE WHEN ERROR_NUMBER() IN (50040, 50100) THEN 'CANCELADA' ELSE 'ERROR' END;
+        EXEC ops.sp_corrida_finalizar @id_corrida, @estatus, @msg;
         SET @json = (SELECT @id_corrida AS CORRIDA, N'Actualización 486' AS PROCESO, @msg AS ERROR FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
         EXEC mail.sp_enviar @plantilla = 'ERROR_PROCESO_486', @id_corrida = @id_corrida, @valores = @json;
         THROW;

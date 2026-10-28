@@ -199,7 +199,10 @@ BEGIN
     DECLARE @opcionales NVARCHAR(4000) =
         (SELECT STRING_AGG(CAMPO, ', ') FROM #map WHERE POS IS NULL AND DERIVADO = 0 AND OBLIGATORIO = 0);
     IF @opcionales IS NOT NULL
-        EXEC ops.sp_log @id_corrida, @paso, 'AVISO', NULL, N'Encabezados opcionales no encontrados (quedan vacíos): ' + @opcionales;
+    BEGIN
+        SET @err = N'Encabezados opcionales no encontrados (quedan vacíos): ' + @opcionales;
+        EXEC ops.sp_log @id_corrida, @paso, 'AVISO', NULL, @err;
+    END
 
     /* 4. Tabla destino tipada (se recrea) */
     DECLARE @def NVARCHAR(MAX) =
@@ -249,8 +252,8 @@ BEGIN
 
     INSERT INTO ops.ARCHIVO_CARGADO (ID_CORRIDA, ID_ARCHIVO, RUTA, LEIDOS, INSERTADOS, RECHAZADOS, ESTATUS)
     VALUES (@id_corrida, @id_archivo, @path, @leidos, @insertados, @leidos - @insertados, 'CARGADO');
-    EXEC ops.sp_log @id_corrida, @paso, 'OK', @insertados,
-         CONCAT(N'Leídos: ', @leidos, N' · rechazados: ', @leidos - @insertados);
+    SET @err = CONCAT(N'Leídos: ', @leidos, N' · rechazados: ', @leidos - @insertados);
+    EXEC ops.sp_log @id_corrida, @paso, 'OK', @insertados, @err;
     SET @recibido = 1;
 END;
 GO
@@ -331,7 +334,8 @@ BEGIN
         FETCH NEXT FROM cur INTO @id, @t, @campo, @valor, @cond, @desc;
     END;
     CLOSE cur; DEALLOCATE cur;
-    EXEC ops.sp_log @id_corrida, 'HOMOLOGACION', 'OK', @total, CONCAT(@reglas, N' reglas aplicadas', ISNULL(N' sobre ' + @tabla, N''));
+    SET @err = CONCAT(@reglas, N' reglas aplicadas', ISNULL(N' sobre ' + @tabla, N''));
+    EXEC ops.sp_log @id_corrida, 'HOMOLOGACION', 'OK', @total, @err;
 END;
 GO
 
@@ -374,7 +378,8 @@ BEGIN
                               WHEN @evalua = 'SIN_FILAS' AND @n = 0 THEN 1 ELSE 0 END;
         IF @disparada = 1
         BEGIN
-            EXEC ops.sp_log @id_corrida, @codigo, CASE WHEN @accion = 'CANCELAR' THEN 'ERROR' ELSE 'AVISO' END, @n, @msg;
+            DECLARE @est VARCHAR(15) = CASE WHEN @accion = 'CANCELAR' THEN 'ERROR' ELSE 'AVISO' END;
+            EXEC ops.sp_log @id_corrida, @codigo, @est, @n, @msg;
 
             IF @accion = 'EXCLUIR'
             BEGIN

@@ -184,8 +184,8 @@ BEGIN
              + N'AND EXISTS (SELECT ' + @d + N' EXCEPT SELECT ' + @l + N'); SET @n = @@ROWCOUNT;';
     EXEC sp_executesql @sql, N'@id_corrida INT, @n INT OUTPUT', @id_corrida = @id_corrida, @n = @n OUTPUT;
 
-    EXEC ops.sp_log @id_corrida, 'ASIG EXISTENTES', 'OK', @n,
-         CONCAT(@existentes, N' cuentas ya estaban en el DAT; ', @n, N' con algún cambio actualizado.');
+    SET @sql = CONCAT(@existentes, N' cuentas ya estaban en el DAT; ', @n, N' con algún cambio actualizado.');
+    EXEC ops.sp_log @id_corrida, 'ASIG EXISTENTES', 'OK', @n, @sql;
 END;
 GO
 
@@ -271,8 +271,9 @@ BEGIN
 
     COMMIT TRANSACTION;
 
-    EXEC ops.sp_log @id_corrida, 'ASIG ALTA', 'OK', @nva + @rea,
-         CONCAT(N'NVA: ', @nva, N' (folios ', @ult + 1, N' a ', @ult + @nva, N', monto ', ISNULL(@monto, 0), N') · REA: ', @rea));
+    SET @sql = CONCAT(N'NVA: ', @nva, N' (folios ', @ult + 1, N' a ', @ult + @nva, N', monto ', ISNULL(@monto, 0), N') · REA: ', @rea);
+    DECLARE @altas INT = @nva + @rea;
+    EXEC ops.sp_log @id_corrida, 'ASIG ALTA', 'OK', @altas, @sql;
 
     IF @alerta IS NOT NULL AND @nva > @alerta
     BEGIN

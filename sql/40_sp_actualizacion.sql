@@ -86,7 +86,9 @@ BEGIN
     ;WITH d AS (SELECT ID, ROW_NUMBER() OVER (PARTITION BY CUENTA ORDER BY ID) AS RN FROM stg.SALDOS_486)
     DELETE FROM d WHERE RN > 1;
 
-    EXEC ops.sp_log @id_corrida, 'ACT PREPARAR', 'OK', @total - @sin_dat, CONCAT(N'Recibidos: ', @total, N' · no están en DAT: ', @sin_dat);
+    SET @sql = CONCAT(N'Recibidos: ', @total, N' · no están en DAT: ', @sin_dat);
+    SET @n = @total - @sin_dat;
+    EXEC ops.sp_log @id_corrida, 'ACT PREPARAR', 'OK', @n, @sql;
 END;
 GO
 
@@ -145,9 +147,9 @@ BEGIN
 
     COMMIT TRANSACTION;
 
-    EXEC ops.sp_log @id_corrida, 'ACT APLICAR', 'OK', @n,
-         CONCAT(N'Cuentas con saldo cambiado: ',
-                (SELECT COUNT(*) FROM stg.SALDOS_486 WHERE ID_CORRIDA = @id_corrida AND ISNULL(SDO_ACT, -1) <> ISNULL(ANT_SDO_ACT, -1))));
+    DECLARE @msg NVARCHAR(400) = CONCAT(N'Cuentas con saldo cambiado: ',
+                (SELECT COUNT(*) FROM stg.SALDOS_486 WHERE ID_CORRIDA = @id_corrida AND ISNULL(SDO_ACT, -1) <> ISNULL(ANT_SDO_ACT, -1)));
+    EXEC ops.sp_log @id_corrida, 'ACT APLICAR', 'OK', @n, @msg;
 END;
 GO
 
@@ -191,8 +193,8 @@ BEGIN
     GROUP BY d.CUENTA2, p.IMPORTE, p.FECHA;
     SET @nuevos = @@ROWCOUNT;
 
-    EXEC ops.sp_log @id_corrida, 'ACT PAGOS', 'OK', @nuevos,
-         CONCAT(N'Recibidos: ', @recibidos, N' · sin cuenta en DAT: ', @sin_dat, N' · nuevos: ', @nuevos,
-                N' · ya registrados o repetidos: ', @recibidos - @sin_dat - @nuevos));
+    DECLARE @msg NVARCHAR(400) = CONCAT(N'Recibidos: ', @recibidos, N' · sin cuenta en DAT: ', @sin_dat, N' · nuevos: ', @nuevos,
+                N' · ya registrados o repetidos: ', @recibidos - @sin_dat - @nuevos);
+    EXEC ops.sp_log @id_corrida, 'ACT PAGOS', 'OK', @nuevos, @msg;
 END;
 GO
