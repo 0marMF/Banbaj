@@ -204,6 +204,11 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o 
 FROM (SELECT N'SCBSDOS: U1MINASIG con signo' AS p, CAST(N'000000000400.00' AS NVARCHAR(4000)) AS e, CAST(pru.fn_campo(@lin, 'U1MINASIG') AS NVARCHAR(4000)) AS o) x;
 GO
 
+/* Diagnóstico de codificación en datos */
+SELECT 'dato' AS ORIGEN, TIPO_CREDITO, UNICODE(SUBSTRING(TIPO_CREDITO, 14, 1)) AS U14, CAST(SUBSTRING(TIPO_CREDITO, 14, 1) AS VARBINARY(4)) AS B14
+FROM stg.ENT_MAESTRA_CONSUMO WHERE CUENTA = '20000004';
+SELECT TOP (1) 'crudo' AS ORIGEN, c009, UNICODE(SUBSTRING(c009, 14, 1)) AS U14 FROM stg.RAW_MAESTRA_CONSUMO WHERE c001 = '20000004';
+GO
 /* ---------------------------------------------------------------------
    ACTUALIZACIÓN: saldos, pagos y retiros
    --------------------------------------------------------------------- */

@@ -221,14 +221,14 @@ BEGIN
                               + REPLACE(TRANSF, N'{v}', N'cfg.fn_texto(r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3) + N')')
                               + N')'
                     END + N' AS ' + QUOTENAME(CAMPO) AS NVARCHAR(MAX)), N', '),
+        /* Solo las columnas OBLIGATORIAS rechazan el renglón (vacías o no convertibles).
+           En las opcionales un valor no convertible queda NULL y se reporta como aviso. */
         @motivo = STRING_AGG(CAST(
-                    CASE WHEN POS IS NOT NULL THEN
+                    CASE WHEN POS IS NOT NULL AND OBLIGATORIO = 1 THEN
                         N'CASE WHEN x.' + QUOTENAME(CAMPO) + N' IS NULL AND cfg.fn_texto(r.c'
-                        + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3) + N') IS NOT NULL THEN N''' + CAMPO + N' inválido; '' END'
-                        + CASE WHEN OBLIGATORIO = 1 THEN
-                            N', CASE WHEN cfg.fn_texto(r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3)
-                            + N') IS NULL THEN N''' + CAMPO + N' vacío; '' END'
-                          ELSE N'' END
+                        + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3) + N') IS NOT NULL THEN N''' + CAMPO + N' inválido; '' END, '
+                        + N'CASE WHEN cfg.fn_texto(r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3)
+                        + N') IS NULL THEN N''' + CAMPO + N' vacío; '' END'
                     END AS NVARCHAR(MAX)), N', ')
     FROM #map;
 
@@ -249,6 +249,27 @@ BEGIN
              + N'SELECT @n = COUNT(*) FROM ' + @dest_q + N';';
     DECLARE @insertados INT;
     EXEC sp_executesql @sql, N'@codigo VARCHAR(50), @n INT OUTPUT', @codigo = @codigo, @n = @insertados OUTPUT;
+
+    /* Aviso: valores no convertibles en columnas opcionales (quedaron NULL) */
+    DECLARE @avisos NVARCHAR(MAX) =
+        (SELECT STRING_AGG(CAST(N'SELECT ' + QUOTENAME(CAMPO, '''') + N' AS CAMPO, COUNT(*) AS N FROM ' + @raw_q + N' r '
+                + N'CROSS APPLY (SELECT TRY_CONVERT(' + TIPO_SQL + N', '
+                + REPLACE(TRANSF, N'{v}', N'cfg.fn_texto(r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3) + N')')
+                + N') AS V) x WHERE r.ID > @fila AND x.V IS NULL AND cfg.fn_texto(r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3)
+                + N') NOT IN (N''-'') AND cfg.fn_texto(r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3) + N') IS NOT NULL' AS NVARCHAR(MAX)),
+                N' UNION ALL ')
+         FROM #map WHERE POS IS NOT NULL AND OBLIGATORIO = 0 AND TIPO_SQL NOT LIKE '%CHAR%');
+    IF @avisos IS NOT NULL
+    BEGIN
+        SET @sql = N'SELECT @txt = STRING_AGG(CONCAT(CAMPO, N'': '', N), N'', '') FROM (' + @avisos + N') a WHERE N > 0;';
+        DECLARE @txt NVARCHAR(4000);
+        EXEC sp_executesql @sql, N'@fila INT, @txt NVARCHAR(4000) OUTPUT', @fila = @fila_enc, @txt = @txt OUTPUT;
+        IF @txt IS NOT NULL
+        BEGIN
+            SET @err = N'Valores no convertibles en columnas opcionales (quedan vacíos): ' + @txt;
+            EXEC ops.sp_log @id_corrida, @paso, 'AVISO', NULL, @err;
+        END;
+    END;
 
     INSERT INTO ops.ARCHIVO_CARGADO (ID_CORRIDA, ID_ARCHIVO, RUTA, LEIDOS, INSERTADOS, RECHAZADOS, ESTATUS)
     VALUES (@id_corrida, @id_archivo, @path, @leidos, @insertados, @leidos - @insertados, 'CARGADO');
