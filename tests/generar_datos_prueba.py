@@ -18,7 +18,9 @@ FECHA_ENC = "31/10/2026"
 
 def escribir(ruta, encabezados, filas):
     ruta.parent.mkdir(parents=True, exist_ok=True)
-    with open(ruta, "w", encoding="cp1252", newline="") as f:
+    # SQL Server en Linux no admite CODEPAGE en BULK INSERT y lee los archivos como OEM (850).
+    # En producción (Windows) los CSV de Excel vienen en Windows-1252 y se leen con CODEPAGE='ACP'.
+    with open(ruta, "w", encoding="cp850", newline="") as f:
         w = csv.writer(f, lineterminator="\n")
         w.writerow(encabezados)
         for fila in filas:
