@@ -1,6 +1,6 @@
 /* =====================================================================
    Banbaj · Pruebas de punta a punta (asignación + actualización 486)
-   Se ejecuta en una base vacía después de sql/*.sql. Usa los archivos
+   Se ejecuta en una base vacía después de los scripts de la carpeta sql. Usa los archivos
    ficticios de tests/generar_datos_prueba.py montados en /datos.
    Cada verificación queda en pru.RESULTADO; al final falla si alguna falló.
    ===================================================================== */
