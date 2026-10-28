@@ -106,10 +106,10 @@ BEGIN
     FETCH NEXT FROM cur INTO @src, @codigo, @seg, @llave;
     WHILE @@FETCH_STATUS = 0
     BEGIN
-        SET @sql = N'SELECT @total = COUNT(*), '
-                 + N'@dev = SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM ' + QUOTENAME(PARSENAME(@src, 2)) + N'.' + QUOTENAME(PARSENAME(@src, 1))
-                 + N' s WHERE s.ID_CORRIDA = @id_corrida AND s.' + QUOTENAME(@llave) + N' = d.' + QUOTENAME(@llave) + N') THEN 1 ELSE 0 END) '
-                 + N'FROM dat.DAT_486 d WHERE d.SEGMENTO2 = @seg;';
+        SET @sql = N'SELECT @total = COUNT(*) FROM dat.DAT_486 d WHERE d.SEGMENTO2 = @seg; '
+                 + N'SELECT @dev = COUNT(*) FROM dat.DAT_486 d WHERE d.SEGMENTO2 = @seg AND NOT EXISTS (SELECT 1 FROM '
+                 + QUOTENAME(PARSENAME(@src, 2)) + N'.' + QUOTENAME(PARSENAME(@src, 1))
+                 + N' s WHERE s.ID_CORRIDA = @id_corrida AND s.' + QUOTENAME(@llave) + N' = d.' + QUOTENAME(@llave) + N');';
         EXEC sp_executesql @sql, N'@id_corrida INT, @seg VARCHAR(20), @total INT OUTPUT, @dev INT OUTPUT',
              @id_corrida = @id_corrida, @seg = @seg, @total = @total OUTPUT, @dev = @dev OUTPUT;
 
