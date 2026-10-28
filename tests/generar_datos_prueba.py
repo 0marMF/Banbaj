@@ -18,7 +18,7 @@ FECHA_ENC = "31/10/2026"
 
 def escribir(ruta, encabezados, filas):
     ruta.parent.mkdir(parents=True, exist_ok=True)
-    with open(ruta, "w", encoding="utf-8", newline="") as f:
+    with open(ruta, "w", encoding="cp1252", newline="") as f:
         w = csv.writer(f, lineterminator="\n")
         w.writerow(encabezados)
         for fila in filas:
