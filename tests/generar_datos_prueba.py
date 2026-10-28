@@ -18,9 +18,9 @@ FECHA_ENC = "31/10/2026"
 
 def escribir(ruta, encabezados, filas):
     ruta.parent.mkdir(parents=True, exist_ok=True)
-    # SQL Server en Linux no admite CODEPAGE en BULK INSERT y lee los archivos como OEM (850).
+    # SQL Server en Linux no admite CODEPAGE en BULK INSERT y lee los archivos como OEM (437; no tiene Ó mayúscula).
     # En producción (Windows) los CSV de Excel vienen en Windows-1252 y se leen con CODEPAGE='ACP'.
-    with open(ruta, "w", encoding="cp850", newline="") as f:
+    with open(ruta, "w", encoding="cp437", newline="") as f:
         w = csv.writer(f, lineterminator="\n")
         w.writerow(encabezados)
         for fila in filas:
@@ -64,14 +64,14 @@ def main(destino):
             "ESTADO": "CDMX", "CP": cp, "COSECHAS": cosecha,
         }
 
-    c4 = con("20000004", "CLIENTE PRUEBA C4", "$1,234.50", " -   ", "ADELANTO DE NÓMINA", "ANTICIPO NÓMINA", "VIGENTE", "1-29", "10", cp="6600")
+    c4 = con("20000004", "CLIENTE PRUEBA C4", "$1,234.50", " -   ", "Adelanto de Nómina", "Anticipo Nómina", "VIGENTE", "1-29", "10", cp="6600")
     escribir(destino / "asig" / "BASE MAESTRA_CONSUMO 31-10-2026 - SERTEC.csv", con_h, [
         con("20000001", "CLIENTE PRUEBA C1", "5000.00", "800.00", "PERSONAL", "PERSONAL", "VENCIDA", "90+", "96", tel="5577777777"),
         con("20000003", "CLIENTE PRUEBA C3", "3000.00", "300.00", "PERSONAL", "PERSONAL", "VENCIDA", "90+", "96", tel="5533333333"),
         c4, c4,
         con("20000005", "CLIENTE PRUEBA C5", "0", "0", "AUTO", "AUTO", "CASTIGADA", "CASTIGADA", "400"),
         con("20000008", "CLIENTE PRUEBA EXCLUIDO", "700.00", "70.00", "PERSONAL", "PERSONAL", "VENCIDA", "90+", "96"),
-        con("20000009", "CLIENTE PRUEBA REASIGNADO", "900.00", "90.00", "NÓMINA REVOLVENTE", "NÓMINA", "VENCIDA", "60-89", "70"),
+        con("20000009", "CLIENTE PRUEBA REASIGNADO", "900.00", "90.00", "Nómina revolvente", "Nómina", "VENCIDA", "60-89", "70"),
     ])
 
     escribir(destino / "act_ok" / "SERTEC_Saldos_tdc.csv",
