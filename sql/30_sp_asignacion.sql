@@ -309,6 +309,14 @@ BEGIN
     JOIN dat.DAT_486 d ON d.CUENTA = v.CUENTA
     WHERE v.ID_CORRIDA = @id_corrida AND v.PROCESADA = 0;
 
+    /* Archivo de devolución para CYBER (prog15: \\192.168.50.1\Cyber_00\dev\MX_G1MCT_DVBJIG_<fecha>_<hora>, una CUENTA2 por línea) */
+    DELETE FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id_corrida AND ARCHIVO = 'DEVOL_CYBER';
+    INSERT INTO ops.SALIDA_LINEA (ID_CORRIDA, ARCHIVO, NUM, LINEA)
+    SELECT @id_corrida, 'DEVOL_CYBER', ROW_NUMBER() OVER (ORDER BY d.CUENTA2), d.CUENTA2
+    FROM ops.DEVOLUCION v
+    JOIN dat.DAT_486 d ON d.CUENTA = v.CUENTA
+    WHERE v.ID_CORRIDA = @id_corrida AND v.PROCESADA = 0;
+
     /* Histórico: baja con foto del registro */
     UPDATE h SET ESTATUS = 'B', FE_BAJA = @fecha, MOTIVO_BAJA = LEFT(v.MOTIVO, 60), ID_CORRIDA_BAJA = @id_corrida,
                  DATOS_BAJA = (SELECT d.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)

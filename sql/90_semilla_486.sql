@@ -19,12 +19,12 @@ DELETE FROM cfg.CP_ESTADO;
 /* Parámetros */
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'PREFIJO_CUENTA2', N'486-', N'Prefijo de la cuenta en CYBER');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'TOPE_DEVOLUCION_PCT', N'', N'Vacío = sin tope: la base maestra se trabaja como llega. Con un número (ej. 10) se detiene si la devolución de un segmento supera ese %');
+INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'DMSTATUS_RETIRO', N'R', N'dmstatus que se pone en CYBER al retirar (prog15.prg: u8activo = ''R'')');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'RESPALDOS_A_CONSERVAR', N'15', N'Corridas con respaldo del DAT que se conservan para retroceso');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'ALERTA_NUEVAS', N'100', N'Más cuentas nuevas que esto dispara la alerta (aem_alerta)');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'DIAS_FE_REG', N'30', N'FE_REG = FE_REC + días');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'NEGATIVO_MODO', N'ABS_LEGADO', N'ABS_LEGADO (como hoy) | CERO | SIGNO. Pendiente de decidir (H-01)');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'CAMPOS_ACTUALIZA_EXISTENTES', N'TEL1,TEL2,TEL3,TEL4,TEL5,TEL6,TEL7,TEL8,TEL9,TEL10,TEL11,TEL12,TEL13,CORREO1,CORREO2,DIRECC1,DIRECC2,DIRECC3,DIRECC4,DIRECC5,ESTADO,PVS,TRAMO,ETIQUETA1,SALDO1,SALDO2,SALDO3', N'Campos que se actualizan en el DAT cuando la cuenta ya existe (paso.prg + asig_bases)');
--- DMSTATUS_RETIRO: valor de dmstatus para el retiro en CYBER (prog15 usa u8activo de cybdev). PENDIENTE.
 
 /* CP -> estado */
 INSERT INTO cfg.CP_ESTADO (CP_INI, CP_FIN, ESTADO) VALUES ('01000', '19999', 'CDMX');

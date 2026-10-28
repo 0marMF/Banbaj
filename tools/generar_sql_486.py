@@ -357,6 +357,7 @@ REGLAS = [
 PARAMETROS = [
     ("PREFIJO_CUENTA2", "486-", "Prefijo de la cuenta en CYBER"),
     ("TOPE_DEVOLUCION_PCT", "", "Vacío = sin tope: la base maestra se trabaja como llega. Con un número (ej. 10) se detiene si la devolución de un segmento supera ese %"),
+    ("DMSTATUS_RETIRO", "R", "dmstatus que se pone en CYBER al retirar (prog15.prg: u8activo = 'R')"),
     ("RESPALDOS_A_CONSERVAR", "15", "Corridas con respaldo del DAT que se conservan para retroceso"),
     ("ALERTA_NUEVAS", "100", "Más cuentas nuevas que esto dispara la alerta (aem_alerta)"),
     ("DIAS_FE_REG", "30", "FE_REG = FE_REC + días"),
@@ -489,7 +490,6 @@ def sql_semilla(scb):
     L.append("/* Parámetros */")
     for k, v, d in PARAMETROS:
         L.append(f"INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES ({cli}, {q(k)}, {q(v)}, {q(d)});")
-    L.append("-- DMSTATUS_RETIRO: valor de dmstatus para el retiro en CYBER (prog15 usa u8activo de cybdev). PENDIENTE.")
     L.append("")
 
     L.append("/* CP -> estado */")

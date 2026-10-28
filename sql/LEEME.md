@@ -81,9 +81,11 @@ EXEC mail.sp_enviar 'RETIROS_ACT_486', @solo_prueba = 1;   -- ver el correo sin 
 
 ## Pendientes antes de producción
 
+Lista completa de programas, tablas y preguntas en [`docs/FALTANTES_486.md`](../docs/FALTANTES_486.md).
+
+
 - `cfg.ARCHIVO.RUTA` real y `mail.PLANTILLA.PERFIL_DBMAIL` real.
 - `NEGATIVO_MODO` (hoy igual que el legado: el negativo sale positivo, H-01). `TOPE_DEVOLUCION_PCT` va vacío: la base maestra se trabaja como llega; poner un número solo si se quiere el freno.
-- Parámetro `DMSTATUS_RETIRO` (valor de dmstatus para el retiro en CYBER).
 - Columnas marcadas POR CONFIRMAR en `cfg.ARCHIVO_COLUMNA` (ENFOQUE, ETIQUETA, REE) y el archivo de Hipotecario.
 - Destinatarios de `OPERACION_ASIG_486` (MAIL.prg / correo_486 no están versionados).
 - Layout de arribo de pagos (PAGOS.prg) y salida SCBTEL (telbnx.prg): siguientes pasos.
