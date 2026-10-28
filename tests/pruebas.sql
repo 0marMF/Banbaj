@@ -132,6 +132,13 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o 
 FROM (SELECT N'Asignación cancelada: el DAT no cambió' AS p, CAST(N'5' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.DAT_486) AS NVARCHAR(4000)) AS o) x;
 GO
 
+/* Diagnóstico de codificación: encabezado leído vs patrón del catálogo */
+SELECT 'archivo' AS ORIGEN, c003 AS TEXTO, UNICODE(SUBSTRING(c003, 3, 1)) AS U3, UNICODE(SUBSTRING(c003, 4, 1)) AS U4, LEN(c003) AS L
+FROM stg.RAW_MAESTRA_CONSUMO WHERE ID = 1
+UNION ALL
+SELECT 'catalogo', PATRON_ENCABEZADO, UNICODE(SUBSTRING(PATRON_ENCABEZADO, 3, 1)), UNICODE(SUBSTRING(PATRON_ENCABEZADO, 4, 1)), LEN(PATRON_ENCABEZADO)
+FROM cfg.ARCHIVO_COLUMNA WHERE CAMPO_DESTINO = 'DES_PROD' AND PATRON_ENCABEZADO LIKE 'CR%';
+GO
 /* ---------------------------------------------------------------------
    ASIGNACIÓN 2: sin tope, aplicando el retiro
    --------------------------------------------------------------------- */
