@@ -16,12 +16,13 @@ Requiere SQL Server 2017 o superior y Database Mail configurado.
 | `20_sp_comunes.sql` | Corrida, bitácora, carga dinámica de archivos, homologación, validación |
 | `25_sp_correo.sql` | Envío de correo dinámico y alta / baja de destinatarios |
 | `30_sp_asignacion.sql` | Unión de bases, devolución, existentes, folios y alta, retiro |
+| `35_sp_respaldo.sql` | Respaldo del DAT por corrida y retroceso (`ops.sp_revertir_corrida`) |
 | `40_sp_actualizacion.sql` | Saldos, scripts para CYBER, pagos |
 | `50_sp_salidas.sql` | SCBSDOS (y cualquier salida de ancho fijo de `cfg.SALIDA`) |
 | `60_sp_orquestadores.sql` | `ops.sp_asignacion_486` y `ops.sp_actualizacion_486` |
 | `90_semilla_486.sql` | Configuración del 486 (generada con `tools/generar_sql_486.py`) |
 
-Con `sqlcmd` usar siempre `-I` (QUOTED_IDENTIFIER ON); SSMS ya lo trae activo.
+Con `sqlcmd` usar siempre `-I` (QUOTED_IDENTIFIER ON) y `-f 65001` (los scripts están en UTF-8; sin esto los acentos de la semilla se dañan). SSMS ya maneja ambos.
 
 ## Uso diario
 
@@ -36,6 +37,10 @@ EXEC ops.sp_retiro @id;
 
 -- Actualización de saldos y pagos
 EXEC ops.sp_actualizacion_486 @id_corrida = @id OUTPUT;
+
+-- Retroceso: deja DAT, histórico de folios, consecutivo y pagos como antes de la corrida
+EXEC ops.sp_revertir_corrida @id;                 -- vista previa
+EXEC ops.sp_revertir_corrida @id, @confirmar = 1; -- revierte (solo la corrida más reciente; no toca CYBER)
 
 -- Qué pasó
 SELECT * FROM ops.BITACORA WHERE ID_CORRIDA = @id ORDER BY ID;
@@ -63,13 +68,17 @@ EXEC mail.sp_enviar 'RETIROS_ACT_486', @solo_prueba = 1;   -- ver el correo sin 
 ## Pendientes antes de producción
 
 - `cfg.ARCHIVO.RUTA` real y `mail.PLANTILLA.PERFIL_DBMAIL` real.
-- `TOPE_DEVOLUCION_PCT` (propuesto 10) y `NEGATIVO_MODO` (hoy igual que el legado: el negativo sale positivo, H-01).
+- `NEGATIVO_MODO` (hoy igual que el legado: el negativo sale positivo, H-01). `TOPE_DEVOLUCION_PCT` va vacío: la base maestra se trabaja como llega; poner un número solo si se quiere el freno.
 - Parámetro `DMSTATUS_RETIRO` (valor de dmstatus para el retiro en CYBER).
 - Columnas marcadas POR CONFIRMAR en `cfg.ARCHIVO_COLUMNA` (ENFOQUE, ETIQUETA, REE) y el archivo de Hipotecario.
 - Destinatarios de `OPERACION_ASIG_486` (MAIL.prg / correo_486 no están versionados).
 - Layout de arribo de pagos (PAGOS.prg) y salida SCBTEL (telbnx.prg): siguientes pasos.
 - Carga inicial: DAT.DBF → `dat.DAT_486`, historia / PURGA → `dat.HISTORIA_FOLIO`, último folio de tab7 → `dat.FOLIO_CONSECUTIVO`.
 
+## Codificación de los archivos
+
+Los CSV que guarda Excel vienen en Windows-1252: en el servidor Windows `cfg.ARCHIVO.CODEPAGE = 'ACP'` los lee bien. SQL Server en Linux no admite `CODEPAGE`; por eso las pruebas de GitHub Actions generan los archivos en la página 437.
+
 ## Pruebas
 
-`.github/workflows/pruebas-sql.yml` levanta SQL Server 2022 en GitHub Actions, ejecuta estos scripts y `tests/pruebas.sql` con datos ficticios (`tests/generar_datos_prueba.py`). El resultado queda en la rama `ci-resultados`.
+`.github/workflows/pruebas-sql.yml` levanta SQL Server 2022 en GitHub Actions, ejecuta estos scripts y `tests/pruebas.sql` con datos ficticios (`tests/generar_datos_prueba.py`). El resultado queda en la rama `ci-resultados` (última corrida: 60 de 60 pruebas OK).
