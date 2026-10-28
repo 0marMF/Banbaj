@@ -87,7 +87,28 @@ EXEC mail.sp_enviar 'RETIROS_ACT_486', @solo_prueba = 1;   -- ver el correo sin 
 - Columnas marcadas POR CONFIRMAR en `cfg.ARCHIVO_COLUMNA` (ENFOQUE, ETIQUETA, REE) y el archivo de Hipotecario.
 - Destinatarios de `OPERACION_ASIG_486` (MAIL.prg / correo_486 no están versionados).
 - Layout de arribo de pagos (PAGOS.prg) y salida SCBTEL (telbnx.prg): siguientes pasos.
-- Carga inicial: DAT.DBF → `dat.DAT_486`, historia / PURGA → `dat.HISTORIA_FOLIO`, último folio de tab7 → `dat.FOLIO_CONSECUTIVO`.
+- Carga inicial desde los DBF: `tools/migrar_dbf.py` (ver abajo).
+
+## Migración de los DBF
+
+Los DBF dejan de usarse. `tools/migrar_dbf.py` pasa todo a tablas en una sola transacción:
+
+| DBF | Tabla |
+| --- | --- |
+| DAT | `dat.DAT_486` |
+| DAT (activas) + PURGA (bajas) | `dat.HISTORIA_FOLIO` |
+| TAB7 (máximo folio, comparado con DAT y PURGA) | `dat.FOLIO_CONSECUTIVO` |
+| ETI486, ETI, DM1, TOP, STATUS | `cfg.ETIQUETA` |
+| EXC486, DIRMAL, EMAILMALO, BLACKLIST_486, TELBAJ_G1 + 3 teléfonos del banco | `cfg.EXCLUSION` (solo lo que aplica al 486) |
+| LADA, PNC | `cfg.LADA`, `cfg.PLAN_NUMERACION` |
+
+```
+pip install dbfread pyodbc
+python tools/migrar_dbf.py --config tools/migracion_486.json            # revisa, no escribe
+python tools/migrar_dbf.py --config tools/migracion_486.json --conexion "DRIVER={ODBC Driver 18 for SQL Server};SERVER=<srv>;DATABASE=Banbaj;Trusted_Connection=yes;TrustServerCertificate=yes"
+```
+
+Las rutas de `tools/migracion_486.json` son las que usan hoy los .prg. Si una tabla destino ya tiene datos, pide `--reemplazar`.
 
 ## Codificación de los archivos
 
