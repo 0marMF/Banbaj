@@ -93,6 +93,7 @@ BEGIN
     WHERE a.ID_ARCHIVO = @id_archivo;
 
     IF @codigo IS NULL THROW 50020, 'Archivo no encontrado en cfg.ARCHIVO.', 1;
+    SET @ruta = cfg.fn_ruta(@ruta, @fecha);       -- carpeta del día: Q:\CYBER\C_486\{AAAA}\{MES}\{DD}\
 
     DECLARE @paso VARCHAR(80) = 'CARGA ' + @codigo;
     DECLARE @dest_schema SYSNAME = ISNULL(PARSENAME(@destino, 2), 'stg'),

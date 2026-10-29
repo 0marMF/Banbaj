@@ -32,7 +32,7 @@ Con `sqlcmd` usar siempre `-I` (QUOTED_IDENTIFIER ON) y `-f 65001` (los scripts 
 ## Uso diario
 
 ```sql
--- Asignación (las bases maestras se dejan como CSV en la carpeta de cfg.ARCHIVO.RUTA)
+-- Asignación y actualización toman los archivos de Q:\CYBER\C_486\<año>\<mes>\<día>\ (cfg.ARCHIVO.RUTA con {AAAA}\{MES}\{DD})
 DECLARE @id INT;
 EXEC ops.sp_asignacion_486 @hora_llegada = '09:15', @id_corrida = @id OUTPUT;
 
@@ -129,7 +129,7 @@ EXEC mail.sp_enviar 'RETIROS_ACT_486', @solo_prueba = 1;   -- ver el correo sin 
 Lista completa de programas, tablas y preguntas en [`docs/FALTANTES_486.md`](../docs/FALTANTES_486.md).
 
 
-- `cfg.ARCHIVO.RUTA` real y `mail.PLANTILLA.PERFIL_DBMAIL` real.
+- `mail.PLANTILLA.PERFIL_DBMAIL` real. La ruta de entrada ya es `Q:\CYBER\C_486\{AAAA}\{MES}\{DD}\` (ej. `Q:\CYBER\C_486\2026\octubre\28\`); la cuenta de servicio de SQL Server necesita lectura en `Q:` (mejor por ruta UNC, porque las unidades mapeadas no existen para el servicio).
 - `NEGATIVO_MODO` (hoy igual que el legado: el negativo sale positivo, H-01). `TOPE_DEVOLUCION_PCT` va vacío: la base maestra se trabaja como llega; poner un número solo si se quiere el freno.
 - Columnas marcadas POR CONFIRMAR en `cfg.ARCHIVO_COLUMNA` (ENFOQUE, ETIQUETA, REE) y el archivo de Hipotecario.
 - Destinatarios de `OPERACION_ASIG_486` (MAIL.prg / correo_486 no están versionados) y de `OPERACION_PAGOS_486` (aviso de pagos negativos).

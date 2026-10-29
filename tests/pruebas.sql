@@ -99,6 +99,10 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o 
 FROM (SELECT N'fn_pad_importe con signo' AS p, CAST(N'-00000000012.50' AS NVARCHAR(4000)) AS e, CAST(cfg.fn_pad_importe(-12.50, 15, 'SIGNO') AS NVARCHAR(4000)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'fn_cp_estado' AS p, CAST(N'GTO' AS NVARCHAR(4000)) AS e, CAST(cfg.fn_cp_estado('37236') AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'fn_ruta: carpeta del día con mes en español' AS p, N'Q:\CYBER\C_486\2026\octubre\28\|Q:\CYBER\C_486\2027\enero\05\' AS e,
+             CONCAT((SELECT RUTA FROM (SELECT DISTINCT cfg.fn_ruta(N'Q:\CYBER\C_486\{AAAA}\{MES}\{DD}\', '2026-10-28') AS RUTA) r), '|',
+                    cfg.fn_ruta(N'Q:\CYBER\C_486\{AAAA}\{MES}\{DD}\', '2027-01-05')) AS o) x;
 GO
 
 /* ---------------------------------------------------------------------

@@ -15,7 +15,7 @@ import openpyxl
 
 RAIZ = Path(__file__).resolve().parent.parent
 CLIENTE = "486"
-RUTA_ENTRADA = r"D:\Banbaj\486\entrada\\"   # cambiar por la carpeta real (cfg.ARCHIVO.RUTA)
+RUTA_ENTRADA = "Q:\\CYBER\\C_486\\{AAAA}\\{MES}\\{DD}\\"   # carpeta del día (cfg.fn_ruta): Q:\CYBER\C_486\2026\octubre\28\
 PERFIL_DBMAIL = "Asignaciones486"           # perfil de Database Mail
 
 

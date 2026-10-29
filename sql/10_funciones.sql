@@ -146,3 +146,19 @@ BEGIN
     RETURN @v;
 END;
 GO
+
+/* Ruta de entrada por fecha: Q:\CYBER\C_486\{AAAA}\{MES}\{DD}\ -> Q:\CYBER\C_486\2026\octubre\28\
+   Tokens: {AAAA} año, {MM} mes a 2 dígitos, {MES} mes en español en minúsculas, {DD} día a 2 dígitos.
+   El nombre del mes no depende del idioma del servidor. */
+CREATE OR ALTER FUNCTION cfg.fn_ruta (@ruta NVARCHAR(400), @fecha DATE)
+RETURNS NVARCHAR(400)
+AS
+BEGIN
+    RETURN REPLACE(REPLACE(REPLACE(REPLACE(@ruta,
+           N'{AAAA}', CAST(YEAR(@fecha) AS NCHAR(4))),
+           N'{MM}',   RIGHT(N'0' + CAST(MONTH(@fecha) AS NVARCHAR(2)), 2)),
+           N'{MES}',  CHOOSE(MONTH(@fecha), N'enero', N'febrero', N'marzo', N'abril', N'mayo', N'junio', N'julio',
+                             N'agosto', N'septiembre', N'octubre', N'noviembre', N'diciembre')),
+           N'{DD}',   RIGHT(N'0' + CAST(DAY(@fecha) AS NVARCHAR(2)), 2));
+END;
+GO
