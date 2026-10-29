@@ -39,6 +39,7 @@ CREATE TABLE dat.HISTORIA_FOLIO (
     FOLIO         INT           NOT NULL,
     CUENTA2       VARCHAR(28)   NOT NULL,            -- cuenta en CYBER ('486-'+FOLIO)
     SEGMENTO2     VARCHAR(20)   NULL,
+    RIESGO        VARCHAR(35)   NULL,                -- crédito con el que llegan los pagos (DAT.RIESGO)
     SUB_CTE       VARCHAR(3)    NOT NULL,            -- NVA / REA
     ESTATUS       CHAR(1)       NOT NULL CONSTRAINT DF_HISTORIA_FOLIO_EST DEFAULT 'A',  -- A=activa, B=baja
     FE_ALTA       DATE          NOT NULL,
@@ -261,8 +262,9 @@ GO
 IF OBJECT_ID('stg.CYBER_TELEFONO') IS NULL
 CREATE TABLE stg.CYBER_TELEFONO (CUENTA NVARCHAR(28) NULL, LADA NVARCHAR(10) NULL, TEL NVARCHAR(20) NULL);
 GO
-/* Bases recibidas completas (todas las columnas, tal como llegaron). Los procesos solo
-   toman las columnas de cfg.ARCHIVO_COLUMNA; aquí queda todo lo demás para consulta.
+/* Base maestra completa (todas las columnas, tal como llegó): solo la última de cada
+   segmento; cuando llega una nueva, reemplaza a la anterior. La historia por cuenta
+   queda en dat.HISTORIA_FOLIO. Los procesos solo toman las columnas de cfg.ARCHIVO_COLUMNA.
    Un renglón del archivo = un renglón con DATOS en JSON {"encabezado": "valor", …}.
    Consulta: SELECT JSON_VALUE(DATOS, '$."ACC_NUM"') FROM dat.BASE_RECIBIDA WHERE … */
 IF OBJECT_ID('dat.BASE_RECIBIDA_ARCHIVO') IS NULL
@@ -285,4 +287,11 @@ CREATE TABLE dat.BASE_RECIBIDA (
     DATOS       NVARCHAR(MAX)  NOT NULL,
     CONSTRAINT PK_BASE_RECIBIDA PRIMARY KEY (ID_CORRIDA, CODIGO, FILA)
 );
+GO
+/* Bases creadas antes: RIESGO en el histórico (para arribar pagos de cuentas retiradas) */
+IF COL_LENGTH('dat.HISTORIA_FOLIO', 'RIESGO') IS NULL
+    ALTER TABLE dat.HISTORIA_FOLIO ADD RIESGO VARCHAR(35) NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_HISTORIA_FOLIO_RIESGO')
+    CREATE INDEX IX_HISTORIA_FOLIO_RIESGO ON dat.HISTORIA_FOLIO (CLIENTE, RIESGO);
 GO

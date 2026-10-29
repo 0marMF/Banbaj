@@ -187,8 +187,12 @@ BEGIN
         DECLARE @json_cols NVARCHAR(MAX) =
             (SELECT STRING_AGG(CAST(N'r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3) + N' AS ' + QUOTENAME(LLAVE) AS NVARCHAR(MAX)), N', ')
                     WITHIN GROUP (ORDER BY POS) FROM #llave);
+        /* Solo se conserva la última base de cada segmento: la nueva reemplaza a la anterior */
+        DELETE b FROM dat.BASE_RECIBIDA b
+        JOIN dat.BASE_RECIBIDA_ARCHIVO a ON a.ID_CORRIDA = b.ID_CORRIDA AND a.CODIGO = b.CODIGO
+        WHERE a.CLIENTE = @cliente AND a.CODIGO = @codigo;
         DELETE FROM dat.BASE_RECIBIDA WHERE ID_CORRIDA = @id_corrida AND CODIGO = @codigo;
-        DELETE FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @id_corrida AND CODIGO = @codigo;
+        DELETE FROM dat.BASE_RECIBIDA_ARCHIVO WHERE CLIENTE = @cliente AND CODIGO = @codigo;
         SET @sql = N'INSERT INTO dat.BASE_RECIBIDA (ID_CORRIDA, CODIGO, FILA, DATOS) '
                  + N'SELECT @id_corrida, @codigo, r.ID, (SELECT ' + @json_cols
                  + N' FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES) FROM ' + @raw_q + N' r WHERE r.ID > @fila AND COALESCE('

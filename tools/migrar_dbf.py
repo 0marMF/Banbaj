@@ -36,9 +36,9 @@ MIGRACION = "MIGRACION DBF"
 
 # Fuentes grandes: solo se leen los campos que se usan (historia tiene 1.8 M de registros)
 CAMPOS_FUENTE = {
-    "PURGA": ["CUENTA", "FOLIO", "CUENTA2", "SEGMENTO2", "SEGMENTO", "SUB_CTE", "FE_ASIG", "FE_BAJA", "FECHA_BAJA",
+    "PURGA": ["CUENTA", "FOLIO", "CUENTA2", "SEGMENTO2", "SEGMENTO", "RIESGO", "SUB_CTE", "FE_ASIG", "FE_BAJA", "FECHA_BAJA",
               "FE_PURGA", "FE_DEV", "FECHA"],
-    "DEVOL": ["CUENTA", "FOLIO", "CUENTA2", "SEGMENTO2", "SEGMENTO", "SUB_CTE", "FE_ASIG", "FE_DEV", "FE_CAPT"],
+    "DEVOL": ["CUENTA", "FOLIO", "CUENTA2", "SEGMENTO2", "SEGMENTO", "RIESGO", "SUB_CTE", "FE_ASIG", "FE_DEV", "FE_CAPT"],
     "HISTORIA": ["FOLIO"],
     "PAGTOT": ["CUENTA", "FE_PAG", "MONT", "FE_REG"],
 }
@@ -139,7 +139,7 @@ def destino_historia(cfg, fuentes, avisos):
             continue
         activas.add((f["CUENTA"], fol))
         sub = f.get("SUB_CTE") if f.get("SUB_CTE") in ("NVA", "REA") else "NVA"
-        filas.append((cli, f["CUENTA"], fol, f.get("CUENTA2") or f"{cli}-{fol}", f.get("SEGMENTO2"), sub, "A",
+        filas.append((cli, f["CUENTA"], fol, f.get("CUENTA2") or f"{cli}-{fol}", f.get("SEGMENTO2"), (f.get("RIESGO") or None), sub, "A",
                       f.get("FE_ASIG") or dt.date(1900, 1, 1), None, None))
     fuente = "PURGA" if "PURGA" in fuentes else ("DEVOL" if "DEVOL" in fuentes else None)
     if fuente:
@@ -160,18 +160,18 @@ def destino_historia(cfg, fuentes, avisos):
             if not isinstance(fe_baja, dt.date):
                 fe_baja = None
             previo = bajas.get(k)
-            if previo and (previo[8] or dt.date(1900, 1, 1)) >= (fe_baja or dt.date(1900, 1, 1)):
+            if previo and (previo[9] or dt.date(1900, 1, 1)) >= (fe_baja or dt.date(1900, 1, 1)):
                 continue                                   # se queda la baja más reciente
             sub = f.get("SUB_CTE") if f.get("SUB_CTE") in ("NVA", "REA") else "NVA"
             seg = f.get("SEGMENTO2") or None
             bajas[k] = (cli, f["CUENTA"], fol, (f.get("CUENTA2") if str(f.get("CUENTA2") or "").startswith(f"{cli}-") else None)
-                        or f"{cli}-{fol}", seg, sub, "B", f.get("FE_ASIG") or dt.date(1900, 1, 1), fe_baja, f"MIGRACION {fuente}")
+                        or f"{cli}-{fol}", seg, (f.get("RIESGO") or None), sub, "B", f.get("FE_ASIG") or dt.date(1900, 1, 1), fe_baja, f"MIGRACION {fuente}")
         if sin_dato:
             avisos.append(f"{fuente}: {sin_dato} registros sin CUENTA o FOLIO numérico omitidos")
         filas += list(bajas.values())
     else:
         avisos.append("HISTORIA: sin PURGA ni DEVOL, las cuentas que regresen no se reconocerán como REA")
-    return ["CLIENTE", "CUENTA", "FOLIO", "CUENTA2", "SEGMENTO2", "SUB_CTE", "ESTATUS", "FE_ALTA", "FE_BAJA", "MOTIVO_BAJA"], filas
+    return ["CLIENTE", "CUENTA", "FOLIO", "CUENTA2", "SEGMENTO2", "RIESGO", "SUB_CTE", "ESTATUS", "FE_ALTA", "FE_BAJA", "MOTIVO_BAJA"], filas
 
 
 def destino_consecutivo(cfg, fuentes, avisos):

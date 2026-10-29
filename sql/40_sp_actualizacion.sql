@@ -154,12 +154,14 @@ END;
 GO
 
 /* ---------------------------------------------------------------------
-   Pagos (pagos.prg): el CREDITO del archivo se cruza contra DAT.RIESGO
-   (y DAT.CUENTA) para obtener CUENTA y CUENTA2. Se arriba lo que no esté
-   ya en dat.PAGO_ARRIBADO con la misma CUENTA + FE_PAG + IMPORTE (antes
-   PAGTOT). Dos pagos iguales en el mismo archivo se arriban los dos, como hoy.
-   Los pagos negativos ya no llegan aquí: la regla PAGOS_NEGATIVOS los
-   excluye y avisa a Operación. El archivo plano es SCBPAG (cfg.SALIDA).
+   Pagos (pagos.prg). Se arriban TODOS los pagos (decisión): la CUENTA de
+   SCBPAG (crédito del banco) se busca en este orden:
+     1. DAT por RIESGO   2. DAT por CUENTA
+     3. histórico de folios por RIESGO   4. histórico por CUENTA (cuentas retiradas)
+     5. si no aparece, el CREDITO tal como llegó (sin CUENTA2)
+   No se repite lo ya arribado (dat.PAGO_ARRIBADO: CUENTA + FE_PAG + IMPORTE).
+   Dos pagos iguales en el mismo archivo se arriban los dos, como hoy.
+   Los negativos no llegan aquí: la regla PAGOS_NEGATIVOS los excluye y avisa.
    --------------------------------------------------------------------- */
 CREATE OR ALTER PROCEDURE ops.sp_act_pagos
     @id_corrida INT
@@ -168,7 +170,7 @@ BEGIN
     SET NOCOUNT ON;
     DECLARE @cliente VARCHAR(10), @fecha DATE;
     SELECT @cliente = CLIENTE, @fecha = FECHA_PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
-    DECLARE @recibidos INT, @sin_dat INT, @ya INT, @nuevos INT;
+    DECLARE @recibidos INT, @ya INT, @nuevos INT;
 
     IF OBJECT_ID('stg.ENT_PAGOS') IS NULL
        OR NOT EXISTS (SELECT 1 FROM stg.ENT_PAGOS WHERE ID_CORRIDA = @id_corrida)
@@ -177,24 +179,23 @@ BEGIN
         RETURN;
     END;
 
-    SELECT p.FILA, p.RIESGO, p.IMPORTE, p.FECHA, x.CUENTA, x.CUENTA2
+    SELECT p.FILA, p.RIESGO, p.IMPORTE, p.FECHA,
+           COALESCE(d.CUENTA, h.CUENTA, LEFT(LTRIM(RTRIM(p.RIESGO)), 25)) AS CUENTA,
+           COALESCE(d.CUENTA2, h.CUENTA2) AS CUENTA2,
+           CASE WHEN d.CUENTA IS NOT NULL THEN 'DAT' WHEN h.CUENTA IS NOT NULL THEN 'HISTORICO' ELSE 'SIN CRUCE' END AS FUENTE
     INTO #p
     FROM stg.ENT_PAGOS p
-    OUTER APPLY (SELECT TOP (1) d.CUENTA, d.CUENTA2 FROM dat.DAT_486 d
-                 WHERE d.CLIENTE = @cliente AND (d.RIESGO = p.RIESGO OR d.CUENTA = p.RIESGO)
-                 ORDER BY CASE WHEN d.RIESGO = p.RIESGO THEN 0 ELSE 1 END, d.CUENTA2) x
+    OUTER APPLY (SELECT TOP (1) x.CUENTA, x.CUENTA2 FROM dat.DAT_486 x
+                 WHERE x.CLIENTE = @cliente AND (x.RIESGO = p.RIESGO OR x.CUENTA = p.RIESGO)
+                 ORDER BY CASE WHEN x.RIESGO = p.RIESGO THEN 0 ELSE 1 END, x.CUENTA2) d
+    OUTER APPLY (SELECT TOP (1) y.CUENTA, y.CUENTA2 FROM dat.HISTORIA_FOLIO y
+                 WHERE d.CUENTA IS NULL AND y.CLIENTE = @cliente AND (y.RIESGO = p.RIESGO OR y.CUENTA = p.RIESGO)
+                 ORDER BY CASE WHEN y.RIESGO = p.RIESGO THEN 0 ELSE 1 END, ISNULL(y.FE_BAJA, '9999-12-31') DESC, y.ID DESC) h
     WHERE p.ID_CORRIDA = @id_corrida AND p.IMPORTE >= 0;
     SET @recibidos = @@ROWCOUNT;
 
-    INSERT INTO ops.RECHAZO (ID_CORRIDA, ORIGEN, FILA, MOTIVO, DATOS)
-    SELECT @id_corrida, 'PAGOS', FILA, N'Crédito de pago que no existe en el DAT',
-           (SELECT p.RIESGO, p.IMPORTE, p.FECHA FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
-    FROM #p p WHERE p.CUENTA IS NULL;
-    SET @sin_dat = @@ROWCOUNT;
-
     SELECT @ya = COUNT(*) FROM #p p
-    WHERE p.CUENTA IS NOT NULL
-      AND EXISTS (SELECT 1 FROM dat.PAGO_ARRIBADO a
+    WHERE EXISTS (SELECT 1 FROM dat.PAGO_ARRIBADO a
                   WHERE a.CLIENTE = @cliente AND a.CUENTA = p.CUENTA AND a.FE_PAG = p.FECHA AND a.IMPORTE = p.IMPORTE);
 
     INSERT INTO dat.PAGO_ARRIBADO (CLIENTE, CUENTA, CUENTA2, FE_PAG, IMPORTE, FE_REG, ID_CORRIDA, ORIGEN)
@@ -205,8 +206,13 @@ BEGIN
                       WHERE a.CLIENTE = @cliente AND a.CUENTA = p.CUENTA AND a.FE_PAG = p.FECHA AND a.IMPORTE = p.IMPORTE);
     SET @nuevos = @@ROWCOUNT;
 
-    DECLARE @msg NVARCHAR(400) = CONCAT(N'Recibidos: ', @recibidos, N' · sin cuenta en DAT: ', @sin_dat,
+    DECLARE @msg NVARCHAR(400) = CONCAT(N'Recibidos: ', @recibidos,
+                N' · en DAT: ', (SELECT COUNT(*) FROM #p WHERE FUENTE = 'DAT'),
+                N' · de cuentas retiradas (histórico): ', (SELECT COUNT(*) FROM #p WHERE FUENTE = 'HISTORICO'),
+                N' · sin cruce (va el crédito tal cual): ', (SELECT COUNT(*) FROM #p WHERE FUENTE = 'SIN CRUCE'),
                 N' · ya arribados antes: ', @ya, N' · a arribar (SCBPAG): ', @nuevos);
     EXEC ops.sp_log @id_corrida, 'ACT PAGOS', 'OK', @nuevos, @msg;
+    IF EXISTS (SELECT 1 FROM #p WHERE FUENTE = 'SIN CRUCE')
+        EXEC ops.sp_log @id_corrida, 'ACT PAGOS', 'AVISO', NULL, N'Hay pagos de créditos que no están en el DAT ni en el histórico; se arriban con el crédito tal como llegó.';
 END;
 GO

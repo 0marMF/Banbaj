@@ -237,12 +237,13 @@ FROM (SELECT N'MIS: DAT en CSV con comillas' AS p, N'8|"100","486","' AS e,
 
 /* Bases maestras completas (todas las columnas) */
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'BASE: maestras guardadas completas (renglones, encabezados y un valor)' AS p, N'4|96|1000000001|7|107' AS e,
+FROM (SELECT N'BASE: maestras guardadas completas (renglones, encabezados y un valor; solo la última)' AS p, N'4|96|1000000001|7|107|1' AS e,
              CONCAT((SELECT REGISTROS FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @id AND CODIGO = 'MAESTRA_TDC'), '|',
                     (SELECT COUNT(*) FROM dat.BASE_RECIBIDA_ARCHIVO a CROSS APPLY OPENJSON(a.ENCABEZADOS) j WHERE a.ID_CORRIDA = @id AND a.CODIGO = 'MAESTRA_TDC'), '|',
                     (SELECT JSON_VALUE(DATOS, '$."ACC_NUM"') FROM dat.BASE_RECIBIDA WHERE ID_CORRIDA = @id AND CODIGO = 'MAESTRA_TDC' AND FILA = 2), '|',
                     (SELECT REGISTROS FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @id AND CODIGO = 'MAESTRA_CONSUMO'), '|',
-                    (SELECT COUNT(*) FROM dat.BASE_RECIBIDA_ARCHIVO a CROSS APPLY OPENJSON(a.ENCABEZADOS) j WHERE a.ID_CORRIDA = @id AND a.CODIGO = 'MAESTRA_CONSUMO')) AS o) x;
+                    (SELECT COUNT(*) FROM dat.BASE_RECIBIDA_ARCHIVO a CROSS APPLY OPENJSON(a.ENCABEZADOS) j WHERE a.ID_CORRIDA = @id AND a.CODIGO = 'MAESTRA_CONSUMO'), '|',
+                    (SELECT COUNT(DISTINCT ID_CORRIDA) FROM dat.BASE_RECIBIDA WHERE CODIGO = 'MAESTRA_TDC')) AS o) x;
 
 /* Gescar (ges_nuevas_rea.prg y ges_retiro.prg): 119 posiciones */
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
@@ -333,9 +334,9 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o 
 FROM (SELECT N'ACT: cada script termina en commit y exit' AS p, CAST(N'commit;|exit;' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(SENTENCIA, '|') WITHIN GROUP (ORDER BY NUM) FROM (SELECT TOP (2) SENTENCIA, NUM FROM ops.CYBER_SCRIPT
       WHERE ID_CORRIDA = @id AND SCRIPT = 'ACT_PAGMIN' ORDER BY NUM DESC) x) AS NVARCHAR(4000)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'ACT: pagos a arribar (dos iguales en el archivo van los dos; crédito inexistente fuera)' AS p, CAST(N'486-100001:500.00,486-100001:500.00,486-102:1000.00' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(CONCAT(CUENTA2, ':', IMPORTE), ',') WITHIN GROUP (ORDER BY CUENTA2, ID) FROM dat.PAGO_ARRIBADO WHERE ID_CORRIDA = @id) AS NVARCHAR(4000)) AS o) x;
+FROM (SELECT N'ACT: se arriban todos los pagos (iguales van los dos; crédito sin cruce va tal cual)' AS p, CAST(N'29999999:10.00,486-100001:500.00,486-100001:500.00,486-102:1000.00' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(CONCAT(ISNULL(CUENTA2, CUENTA), ':', IMPORTE), ',') WITHIN GROUP (ORDER BY ISNULL(CUENTA2, CUENTA), ID) FROM dat.PAGO_ARRIBADO WHERE ID_CORRIDA = @id) AS NVARCHAR(4000)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'SCBPAG: 3 líneas de 104' AS p, N'3|0' AS e,
+FROM (SELECT N'SCBPAG: 4 líneas de 104' AS p, N'4|0' AS e,
              CONCAT((SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBPAG'), '|',
                     (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBPAG' AND DATALENGTH(LINEA) / 2 <> 104)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
@@ -357,8 +358,12 @@ END TRY
 BEGIN CATCH
     INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Segunda actualización termina OK', ISNULL(0, 0), CAST(ERROR_MESSAGE() AS NVARCHAR(4000));
 END CATCH;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'ACT 2: pagos de cuentas retiradas se cruzan con el histórico',
+       CASE WHEN EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ACT')
+                         AND PASO = 'ACT PAGOS' AND MENSAJE LIKE N'%de cuentas retiradas (histórico): 2 %') THEN 1 ELSE 0 END,
+       (SELECT TOP (1) MENSAJE FROM ops.BITACORA WHERE PASO = 'ACT PAGOS' ORDER BY ID DESC);
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'ACT 2: pagos ya arribados no se repiten' AS p, CAST(N'3|0' AS NVARCHAR(4000)) AS e, CAST(CONCAT((SELECT COUNT(*) FROM dat.PAGO_ARRIBADO), '|', (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBPAG')) AS NVARCHAR(4000)) AS o) x;
+FROM (SELECT N'ACT 2: pagos ya arribados no se repiten' AS p, CAST(N'4|0' AS NVARCHAR(4000)) AS e, CAST(CONCAT((SELECT COUNT(*) FROM dat.PAGO_ARRIBADO), '|', (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBPAG')) AS NVARCHAR(4000)) AS o) x;
 GO
 
 /* Pagos negativos: la actualización se cancela */
@@ -372,7 +377,7 @@ BEGIN CATCH
 END CATCH;
 SET @id = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ACT');
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'Pagos negativos: no se arriban, quedan en rechazos y se avisa a Operación' AS p, N'OK|1|0|3|1' AS e,
+FROM (SELECT N'Pagos negativos: no se arriban, quedan en rechazos y se avisa a Operación' AS p, N'OK|1|0|4|1' AS e,
              CONCAT((SELECT ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = @id), '|',
                     (SELECT COUNT(*) FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'PAGOS_NEGATIVOS'), '|',
                     (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBPAG'), '|',

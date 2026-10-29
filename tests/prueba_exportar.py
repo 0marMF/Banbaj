@@ -55,7 +55,7 @@ def main(conexion):
 
     ruta = act / "SCBPAG.TXT"
     datos, ls = lineas(ruta) if ruta.exists() else (b"", [])
-    ok("SCBPAG.TXT: 3 líneas de 104", len(ls) == 3 and all(len(x) == 104 for x in ls))
+    ok("SCBPAG.TXT: 4 líneas de 104", len(ls) == 4 and all(len(x) == 104 for x in ls))
     ok("Scripts de saldos para CYBER", all((act / "cyber" / f"{s}.sql").exists() for s in ("ACT_SALDOS", "ACT_VENCIDO", "ACT_PAGMIN")))
     sql = (act / "cyber" / "ACT_SALDOS.sql").read_bytes() if (act / "cyber" / "ACT_SALDOS.sql").exists() else b""
     ok("Script termina en commit y exit", sql.endswith(b"commit;\r\nexit;\r\n"))

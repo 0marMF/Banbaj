@@ -261,8 +261,8 @@ BEGIN
              + N'WHERE ID_CORRIDA = @id_corrida AND ES_EXISTENTE = 0;';
     EXEC sp_executesql @sql, N'@id_corrida INT', @id_corrida = @id_corrida;
 
-    INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, SUB_CTE, ESTATUS, FE_ALTA, ID_CORRIDA_ALTA)
-    SELECT @cliente, CUENTA, CAST(FOLIO AS INT), CUENTA2, SEGMENTO2, SUB_CTE, 'A', @fecha, @id_corrida
+    INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, ID_CORRIDA_ALTA)
+    SELECT @cliente, CUENTA, CAST(FOLIO AS INT), CUENTA2, SEGMENTO2, LEFT(RIESGO, 35), SUB_CTE, 'A', @fecha, @id_corrida
     FROM stg.LAYOUT_486
     WHERE ID_CORRIDA = @id_corrida AND ES_EXISTENTE = 0;
 
@@ -304,6 +304,7 @@ BEGIN
 
     /* Histórico: baja con foto del registro */
     UPDATE h SET ESTATUS = 'B', FE_BAJA = @fecha, MOTIVO_BAJA = LEFT(v.MOTIVO, 60), ID_CORRIDA_BAJA = @id_corrida,
+                 RIESGO = ISNULL(h.RIESGO, LEFT(d.RIESGO, 35)),
                  DATOS_BAJA = (SELECT d.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
     FROM dat.HISTORIA_FOLIO h
     JOIN ops.DEVOLUCION v ON v.CUENTA = h.CUENTA AND v.ID_CORRIDA = @id_corrida AND v.PROCESADA = 0
@@ -311,9 +312,9 @@ BEGIN
     WHERE h.CLIENTE = @cliente AND h.ESTATUS = 'A';
 
     /* Cuentas sin histórico (cargadas antes de la migración): se registra la baja */
-    INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA,
+    INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA,
                                     MOTIVO_BAJA, ID_CORRIDA_BAJA, DATOS_BAJA, ID_CORRIDA_ALTA)
-    SELECT @cliente, d.CUENTA, ISNULL(TRY_CONVERT(INT, d.FOLIO), 0), ISNULL(d.CUENTA2, ''), d.SEGMENTO2,
+    SELECT @cliente, d.CUENTA, ISNULL(TRY_CONVERT(INT, d.FOLIO), 0), ISNULL(d.CUENTA2, ''), d.SEGMENTO2, LEFT(d.RIESGO, 35),
            CASE WHEN LEFT(d.SUB_CTE, 3) IN ('NVA', 'REA') THEN LEFT(d.SUB_CTE, 3) ELSE 'NVA' END, 'B',
            ISNULL(d.FE_ASIG, @fecha), @fecha, LEFT(v.MOTIVO, 60), @id_corrida,
            (SELECT d.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER), 0     -- 0 = sin alta registrada (para el retroceso)
