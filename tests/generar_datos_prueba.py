@@ -73,7 +73,8 @@ def main(destino):
         c4, c4,
         con("20000005", "CLIENTE PRUEBA C5", "0", "0", "AUTO", "AUTO", "CASTIGADA", "CASTIGADA", "400"),
         con("20000008", "CLIENTE PRUEBA EXCLUIDO", "700.00", "70.00", "PERSONAL", "PERSONAL", "VENCIDA", "90+", "96"),
-        con("20000009", "CLIENTE PRUEBA REASIGNADO", "900.00", "90.00", "Nómina revolvente", "Nómina", "VENCIDA", "60-89", "70"),
+        con("20000009", "CLIENTE PRUEBA REASIGNADO", "900.00", "90.00", "Nómina revolvente", "Nómina", "VENCIDA", "60-89", "70",
+            correo1="Malo@Correo.com", correo2="notiene@hotmail.com"),
     ])
 
     escribir(destino / "act_ok" / "SERTEC_Saldos_tdc.csv",
@@ -129,20 +130,6 @@ def main(destino):
     ])
     # Lista negra (blacklist_486.prg)
     escribir(destino / "exclusiones" / "BLACKLIST.csv", ["TEL"], [{"TEL": "55 1234 5678"}, {"TEL": "5512345678"}, {"TEL": ""}])
-    # Lo que baja STATUS.SQL de CYBER (sqlplus con colsep '|', columnas con espacios)
-    (destino / "status").mkdir(parents=True, exist_ok=True)
-    filas = [
-        ("486", "100001", "486-100001", "PP", "CM", "01/11/26", "1", "20000004"),
-        ("486", "100003", "486-100003", "NC", "CM", "01/11/26", "1", "3333XAXX010101000"),
-        ("486", "500", "486-500", "", "", "", "", "20000009"),
-        ("486", "102", "486-102", "NC", "CM", "01/11/26", "1", "20000001"),
-        ("307", "1", "307-1", "NC", "CM", "01/11/26", "1", "X"),
-        ("486", "100004", "486-100004", "", "RP", "01/11/26", "1", "4444XAXX010101000"),
-    ]
-    anchos = (3, 10, 28, 6, 6, 9, 4, 25)
-    with open(destino / "status" / "STATUSBAJ.txt", "w", encoding="cp437", newline="") as f:
-        for fila in filas:
-            f.write("|".join(v.ljust(w) for v, w in zip(fila, anchos)).rstrip() + "\n")
     print("datos de prueba en", destino)
 
 

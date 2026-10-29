@@ -175,6 +175,30 @@ BEGIN
     SET @sql += N') v(POS, NOMBRE) WHERE r.ID = @fila;';
     EXEC sp_executesql @sql, N'@fila INT', @fila = @fila_enc;
 
+    /* 3b. Base completa: todas las columnas, tal como llegaron (cfg.ARCHIVO.GUARDAR_COMPLETO) */
+    IF EXISTS (SELECT 1 FROM cfg.ARCHIVO WHERE ID_ARCHIVO = @id_archivo AND GUARDAR_COMPLETO = 1)
+    BEGIN
+        /* Llave JSON = encabezado; vacío -> COL_n, repetido -> nombre_n; el punto se cambia por _ (FOR JSON lo anida) */
+        SELECT POS, LEFT(REPLACE(CASE WHEN NULLIF(LTRIM(RTRIM(NOMBRE)), N'') IS NULL THEN CONCAT(N'COL_', POS)
+                                      WHEN COUNT(*) OVER (PARTITION BY UPPER(LTRIM(RTRIM(NOMBRE)))) > 1 THEN CONCAT(LTRIM(RTRIM(NOMBRE)), N'_', POS)
+                                      ELSE LTRIM(RTRIM(NOMBRE)) END, N'.', N'_'), 128) AS LLAVE
+        INTO #llave FROM #hdr;
+        DECLARE @json_cols NVARCHAR(MAX) =
+            (SELECT STRING_AGG(CAST(N'r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3) + N' AS ' + QUOTENAME(LLAVE) AS NVARCHAR(MAX)), N', ')
+                    WITHIN GROUP (ORDER BY POS) FROM #llave);
+        DELETE FROM dat.BASE_RECIBIDA WHERE ID_CORRIDA = @id_corrida AND CODIGO = @codigo;
+        DELETE FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @id_corrida AND CODIGO = @codigo;
+        SET @sql = N'INSERT INTO dat.BASE_RECIBIDA (ID_CORRIDA, CODIGO, FILA, DATOS) '
+                 + N'SELECT @id_corrida, @codigo, r.ID, (SELECT ' + @json_cols
+                 + N' FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES) FROM ' + @raw_q + N' r WHERE r.ID > @fila AND COALESCE('
+                 + (SELECT STRING_AGG(CAST(N'r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3) AS NVARCHAR(MAX)), N', ') FROM #llave) + N', NULL) IS NOT NULL;';
+        EXEC sp_executesql @sql, N'@id_corrida INT, @codigo VARCHAR(50), @fila INT', @id_corrida = @id_corrida, @codigo = @codigo, @fila = @fila_enc;
+        INSERT INTO dat.BASE_RECIBIDA_ARCHIVO (ID_CORRIDA, CODIGO, CLIENTE, ARCHIVO, ENCABEZADOS, REGISTROS)
+        SELECT @id_corrida, @codigo, @cliente, @archivo,
+               (SELECT N'[' + STRING_AGG(CAST(N'"' + STRING_ESCAPE(ISNULL(NOMBRE, N''), 'json') + N'"' AS NVARCHAR(MAX)), N',') WITHIN GROUP (ORDER BY POS) + N']' FROM #hdr),
+               (SELECT COUNT(*) FROM dat.BASE_RECIBIDA WHERE ID_CORRIDA = @id_corrida AND CODIGO = @codigo);
+    END;
+
     CREATE TABLE #map (CAMPO SYSNAME, POS INT NULL, TIPO_SQL VARCHAR(50), TRANSF NVARCHAR(1000),
                        OBLIGATORIO BIT, DERIVADO BIT);
     INSERT INTO #map (CAMPO, POS, TIPO_SQL, TRANSF, OBLIGATORIO, DERIVADO)

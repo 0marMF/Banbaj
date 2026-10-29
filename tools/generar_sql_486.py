@@ -410,7 +410,8 @@ PARAMETROS = [
     ("TEL_DAT_AREA_MOVIL", "045", "op9.prg: área de los celulares al guardarlos en el DAT"),
     ("CORREOS_INVALIDOS", "notiene@hotmail.com,notiene@gmail.com,notienecorreo@hotmail.com,notiene@mail.com,notiene@email.com",
      "email.PRG: correos que no se mandan a CYBER"),
-    ("CORREOS_EXCLUIR_MALOS", "0", "1 = quitar EMAILMALO también de sub_mail.TXT (hoy no se quita: 0). Por definir"),
+    ("CORREOS_EXCLUIR_MALOS", "1", "1 = EMAILMALO también se quita de sub_mail.TXT (decisión: sí se aplica)"),
+    ("CYBER_BANDERA_CORREOS", "416", "id_proc de RCVRY.RPT_LOG_CYBER_REG que se enciende y apaga al actualizar correos (ACTIVA/INACTIVA_BANDERA.SQL)"),
     ("CYBER_PROC_CORREOS", "RCVRY.JSP_CORREOS_486", "Procedimiento de CYBER que purga y agrega los correos (INSERTA_MAIL.sql)"),
     ("STATUS_NO_BLANQUEAR", "GS,PP,LQ,NP,PR,CD,CC,FA", "status.prg: status que no se blanquean (REQ 2021-051124)"),
     ("DIAS_BLANQUEO_STATUS", "1-10", "status.prg: días del mes en que se blanquea status"),
@@ -496,12 +497,11 @@ SALIDAS_ARCHIVO = [
      "d.CUENTA2", None, "SCBACTH_486REA.TXT", "Gescar de cuentas reasignadas (ges_nuevas_rea.prg)"),
     ("MAIL_SUBMAIL", "ASIG", 35, "ops.CORREO d WHERE d.ID_CORRIDA = @id_corrida", "d.CUENTA2, d.CORREO", "|",
      "sub_mail.TXT", "Correos para cargar en RCVRY.JSP_TAB_MAIL_REMESA_486 (email.PRG -> act_mail.prg)"),
-    ("GESCAR_SINTEL", "ASIG", 60,
-     "dat.DAT_486 d WHERE d.CLIENTE = @cliente AND EXISTS (SELECT 1 FROM dat.HISTORIA_FOLIO h WHERE h.CLIENTE = @cliente "
-     "AND h.ID_CORRIDA_ALTA = @id_corrida AND h.CUENTA = d.CUENTA) AND NOT EXISTS (SELECT 1 FROM ops.TELEFONO t "
-     "WHERE t.ID_CORRIDA = @id_corrida AND t.CUENTA2 = d.CUENTA2)",
+    ("GESCAR_SINTEL", "SINTEL", 10,
+     "dat.HISTORIA_FOLIO d WHERE d.CLIENTE = @cliente AND d.ID_CORRIDA_ALTA = @id_corrida "
+     "AND NOT EXISTS (SELECT 1 FROM ops.TELEFONO_CYBER t WHERE t.ID_CORRIDA = @id_corrida AND t.CUENTA2 = d.CUENTA2)",
      "d.CUENTA2", None, "SCBACTH_SINTEL.TXT",
-     "Gescar de cuentas sin teléfono (ges486.prg). INACTIVO: hoy cruza contra los teléfonos activos en CYBER; aquí solo contra los que se mandan", 0),
+     "Gescar de nuevas y reasignadas sin teléfono activo en CYBER (ges486.prg); lo genera ops.sp_gescar_sin_telefono"),
     ("SCBSDOS_ACT", "ACT", 10, None, "d.CUENTA2", None, "SCBSDOS.TXT", "Cuentas del DAT después de la actualización"),
     ("SCBSDOS_ETI", "ETI", 10, None, "d.CUENTA2", None, "SCBSDOS.TXT", "SCBSDOS de etiquetado o fuera de proceso (eti486.prg, moraeti.prg)"),
     ("BLANQUEO_LISTA", "BLANQUEO", 10, "ops.STATUS_CYBER d WHERE d.ID_CORRIDA = @id_corrida AND d.BLANQUEA = 1", "d.CUENTA", ",",
@@ -512,6 +512,13 @@ SALIDAS_ARCHIVO = [
      "Devolución para CYBER: una CUENTA2 por línea (prog15.prg, \\\\192.168.50.1\\Cyber_00\\dev)"),
     ("GESCAR_RETIRO", "RETIRO", 20, BAJA_RETIRO, "d.CUENTA2", None, "SCBACTH_486.TXT", "Gescar de retiro (ges_retiro.prg)"),
     ("RETIROS", "RETIRO", 30, BAJA_RETIRO, "d.FOLIO", ",", "RETIROS_486_{AAAAMMDD}.csv", "Folios retirados para operación"),
+]
+# Copia del DAT para MIS (antes DBF en Q:\\MIS\\SERTEC98\\CLIENTES\\486\\DAT y B:\\asignaciones\\dats\\dat486)
+_MIS_ORIGEN = "ops.v_DAT_486_MIS d WHERE d.CLIENTE = @cliente"
+DAT_MIS_ARCHIVOS = [
+    (f"DAT_MIS_{p}", p if p != "RET" else "RETIRO", 90, _MIS_ORIGEN, "d.CUENTA", ",", "DAT486_{AAAAMMDD}.csv",
+     "DAT del 486 en CSV para MIS (resdat.PRG / prog15.prg)", 1, 1, 1)
+    for p in ("ASIG", "ACT", "RET", "ETI")
 ]
 GESCAR = lambda comentario: [  # SCBACTH: 119 posiciones
     ("IDENTIFICA", 3, "CONSTANTE", "'200'"), ("GRUPO", 1, "CONSTANTE", "'1'"), ("CUENTA", 25, "TEXTO", "d.CUENTA2"),
@@ -630,7 +637,7 @@ PLANTILLAS = [
 
 
 # ---------------------------------------------------------------- escritura
-def sql_semilla(scb):
+def sql_semilla(scb, dat):
     L = ["/* =====================================================================",
          "   Banbaj · 90 Semilla del cliente 486 (generado por tools/generar_sql_486.py)",
          "   Re-ejecutable: borra y vuelve a cargar la configuración del 486.",
@@ -661,9 +668,9 @@ def sql_semilla(scb):
     L.append("/* Archivos de entrada y sus columnas */")
     L.append("DECLARE @id INT;")
     for cod, proc, seg, pat, ncol, tabla, llave, obl, orden, act, com in ARCHIVOS:
-        L.append(f"INSERT INTO cfg.ARCHIVO (CLIENTE, PROCESO, CODIGO, SEGMENTO2, RUTA, PATRON_NOMBRE, NUM_COLUMNAS, TABLA_DESTINO, "
+        L.append(f"INSERT INTO cfg.ARCHIVO (CLIENTE, PROCESO, CODIGO, SEGMENTO2, RUTA, PATRON_NOMBRE, NUM_COLUMNAS, TABLA_DESTINO, GUARDAR_COMPLETO, "
                  f"LLAVE_DAT, OBLIGATORIO, ORDEN, ACTIVO, COMENTARIO) VALUES ({cli}, {q(proc)}, {q(cod)}, {q(seg)}, {q(RUTA_ENTRADA)}, "
-                 f"{q(pat)}, {ncol}, {q(tabla)}, {q(llave)}, {obl}, {orden}, {act}, {q(com)});")
+                 f"{q(pat)}, {ncol}, {q(tabla)}, {1 if proc == 'ASIG' else 0}, {q(llave)}, {obl}, {orden}, {act}, {q(com)});")
         L.append("SET @id = SCOPE_IDENTITY();")
         for campo, enc, (tipo, trf), obl_c, con_fecha, comc in COLUMNAS[cod]:
             pat_c = patron(enc, con_fecha) if enc else None
@@ -705,10 +712,21 @@ def sql_semilla(scb):
                      f"VALUES ({cli}, {q(arch)}, {i}, {q(campo)}, {ancho_c}, {q(fmt)}, {q(expr)});")
     L.append("")
     L.append("/* Catálogo de archivos planos */")
-    for arch, proc, orden_a, origen, orden_l, sep, nombre, desc, *resto in SALIDAS_ARCHIVO:
-        activo = resto[0] if resto else 1
-        L.append(f"INSERT INTO cfg.SALIDA_ARCHIVO (CLIENTE, ARCHIVO, PROCESO, ORDEN, ORIGEN, ORDEN_LINEAS, SEPARADOR, NOMBRE, DESCRIPCION, ACTIVO) "
-                 f"VALUES ({cli}, {q(arch)}, {q(proc)}, {orden_a}, {q(origen)}, {q(orden_l)}, {q(sep)}, {q(nombre)}, {q(desc)}, {activo});")
+    for arch, proc, orden_a, origen, orden_l, sep, nombre, desc, *resto in SALIDAS_ARCHIVO + DAT_MIS_ARCHIVOS:
+        activo, comillas, encabezado = (list(resto) + [1, 0, 0])[:3] if resto else (1, 0, 0)
+        L.append(f"INSERT INTO cfg.SALIDA_ARCHIVO (CLIENTE, ARCHIVO, PROCESO, ORDEN, ORIGEN, ORDEN_LINEAS, SEPARADOR, NOMBRE, DESCRIPCION, ACTIVO, COMILLAS, ENCABEZADO) "
+                 f"VALUES ({cli}, {q(arch)}, {q(proc)}, {orden_a}, {q(origen)}, {q(orden_l)}, {q(sep)}, {q(nombre)}, {q(desc)}, {activo}, {comillas}, {encabezado});")
+    L.append("/* Copia del DAT para MIS en CSV (resdat.PRG): CUENTA = 486-folio, CUENTA3 = crédito */")
+    for i, (campo, t, n) in enumerate(dat, 1):
+        if t == "N":
+            fmt, expr = "IMPORTE", f"d.{campo}"
+        elif t == "D":
+            fmt, expr = "TEXTO", f"CONVERT(VARCHAR(10), d.{campo}, 103)"
+        else:
+            fmt, expr = "TEXTO", f"d.{campo}"
+        for arch, *_ in DAT_MIS_ARCHIVOS:
+            L.append(f"INSERT INTO cfg.SALIDA (CLIENTE, ARCHIVO, ORDEN, CAMPO, ANCHO, FORMATO, EXPRESION) "
+                     f"VALUES ({cli}, {q(arch)}, {i}, {q(campo)}, 0, {q(fmt)}, {q(expr)});")
     L.append("")
     L.append("/* Teléfonos de dueños del banco: nunca se arriban (telbnx.prg, REQ 2022-004456) */")
     for t in ("4777140350", "4777140308", "4777147689"):
@@ -745,7 +763,7 @@ def main():
         assert sum(c[1] for c in CAMPOS_SALIDA[arch]) == ancho, f"{arch} debe medir {ancho}"
     assert {a[0] for a in SALIDAS_ARCHIVO} - {"SCBSDOS", "SCBSDOS_ACT", "SCBSDOS_ETI"} == set(CAMPOS_SALIDA), "salidas sin campos"
     (RAIZ / "sql" / "05_tabla_dat_486.sql").write_text(sql_dat(dat), encoding="utf-8")
-    (RAIZ / "sql" / "90_semilla_486.sql").write_text(sql_semilla(scb), encoding="utf-8")
+    (RAIZ / "sql" / "90_semilla_486.sql").write_text(sql_semilla(scb, dat), encoding="utf-8")
     print("ok:", len(dat), "campos DAT,", len(scb), "campos SCBSDOS")
 
 

@@ -26,7 +26,8 @@ BEGIN
     DECLARE @origen NVARCHAR(2000), @orden NVARCHAR(400), @sep VARCHAR(5),
             @ancho INT, @partes NVARCHAR(MAX), @sql NVARCHAR(MAX), @n INT, @malas INT;
 
-    SELECT @origen = ORIGEN, @orden = ORDEN_LINEAS, @sep = SEPARADOR
+    DECLARE @comillas BIT = 0;
+    SELECT @origen = ORIGEN, @orden = ORDEN_LINEAS, @sep = SEPARADOR, @comillas = COMILLAS
     FROM cfg.SALIDA_ARCHIVO WHERE CLIENTE = @cliente AND ARCHIVO = @archivo;
     SET @origen = ISNULL(@origen, N'dat.DAT_486 d WHERE d.CLIENTE = @cliente');
     SET @orden  = ISNULL(@orden, N'd.CUENTA2');
@@ -51,12 +52,14 @@ BEGIN
         DECLARE @sep_sql NVARCHAR(20) = N', N''' + REPLACE(@sep, '''', '''''') + N''', ';
         /* Delimitado: campos sin espacios sobrantes, sin comillas (como COPY TO … DELIMITED WITH "") */
         SELECT @partes = STRING_AGG(CAST(
+                   CASE WHEN @comillas = 1 THEN N'CONCAT(N''"'', REPLACE(ISNULL(' ELSE N'' END +
                    CASE FORMATO
                        WHEN 'IMPORTE'        THEN N'CONVERT(NVARCHAR(30), CAST(' + EXPRESION + N' AS DECIMAL(18,2)))'
                        WHEN 'IMPORTE_SIGNO'  THEN N'CONVERT(NVARCHAR(30), CAST(' + EXPRESION + N' AS DECIMAL(18,2)))'
                        WHEN 'FECHA_MMDDAAAA' THEN N'cfg.fn_fecha_mmddaaaa(' + EXPRESION + N')'
                        ELSE N'LTRIM(RTRIM(CAST((' + EXPRESION + N') AS NVARCHAR(4000))))'
-                   END AS NVARCHAR(MAX)), @sep_sql) WITHIN GROUP (ORDER BY ORDEN)
+                   END +
+                   CASE WHEN @comillas = 1 THEN N', N''''), N''"'', N''""''), N''"'')' ELSE N'' END AS NVARCHAR(MAX)), @sep_sql) WITHIN GROUP (ORDER BY ORDEN)
         FROM cfg.SALIDA
         WHERE CLIENTE = @cliente AND ARCHIVO = @archivo AND ACTIVO = 1;
     END;

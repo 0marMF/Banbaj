@@ -104,6 +104,8 @@ BEGIN
 
     DELETE FROM dat.PAGO_ARRIBADO WHERE ID_CORRIDA = @id_corrida AND ORIGEN = 'CORRIDA';
     DELETE FROM ops.TELEFONO WHERE ID_CORRIDA = @id_corrida;
+    DELETE FROM dat.BASE_RECIBIDA WHERE ID_CORRIDA = @id_corrida;
+    DELETE FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @id_corrida;
     UPDATE ops.DEVOLUCION SET PROCESADA = 0 WHERE ID_CORRIDA = @id_corrida;
 
     SET @msg = CONCAT(N'Revertida (estatus previo ', @estatus, N'). Lo que ya se haya arribado a CYBER no se revierte.');

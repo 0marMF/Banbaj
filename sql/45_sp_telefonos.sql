@@ -100,7 +100,12 @@ BEGIN
 
     /* Script para CYBER, después de cargar sub_mst.TXT en RCVRY.JSP_TAB_TEL_REMESA_486 (ACTUALIZA_PHONE.SQL).
        El procedimiento vive en CYBER y no se modifica desde aquí. */
-    DELETE FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id_corrida AND SCRIPT = 'TEL_ACTUALIZA';
+    DELETE FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id_corrida AND SCRIPT IN ('TEL_BORRA', 'TEL_ACTUALIZA');
+    /* borra.sql de ACT_PHONE: se vacía la remesa para volver a insertar */
+    INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
+    VALUES (@id_corrida, 'TEL_BORRA', 1, N'TRUNCATE TABLE RCVRY.JSP_TAB_TEL_REMESA_486;'),
+           (@id_corrida, 'TEL_BORRA', 2, N'COMMIT;'),
+           (@id_corrida, 'TEL_BORRA', 3, N'EXIT;');
     INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
     VALUES (@id_corrida, 'TEL_ACTUALIZA', 1, CONCAT(N'EXECUTE ', ISNULL(cfg.fn_param(@cliente, 'CYBER_PROC_TELEFONOS'), N'RCVRY.JSP_TELEFONOS_REMESA_486'), N';')),
            (@id_corrida, 'TEL_ACTUALIZA', 2, N'COMMIT;'),

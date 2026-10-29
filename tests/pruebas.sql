@@ -43,6 +43,7 @@ UPDATE cfg.ARCHIVO SET RUTA = '/datos/act_ok/', CODEPAGE = '' WHERE CLIENTE = '4
 INSERT INTO dat.FOLIO_CONSECUTIVO (CLIENTE, ULTIMO_FOLIO) VALUES ('486', 100000);
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO) VALUES ('486', 'CUENTA', '20000008', 'Prueba de exclusión');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'TELEFONO', '5533333333', '486-104', 'Prueba de queja (TELBAJ)');
+INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'CORREO', 'malo@correo.com', '20000009', 'Prueba de EMAILMALO');
 INSERT INTO cfg.PLAN_NUMERACION (LADA, SERIE, N_INI, N_FIN, TIPORED)
 VALUES ('55', '1111', 0, 9999, 'MOVIL'), ('477', '123', 4000, 4999, 'MOVIL'), ('477', '123', 0, 3999, 'FIJO'), ('477', '700', 0, 9999, 'FIJO');
 
@@ -200,8 +201,9 @@ FROM (SELECT N'TEL: SCBTEL 7 líneas de 137 con fecha y gestor' AS p, N'7|0|1102
                     (SELECT SUBSTRING(LINEA, 82, 8) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBTEL' AND NUM = 1), '|',
                     (SELECT SUBSTRING(LINEA, 99, 4) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBTEL' AND NUM = 1)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'TEL: bitácora (quejas TELBAJ) y script de CYBER' AS p, N'1|EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;' AS e,
+FROM (SELECT N'TEL: bitácora (quejas TELBAJ) y scripts de CYBER (vaciar remesa y procedimiento)' AS p, N'1|TRUNCATE TABLE RCVRY.JSP_TAB_TEL_REMESA_486;|EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;' AS e,
              CONCAT((SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'TELEFONOS' AND MENSAJE LIKE N'%quejas (TELBAJ): 1 %'), '|',
+                    (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'TEL_BORRA' AND NUM = 1), '|',
                     (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'TEL_ACTUALIZA' AND NUM = 1)) AS o) x;
 
 /* op9.prg: las cuentas nuevas guardan sus teléfonos como AREA + TELEFONO; las existentes, como llegan */
@@ -216,7 +218,27 @@ FROM (SELECT N'MAIL: sub_mail (CUENTA2|CORREO) y scripts de CYBER' AS p,
              CONCAT((SELECT STRING_AGG(LINEA, ',') WITHIN GROUP (ORDER BY NUM) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'MAIL_SUBMAIL'), '|',
                     (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'MAIL_BORRA' AND NUM = 1), '|',
                     (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'MAIL_ACTUALIZA' AND NUM = 1)) AS o) x;
-INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'GESCAR sin teléfono: inactivo (no se genera)', CASE WHEN NOT EXISTS (SELECT 1 FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'GESCAR_SINTEL') THEN 1 ELSE 0 END, NULL;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'GESCAR sin teléfono: no sale en la asignación (espera lo que baja de CYBER)', CASE WHEN NOT EXISTS (SELECT 1 FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'GESCAR_SINTEL') THEN 1 ELSE 0 END, NULL;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'MAIL: banderas de CYBER (id_proc 416) al inicio y al final' AS p,
+             N'UPDATE RCVRY.RPT_LOG_CYBER_REG SET STATUS=1, ETAPA=''INICIA ACTUALIZACION ADDRESS 486'', ACTIVADO=SYSDATE  where id_proc=416;|UPDATE RCVRY.RPT_LOG_CYBER_REG SET STATUS=0, ETAPA=''FINALIZA ACTUALIZACION ADDRESS G1 486'' where id_proc=416;' AS e,
+             CONCAT((SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'MAIL_ACTIVA_BANDERA' AND NUM = 1), '|',
+                    (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'MAIL_INACTIVA_BANDERA' AND NUM = 2)) AS o) x;
+
+/* DAT para MIS en CSV (resdat.PRG): CUENTA = 486-folio, campos entre comillas */
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'MIS: DAT en CSV con comillas' AS p, N'8|"100","486","' AS e,
+             CONCAT((SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'DAT_MIS_ASIG'), '|',
+                    (SELECT LEFT(LINEA, 13) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'DAT_MIS_ASIG' AND NUM = 1)) AS o) x;
+
+/* Bases maestras completas (todas las columnas) */
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'BASE: maestras guardadas completas (renglones, encabezados y un valor)' AS p, N'4|96|1000000001|7|107' AS e,
+             CONCAT((SELECT REGISTROS FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @id AND CODIGO = 'MAESTRA_TDC'), '|',
+                    (SELECT COUNT(*) FROM dat.BASE_RECIBIDA_ARCHIVO a CROSS APPLY OPENJSON(a.ENCABEZADOS) j WHERE a.ID_CORRIDA = @id AND a.CODIGO = 'MAESTRA_TDC'), '|',
+                    (SELECT JSON_VALUE(DATOS, '$."ACC_NUM"') FROM dat.BASE_RECIBIDA WHERE ID_CORRIDA = @id AND CODIGO = 'MAESTRA_TDC' AND FILA = 2), '|',
+                    (SELECT REGISTROS FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @id AND CODIGO = 'MAESTRA_CONSUMO'), '|',
+                    (SELECT COUNT(*) FROM dat.BASE_RECIBIDA_ARCHIVO a CROSS APPLY OPENJSON(a.ENCABEZADOS) j WHERE a.ID_CORRIDA = @id AND a.CODIGO = 'MAESTRA_CONSUMO')) AS o) x;
 
 /* Gescar (ges_nuevas_rea.prg y ges_retiro.prg): 119 posiciones */
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
@@ -455,8 +477,15 @@ FROM (SELECT N'EXCLUSION: carga de lista negra con REQ (sin duplicar)' AS p, N'1
                     (SELECT REQ FROM cfg.EXCLUSION WHERE TIPO = 'TELEFONO' AND VALOR = '5512345678')) AS o) x;
 GO
 
-/* Blanqueo de status (status.prg) sobre la asignación 2 (día 2: sí toca) */
-EXEC ops.sp_blanqueo_status @id_corrida = 2, @archivo = N'/datos/status/STATUSBAJ.txt', @codepage = '';
+/* Blanqueo de status (status.prg) sobre la asignación 2 (día 2: sí toca). Lo que baja de CYBER llega a stg.CYBER_STATUS */
+INSERT INTO stg.CYBER_STATUS (CLIENTE, FOLIO, CUENTA, STATUS, ACCION, FECHA, PESO, DMSSNUM)
+VALUES ('486', '100001', '486-100001', 'PP', 'CM', '01/11/2026', '1', '20000004'),
+       ('486', '100003', '486-100003', 'NC', 'CM', '01/11/2026', '1', '3333XAXX010101000'),
+       ('486', '500', '486-500', NULL, NULL, NULL, NULL, '20000009'),
+       ('486', '102', '486-102', 'NC', 'CM', '01/11/2026', '1', '20000001'),
+       ('307', '1', '307-1', 'NC', 'CM', '01/11/2026', '1', 'X'),
+       ('486', '100004', '486-100004', NULL, 'RP', '01/11/2026', '1', '4444XAXX010101000');
+EXEC ops.sp_blanqueo_status @id_corrida = 2;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'STATUS: blanquea nuevas/reasignadas salvo PP y sin status' AS p,
              N'486-100003,486-100004|4|100003,486-100003,NC,CM|NO ES NUEVA NI REASIGNADA EN LA CORRIDA,OTRO CLIENTE,SIN STATUS NI ACCION,STATUS QUE NO SE BLANQUEA' AS e,
@@ -464,6 +493,43 @@ FROM (SELECT N'STATUS: blanquea nuevas/reasignadas salvo PP y sin status' AS p,
                     (SELECT COUNT(*) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = 2 AND SCRIPT = 'BLANQUEO_STATUS'), '|',
                     (SELECT LINEA FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = 2 AND ARCHIVO = 'BLANQUEO_LISTA' AND NUM = 1), '|',
                     (SELECT STRING_AGG(MOTIVO, ',') WITHIN GROUP (ORDER BY MOTIVO) FROM ops.STATUS_CYBER WHERE ID_CORRIDA = 2 AND MOTIVO IS NOT NULL)) AS o) x;
+GO
+
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'STATUS: la tabla de paso queda vacía', CASE WHEN NOT EXISTS (SELECT 1 FROM stg.CYBER_STATUS) THEN 1 ELSE 0 END, NULL;
+GO
+
+/* Correos nuevos (email.PRG): sin lo que baja de CYBER no se arman; con él, solo los que CYBER no tiene */
+BEGIN TRY
+    EXEC ops.sp_correos_nuevos @id_corrida = 2;
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) VALUES (N'CORREOS NUEVOS: sin datos de CYBER se detiene', 0, N'No se detuvo');
+END TRY
+BEGIN CATCH
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'CORREOS NUEVOS: sin datos de CYBER se detiene (50642)', CASE WHEN ERROR_NUMBER() = 50642 THEN 1 ELSE 0 END, ERROR_MESSAGE();
+END CATCH;
+INSERT INTO stg.CYBER_CORREO (CUENTA, CORREO) VALUES ('486-102', 'UNO@correo.com '), ('486-100004', 'otro@correo.com');
+DECLARE @r TABLE (NUEVOS INT, YA_EN_CYBER INT);
+INSERT INTO @r EXEC ops.sp_correos_nuevos @id_corrida = 2;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'CORREOS NUEVOS: INSERT en RCVRY.ADDRESS solo de lo que CYBER no tiene (formato email.sql)' AS p,
+             N'1|1|3|INSERT INTO RCVRY.ADDRESS VALUES(''3333XAXX010101000'',''3'','''',''persona.tres@correo.com'','''','''','''','''','''',''A'','''',''1'',''486-100003'',TO_DATE(''02/11/26 |0' AS e,
+             CONCAT((SELECT CONCAT(NUEVOS, '|', YA_EN_CYBER) FROM @r), '|',
+                    (SELECT COUNT(*) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = 2 AND SCRIPT = 'MAIL_INSERTA_NUEVOS'), '|',
+                    (SELECT LEFT(SENTENCIA, 143) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = 2 AND SCRIPT = 'MAIL_INSERTA_NUEVOS' AND NUM = 1), '|',
+                    (SELECT COUNT(*) FROM stg.CYBER_CORREO)) AS o) x;
+GO
+
+/* Gescar de nuevas y reasignadas sin teléfono activo en CYBER (ges486.prg) */
+INSERT INTO stg.CYBER_TELEFONO (CUENTA, LADA, TEL)
+VALUES ('486-100001', '0155', '12345678'), ('486-100003', '045', '4771234567'), ('486-100003', '0155', '11111111'), ('486-102', '0155', '77777777');
+EXEC ops.sp_gescar_sin_telefono @id_corrida = 2;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'GESCAR sin teléfono: cuentas sin teléfono en CYBER (119, zzasg)' AS p,
+             N'3|0|2001486-100002|zzasg|CUENTA SIN NUMERO TELEFONICO|486-100002,486-100004,486-500' AS e,
+             CONCAT((SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = 2 AND ARCHIVO = 'GESCAR_SINTEL'), '|',
+                    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = 2 AND ARCHIVO = 'GESCAR_SINTEL' AND DATALENGTH(LINEA) / 2 <> 119), '|',
+                    (SELECT CONCAT(RTRIM(LEFT(LINEA, 29)), '|', RTRIM(SUBSTRING(LINEA, 56, 8)), '|', RTRIM(SUBSTRING(LINEA, 64, 56)))
+                     FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = 2 AND ARCHIVO = 'GESCAR_SINTEL' AND NUM = 1), '|',
+                    (SELECT STRING_AGG(SUBSTRING(RTRIM(LEFT(LINEA, 29)), 5, 25), ',') WITHIN GROUP (ORDER BY NUM) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = 2 AND ARCHIVO = 'GESCAR_SINTEL')) AS o) x;
 GO
 
 /* Aviso a Operación después del arribo (correo_486.prg) */

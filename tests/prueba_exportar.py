@@ -49,6 +49,10 @@ def main(conexion):
     ok("Lista de retiros para operación", (asig / "RETIROS_486_20261102.csv").exists())
     ok("Scripts de CYBER (retiro y teléfonos)", (asig / "cyber" / "RETIRO.sql").exists() and (asig / "cyber" / "TEL_ACTUALIZA.sql").exists())
 
+    mis = asig / "DAT486_20261102.csv"
+    datos, ls = lineas(mis) if mis.exists() else (b"", [])
+    ok("DAT para MIS en CSV con encabezado", len(ls) == 9 and ls[0].startswith(b"FOLIO,CLIENTE,SUB_CTE") and ls[1].startswith(b'"100","486"'))
+
     ruta = act / "SCBPAG.TXT"
     datos, ls = lineas(ruta) if ruta.exists() else (b"", [])
     ok("SCBPAG.TXT: 3 líneas de 104", len(ls) == 3 and all(len(x) == 104 for x in ls))

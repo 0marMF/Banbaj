@@ -10,6 +10,7 @@
                              al 10, a partir de lo que baja STATUS.SQL
    cfg.sp_exclusion_cargar   blacklist_486.prg: alta masiva de exclusiones con
    cfg.sp_exclusion_alta/baja requerimiento y quién lo solicita
+   ops.sp_gescar_sin_telefono ges486.prg: gescar de nuevas sin teléfono en CYBER
    ops.sp_avisar             correos de confirmación a Operación, después de
                              arribar a CYBER (MAIL, correo_486, correo, correo_486noti)
    ===================================================================== */
@@ -173,17 +174,15 @@ GO
 /* ---------------------------------------------------------------------
    Blanqueo de status (status.prg, REQ 2020-029307). Del día 1 al 10
    (DIAS_BLANQUEO_STATUS), después de arribar la asignación:
-   1. Correr cyber/486/STATUS.SQL en CYBER (deja C:\STATUSBAJ.txt).
-   2. EXEC ops.sp_blanqueo_status @id_corrida = <asignación>, @archivo = N'C:\STATUSBAJ.txt';
-   3. Revisar BLANQUEO_LISTA y correr cyber/BLANQUEO_STATUS.sql.
+   1. python tools/bajar_cyber.py status --corrida <asignación> … (consulta de STATUS.SQL
+      a stg.CYBER_STATUS y ejecuta este procedimiento; sin archivos en la máquina).
+   2. Revisar BLANQUEO_LISTA y correr cyber/BLANQUEO_STATUS.sql.
    Se blanquean las cuentas nuevas y reasignadas de esa asignación, salvo
    los status de STATUS_NO_BLANQUEAR y las que no tienen status ni acción.
    --------------------------------------------------------------------- */
 CREATE OR ALTER PROCEDURE ops.sp_blanqueo_status
     @id_corrida INT,
-    @archivo    NVARCHAR(500),
-    @forzar     BIT         = 0,
-    @codepage   VARCHAR(10) = 'ACP'
+    @forzar     BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -201,12 +200,7 @@ BEGIN
         RETURN;
     END;
 
-    CREATE TABLE #s (CLIENTE NVARCHAR(50), FOLIO NVARCHAR(50), CUENTA NVARCHAR(50), STATUS NVARCHAR(50), ACCION NVARCHAR(50),
-                     FECHA NVARCHAR(50), PESO NVARCHAR(50), DMSSNUM NVARCHAR(100));
-    DECLARE @sql NVARCHAR(MAX) = N'BULK INSERT #s FROM ' + QUOTENAME(@archivo, '''')
-        + N' WITH (FIELDTERMINATOR = ''|'', ROWTERMINATOR = ''0x0a'''
-        + CASE WHEN NULLIF(@codepage, '') IS NOT NULL THEN N', CODEPAGE = ' + QUOTENAME(@codepage, '''') ELSE N'' END + N');';
-    EXEC (@sql);
+    IF NOT EXISTS (SELECT 1 FROM stg.CYBER_STATUS) THROW 50611, 'stg.CYBER_STATUS está vacía: baja primero los status de CYBER (tools/bajar_cyber.py status).', 1;
 
     DECLARE @no TABLE (STATUS VARCHAR(10) PRIMARY KEY);
     INSERT INTO @no SELECT DISTINCT UPPER(LTRIM(RTRIM(value))) FROM STRING_SPLIT(ISNULL(cfg.fn_param(@cliente, 'STATUS_NO_BLANQUEAR'), ''), ',') WHERE LTRIM(RTRIM(value)) <> '';
@@ -217,7 +211,8 @@ BEGIN
            LEFT(NULLIF(LTRIM(RTRIM(CLIENTE)), ''), 10), LEFT(NULLIF(LTRIM(RTRIM(FOLIO)), ''), 20), LEFT(NULLIF(LTRIM(RTRIM(CUENTA)), ''), 28),
            LEFT(NULLIF(LTRIM(RTRIM(STATUS)), ''), 10), LEFT(NULLIF(LTRIM(RTRIM(ACCION)), ''), 10), LEFT(NULLIF(LTRIM(RTRIM(FECHA)), ''), 30),
            LEFT(NULLIF(LTRIM(RTRIM(PESO)), ''), 10), LEFT(NULLIF(LTRIM(RTRIM(REPLACE(DMSSNUM, NCHAR(13), N''))), ''), 28)
-    FROM #s;
+    FROM stg.CYBER_STATUS;
+    TRUNCATE TABLE stg.CYBER_STATUS;
 
     UPDATE s SET MOTIVO = CASE
             WHEN ISNULL(s.CLIENTE, '') <> @cliente THEN 'OTRO CLIENTE'
@@ -330,5 +325,42 @@ BEGIN
                                    FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
     IF @json IS NULL THROW 50630, 'La corrida no existe.', 1;
     EXEC mail.sp_enviar @plantilla = @plantilla, @id_corrida = @id_corrida, @valores = @json, @solo_prueba = @solo_prueba;
+END;
+GO
+
+/* ---------------------------------------------------------------------
+   Gescar de cuentas sin teléfono (ges486.prg, REQ 2021-051126). Después de
+   arribar los teléfonos de la asignación:
+   1. python tools/bajar_cyber.py telefonos --corrida <asignación> … (teléfonos activos del 486
+      a stg.CYBER_TELEFONO y ejecuta este procedimiento).
+   2. Arribar SCBACTH_SINTEL.TXT ("CUENTA SIN NUMERO TELEFONICO", origen zzasg).
+   Aplica a las cuentas nuevas y reasignadas de esa asignación que no tienen
+   ningún teléfono activo en CYBER.
+   --------------------------------------------------------------------- */
+CREATE OR ALTER PROCEDURE ops.sp_gescar_sin_telefono
+    @id_corrida INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @cliente VARCHAR(10), @proceso VARCHAR(10);
+    SELECT @cliente = CLIENTE, @proceso = PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
+    IF @proceso IS NULL OR @proceso <> 'ASIG' THROW 50650, 'Indica una corrida de asignación.', 1;
+
+    IF NOT EXISTS (SELECT 1 FROM stg.CYBER_TELEFONO) THROW 50651, 'stg.CYBER_TELEFONO está vacía: baja primero los teléfonos de CYBER (tools/bajar_cyber.py telefonos).', 1;
+
+    DELETE FROM ops.TELEFONO_CYBER WHERE ID_CORRIDA = @id_corrida;
+    INSERT INTO ops.TELEFONO_CYBER (ID_CORRIDA, CUENTA2, TELEFONOS)
+    SELECT @id_corrida, LEFT(LTRIM(RTRIM(CUENTA)), 28), COUNT(*)
+    FROM stg.CYBER_TELEFONO WHERE NULLIF(LTRIM(RTRIM(CUENTA)), N'') IS NOT NULL
+    GROUP BY LEFT(LTRIM(RTRIM(CUENTA)), 28);
+    TRUNCATE TABLE stg.CYBER_TELEFONO;
+
+    EXEC ops.sp_generar_salidas @id_corrida, 'SINTEL';
+
+    DECLARE @n INT = (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id_corrida AND ARCHIVO = 'GESCAR_SINTEL');
+    DECLARE @msg NVARCHAR(400) = CONCAT(N'Cuentas con teléfono en CYBER: ', (SELECT COUNT(*) FROM ops.TELEFONO_CYBER WHERE ID_CORRIDA = @id_corrida),
+                                        N' · nuevas/reasignadas sin teléfono: ', @n);
+    EXEC ops.sp_log @id_corrida, 'GESCAR SIN TELEFONO', 'OK', @n, @msg;
+    SELECT @n AS SIN_TELEFONO;
 END;
 GO

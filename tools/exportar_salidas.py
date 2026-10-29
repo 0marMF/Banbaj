@@ -63,20 +63,24 @@ def main():
 
     print(f"Corrida {a.corrida} ({proceso} {fecha:%d/%m/%Y}) -> {destino}")
     cur.execute("""
-        SELECT l.ARCHIVO, COUNT(*) AS N, MAX(s.NOMBRE), MAX(s.FIN_DE_LINEA), MAX(s.CODIFICACION)
+        SELECT l.ARCHIVO, COUNT(*) AS N, MAX(s.NOMBRE), MAX(s.FIN_DE_LINEA), MAX(s.CODIFICACION),
+               MAX(CAST(s.ENCABEZADO AS INT)), MAX(s.SEPARADOR)
         FROM ops.SALIDA_LINEA l
         LEFT JOIN cfg.SALIDA_ARCHIVO s ON s.CLIENTE = ? AND s.ARCHIVO = l.ARCHIVO
         WHERE l.ID_CORRIDA = ?
         GROUP BY l.ARCHIVO ORDER BY l.ARCHIVO""", cliente, a.corrida)
     archivos = cur.fetchall()
     escritos = 0
-    for archivo, n, patron, fin, cod in archivos:
+    for archivo, n, patron, fin, cod, encabezado, sep in archivos:
         if solo and archivo.upper() not in solo:
             continue
         nombre = nombre_archivo(patron or f"{archivo}.TXT", fecha, ahora, a.corrida)
         eol = "\r\n" if (fin or "CRLF") == "CRLF" else "\n"
         cur.execute("SELECT LINEA FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = ? AND ARCHIVO = ? ORDER BY NUM", a.corrida, archivo)
         lineas = [x[0] for x in cur.fetchall()]
+        if encabezado:
+            cur.execute("SELECT CAMPO FROM cfg.SALIDA WHERE CLIENTE = ? AND ARCHIVO = ? AND ACTIVO = 1 ORDER BY ORDEN", cliente, archivo)
+            lineas.insert(0, (sep or ",").join(x[0] for x in cur.fetchall()))
         ruta = destino / nombre
         with open(ruta, "w", encoding=cod or "cp1252", errors="replace", newline="") as f:
             for linea in lineas:

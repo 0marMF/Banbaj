@@ -231,3 +231,58 @@ CREATE TABLE ops.STATUS_CYBER (
     CONSTRAINT PK_STATUS_CYBER PRIMARY KEY (ID_CORRIDA, NUM)
 );
 GO
+/* Lo que bajó de CYBER para cruzar: correos que ya tiene (email.PRG: cyadd.sql) y
+   cuentas con teléfono activo (ges486.prg: TELs_486.sql) */
+IF OBJECT_ID('ops.CORREO_CYBER') IS NULL
+CREATE TABLE ops.CORREO_CYBER (
+    ID_CORRIDA  INT           NOT NULL,
+    CUENTA2     VARCHAR(28)   NOT NULL,
+    CORREO      VARCHAR(100)  NOT NULL,
+    CONSTRAINT PK_CORREO_CYBER PRIMARY KEY (ID_CORRIDA, CUENTA2, CORREO)
+);
+GO
+IF OBJECT_ID('ops.TELEFONO_CYBER') IS NULL
+CREATE TABLE ops.TELEFONO_CYBER (
+    ID_CORRIDA  INT           NOT NULL,
+    CUENTA2     VARCHAR(28)   NOT NULL,
+    TELEFONOS   INT           NOT NULL,
+    CONSTRAINT PK_TELEFONO_CYBER PRIMARY KEY (ID_CORRIDA, CUENTA2)
+);
+GO
+/* Paso para lo que se baja de CYBER (tools/bajar_cyber.py): no se guardan archivos en la máquina.
+   Cada procedimiento copia lo que necesita a ops.* y vacía la tabla de paso. */
+IF OBJECT_ID('stg.CYBER_STATUS') IS NULL
+CREATE TABLE stg.CYBER_STATUS (CLIENTE NVARCHAR(10) NULL, FOLIO NVARCHAR(20) NULL, CUENTA NVARCHAR(28) NULL, STATUS NVARCHAR(10) NULL,
+                               ACCION NVARCHAR(10) NULL, FECHA NVARCHAR(30) NULL, PESO NVARCHAR(10) NULL, DMSSNUM NVARCHAR(28) NULL);
+GO
+IF OBJECT_ID('stg.CYBER_CORREO') IS NULL
+CREATE TABLE stg.CYBER_CORREO (CUENTA NVARCHAR(28) NULL, CORREO NVARCHAR(300) NULL);
+GO
+IF OBJECT_ID('stg.CYBER_TELEFONO') IS NULL
+CREATE TABLE stg.CYBER_TELEFONO (CUENTA NVARCHAR(28) NULL, LADA NVARCHAR(10) NULL, TEL NVARCHAR(20) NULL);
+GO
+/* Bases recibidas completas (todas las columnas, tal como llegaron). Los procesos solo
+   toman las columnas de cfg.ARCHIVO_COLUMNA; aquí queda todo lo demás para consulta.
+   Un renglón del archivo = un renglón con DATOS en JSON {"encabezado": "valor", …}.
+   Consulta: SELECT JSON_VALUE(DATOS, '$."ACC_NUM"') FROM dat.BASE_RECIBIDA WHERE … */
+IF OBJECT_ID('dat.BASE_RECIBIDA_ARCHIVO') IS NULL
+CREATE TABLE dat.BASE_RECIBIDA_ARCHIVO (
+    ID_CORRIDA   INT            NOT NULL,
+    CODIGO       VARCHAR(50)    NOT NULL,
+    CLIENTE      VARCHAR(10)    NOT NULL,
+    ARCHIVO      NVARCHAR(512)  NOT NULL,
+    ENCABEZADOS  NVARCHAR(MAX)  NOT NULL,          -- arreglo JSON con los encabezados en orden
+    REGISTROS    INT            NOT NULL,
+    FE_CARGA     DATETIME2(0)   NOT NULL CONSTRAINT DF_BASE_RECIBIDA_ARCHIVO_FE DEFAULT SYSDATETIME(),
+    CONSTRAINT PK_BASE_RECIBIDA_ARCHIVO PRIMARY KEY (ID_CORRIDA, CODIGO)
+);
+GO
+IF OBJECT_ID('dat.BASE_RECIBIDA') IS NULL
+CREATE TABLE dat.BASE_RECIBIDA (
+    ID_CORRIDA  INT            NOT NULL,
+    CODIGO      VARCHAR(50)    NOT NULL,
+    FILA        INT            NOT NULL,           -- renglón del archivo
+    DATOS       NVARCHAR(MAX)  NOT NULL,
+    CONSTRAINT PK_BASE_RECIBIDA PRIMARY KEY (ID_CORRIDA, CODIGO, FILA)
+);
+GO
