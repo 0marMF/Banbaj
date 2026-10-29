@@ -64,7 +64,7 @@ IF OBJECT_ID('ops.CORRIDA') IS NULL
 CREATE TABLE ops.CORRIDA (
     ID_CORRIDA     INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CORRIDA PRIMARY KEY,
     CLIENTE        VARCHAR(10)   NOT NULL,
-    PROCESO        VARCHAR(10)   NOT NULL,           -- ASIG / ACT / RET (retiro por solicitud)
+    PROCESO        VARCHAR(10)   NOT NULL,           -- ASIG / ACT / RET (retiro por solicitud) / ETI (etiquetado manual)
     FECHA_PROCESO  DATE          NOT NULL,
     HORA_LLEGADA   TIME(0)       NULL,               -- hora en que llegó la información del banco
     INICIO         DATETIME2(0)  NOT NULL CONSTRAINT DF_CORRIDA_INICIO DEFAULT SYSDATETIME(),
@@ -72,15 +72,15 @@ CREATE TABLE ops.CORRIDA (
     ESTATUS        VARCHAR(15)   NOT NULL CONSTRAINT DF_CORRIDA_ESTATUS DEFAULT 'EN_PROCESO',
     USUARIO        SYSNAME       NOT NULL CONSTRAINT DF_CORRIDA_USUARIO DEFAULT SUSER_SNAME(),
     MENSAJE        NVARCHAR(4000) NULL,
-    CONSTRAINT CK_CORRIDA_PROCESO CHECK (PROCESO IN ('ASIG','ACT','RET')),
+    CONSTRAINT CK_CORRIDA_PROCESO CHECK (PROCESO IN ('ASIG','ACT','RET','ETI')),
     CONSTRAINT CK_CORRIDA_ESTATUS CHECK (ESTATUS IN ('EN_PROCESO','OK','ERROR','CANCELADA','REVERTIDA'))
 );
 GO
-/* Bases creadas antes del retiro por solicitud: se agrega 'RET' al check */
-IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CORRIDA_PROCESO' AND definition NOT LIKE '%RET%')
+/* Bases creadas antes: se agregan 'RET' y 'ETI' al check */
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CORRIDA_PROCESO' AND definition NOT LIKE '%ETI%')
 BEGIN
     ALTER TABLE ops.CORRIDA DROP CONSTRAINT CK_CORRIDA_PROCESO;
-    ALTER TABLE ops.CORRIDA ADD CONSTRAINT CK_CORRIDA_PROCESO CHECK (PROCESO IN ('ASIG','ACT','RET'));
+    ALTER TABLE ops.CORRIDA ADD CONSTRAINT CK_CORRIDA_PROCESO CHECK (PROCESO IN ('ASIG','ACT','RET','ETI'));
 END;
 GO
 IF OBJECT_ID('ops.BITACORA') IS NULL
@@ -200,5 +200,34 @@ CREATE TABLE ops.TELEFONO (
     TIPOTEL     CHAR(1)      NOT NULL,                -- 1 = TEL1, 2 = TEL2, 4 = otro fijo, 5 = celular
     CAMPO_DAT   VARCHAR(10)  NOT NULL,                -- TEL1..TEL16 de donde salió
     CONSTRAINT PK_TELEFONO PRIMARY KEY (ID_CORRIDA, CUENTA2, AREA, TELEFONO)
+);
+GO
+/* Correos que se arriban a CYBER en la asignación (antes email.PRG -> sub_mail.TXT).
+   CYBER (RCVRY.JSP_CORREOS_486) purga y agrega. */
+IF OBJECT_ID('ops.CORREO') IS NULL
+CREATE TABLE ops.CORREO (
+    ID_CORRIDA  INT           NOT NULL,
+    CUENTA2     VARCHAR(28)   NOT NULL,
+    CORREO      VARCHAR(100)  NOT NULL,
+    CAMPO_DAT   VARCHAR(10)   NOT NULL,
+    CONSTRAINT PK_CORREO PRIMARY KEY (ID_CORRIDA, CUENTA2, CORREO)
+);
+GO
+/* Status de CYBER para el blanqueo (antes status.prg: STATUS.SQL -> C:\STATUSBAJ.txt -> CYBSTATUS) */
+IF OBJECT_ID('ops.STATUS_CYBER') IS NULL
+CREATE TABLE ops.STATUS_CYBER (
+    ID_CORRIDA  INT           NOT NULL,             -- corrida de asignación a la que pertenece
+    NUM         INT           NOT NULL,
+    CLIENTE     VARCHAR(10)   NULL,
+    FOLIO       VARCHAR(20)   NULL,
+    CUENTA      VARCHAR(28)   NULL,                 -- DMACCT (486-folio)
+    STATUS      VARCHAR(10)   NULL,                 -- DMACRC2
+    ACCION      VARCHAR(10)   NULL,                 -- DMACAC2
+    FECHA       VARCHAR(30)   NULL,                 -- DMACDT2
+    PESO        VARCHAR(10)   NULL,                 -- DMACSC2
+    DMSSNUM     VARCHAR(28)   NULL,                 -- crédito del banco
+    BLANQUEA    BIT           NOT NULL CONSTRAINT DF_STATUS_CYBER_B DEFAULT 0,
+    MOTIVO      VARCHAR(60)   NULL,
+    CONSTRAINT PK_STATUS_CYBER PRIMARY KEY (ID_CORRIDA, NUM)
 );
 GO

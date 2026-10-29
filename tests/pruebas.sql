@@ -191,10 +191,10 @@ FROM (SELECT N'ASIG: script de retiro para CYBER' AS p, CAST(N'update RCVRY.delq
 /* Teléfonos (telbnx.prg): limpieza, celular por plan de numeración, lada de 2 y 3 dígitos, banco, queja, repetidos */
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'TEL: sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL)' AS p,
-             N'486-100|01477|7001234|4,486-100|0155|99999999|1,486-100|045|4771234567|5,486-102|0155|77777777|1,486-104|0155|44445555|4,486-104|044|5511111111|5' AS e,
+             N'486-100|01477|7001234|4,486-100|0155|99999999|1,486-100|045|4771234567|5,486-100003|045|4771234567|5,486-102|0155|77777777|1,486-104|0155|44445555|4,486-104|044|5511111111|5' AS e,
              (SELECT STRING_AGG(LINEA, ',') WITHIN GROUP (ORDER BY NUM) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'TEL_SUBMST') AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'TEL: SCBTEL 6 líneas de 137 con fecha y gestor' AS p, N'6|0|11022026|HOSP' AS e,
+FROM (SELECT N'TEL: SCBTEL 7 líneas de 137 con fecha y gestor' AS p, N'7|0|11022026|HOSP' AS e,
              CONCAT((SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBTEL'), '|',
                     (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBTEL' AND DATALENGTH(LINEA) / 2 <> 137), '|',
                     (SELECT SUBSTRING(LINEA, 82, 8) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBTEL' AND NUM = 1), '|',
@@ -203,6 +203,20 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o 
 FROM (SELECT N'TEL: bitácora (quejas TELBAJ) y script de CYBER' AS p, N'1|EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;' AS e,
              CONCAT((SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'TELEFONOS' AND MENSAJE LIKE N'%quejas (TELBAJ): 1 %'), '|',
                     (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'TEL_ACTUALIZA' AND NUM = 1)) AS o) x;
+
+/* op9.prg: las cuentas nuevas guardan sus teléfonos como AREA + TELEFONO; las existentes, como llegan */
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'TEL DAT: nueva normalizada (op9), existente tal como llega' AS p, N'0454771234567|5599999999' AS e,
+             CONCAT((SELECT TEL1 FROM dat.DAT_486 WHERE CUENTA = '3333XAXX010101000'), '|', (SELECT TEL1 FROM dat.DAT_486 WHERE CUENTA = '1111XAXX010101000')) AS o) x;
+
+/* Correos (email.PRG): minúsculas, con @, sin "no tiene", uno por cuenta */
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'MAIL: sub_mail (CUENTA2|CORREO) y scripts de CYBER' AS p,
+             N'486-100003|persona.tres@correo.com,486-102|uno@correo.com|TRUNCATE TABLE RCVRY.JSP_TAB_MAIL_REMESA_486;|EXECUTE RCVRY.JSP_CORREOS_486;' AS e,
+             CONCAT((SELECT STRING_AGG(LINEA, ',') WITHIN GROUP (ORDER BY NUM) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'MAIL_SUBMAIL'), '|',
+                    (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'MAIL_BORRA' AND NUM = 1), '|',
+                    (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'MAIL_ACTUALIZA' AND NUM = 1)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'GESCAR sin teléfono: inactivo (no se genera)', CASE WHEN NOT EXISTS (SELECT 1 FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'GESCAR_SINTEL') THEN 1 ELSE 0 END, NULL;
 
 /* Gescar (ges_nuevas_rea.prg y ges_retiro.prg): 119 posiciones */
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
@@ -264,6 +278,9 @@ GO
 /* ---------------------------------------------------------------------
    ACTUALIZACIÓN: saldos, pagos y retiros
    --------------------------------------------------------------------- */
+/* Para estructura.prg (REE): TDC con tramo 60-89 y Consumo personal 90+ con REE previo */
+UPDATE dat.DAT_486 SET TRAMO = '60-89', REE = NULL WHERE CUENTA = '3333XAXX010101000';
+UPDATE dat.DAT_486 SET REE = 'X' WHERE CUENTA = '20000001';
 DECLARE @id INT;
 BEGIN TRY
     EXEC ops.sp_actualizacion_486 @fecha = '2026-11-03', @aplicar_retiro = 1, @id_corrida = @id OUTPUT;
@@ -299,6 +316,9 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o 
 FROM (SELECT N'SCBPAG: línea completa (pagos.prg)' AS p,
              CONCAT(N'5001', LEFT(N'20000001' + SPACE(25), 25), N'11022026', N'000000001000.00', N'pbank ', N'SERTEC  ', N'11032026', LEFT(N'PAGO' + SPACE(15), 15), N'000000001000.00') AS e,
              (SELECT LINEA FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBPAG' AND LINEA LIKE N'500120000001 %') AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ACT: REE (estructura.prg): TDC 60-89 = REEST, personal 90+ vacío' AS p, CAST(N'REEST|' AS NVARCHAR(4000)) AS e,
+             CAST(CONCAT((SELECT REE FROM dat.DAT_486 WHERE CUENTA = '3333XAXX010101000'), '|', (SELECT REE FROM dat.DAT_486 WHERE CUENTA = '20000001')) AS NVARCHAR(4000)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'ACT: DAT después del retiro' AS p, CAST(N'4' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.DAT_486) AS NVARCHAR(4000)) AS o) x;
 GO
@@ -382,6 +402,89 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o 
 FROM (SELECT N'RET: retroceso devuelve las cuentas al DAT' AS p, N'4|A,A' AS e,
              CONCAT((SELECT COUNT(*) FROM dat.DAT_486), '|',
                     (SELECT STRING_AGG(ESTATUS, ',') FROM dat.HISTORIA_FOLIO WHERE CUENTA IN ('3333XAXX010101000', '4444XAXX010101000'))) AS o) x;
+GO
+
+/* ---------------------------------------------------------------------
+   PROCESOS MANUALES: etiquetado del DAT, mora, lista negra, blanqueo de
+   status y avisos. DAT: 486-102 (20000001), 486-100003, 486-100004, 486-500.
+   --------------------------------------------------------------------- */
+DECLARE @t TABLE (ID INT IDENTITY(1,1), CAMPO SYSNAME, RESULTADO VARCHAR(30), REGISTROS INT);
+INSERT INTO @t (CAMPO, RESULTADO, REGISTROS) EXEC ops.sp_etiquetado_dat @archivo = N'/datos/etiquetas/ETIQUETADO.csv', @codepage = '';
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ETI: vista previa del etiquetado (eti486.prg)' AS p,
+             N'ETIQUETA:A ACTUALIZAR:1|ETIQUETA:NO ESTA EN EL DAT:1|SALDO1:A ACTUALIZAR:1|SALDO1:IMPORTE INVALIDO:1|SALDO1:NO ESTA EN EL DAT:1|TIPO:A ACTUALIZAR:1|TIPO:NO ESTA EN EL DAT:1' AS e,
+             (SELECT STRING_AGG(CONCAT(CAMPO, ':', RESULTADO, ':', REGISTROS), '|') WITHIN GROUP (ORDER BY ID) FROM @t) AS o) x;
+DECLARE @id INT;
+BEGIN TRY
+    EXEC ops.sp_etiquetado_dat @archivo = N'/datos/etiquetas/ETIQUETADO.csv', @codepage = '', @confirmar = 1, @id_corrida = @id OUTPUT;
+END TRY
+BEGIN CATCH
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'ETI: etiquetado termina OK', 0, ERROR_MESSAGE();
+END CATCH;
+SET @id = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ETI');
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ETI: DAT etiquetado (vacío no cambia) y SCBSDOS' AS p, N'OK|1500.00|PERS_VIG|REE|4|4' AS e,
+             CONCAT((SELECT ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = @id), '|',
+                    (SELECT SALDO1 FROM dat.DAT_486 WHERE CUENTA = '20000001'), '|',
+                    (SELECT TIPO FROM dat.DAT_486 WHERE CUENTA = '20000001'), '|',
+                    (SELECT ETIQUETA FROM dat.DAT_486 WHERE CUENTA = '3333XAXX010101000'), '|',
+                    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS_ETI'), '|',
+                    (SELECT COUNT(*) FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'ETIQUETADO_DAT')) AS o) x;
+GO
+
+/* Mora (moraeti.prg): folio o crédito; '-' deja la mora vacía; luego SCBSDOS */
+DECLARE @r TABLE (TIPO VARCHAR(20), MODO VARCHAR(10), LEIDOS INT, CARGADOS INT, SIN_DATO INT, REPETIDOS INT, NO_DAT INT);
+INSERT INTO @r EXEC cfg.sp_etiqueta_cargar '486', 'ETI486', '/datos/etiquetas/MORA.csv', 'AGREGAR', 'FOLIO_O_CUENTA', '';
+DECLARE @id INT;
+EXEC ops.sp_regenerar_scbsdos @motivo = N'Prueba de mora', @id_corrida = @id OUTPUT;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'MORA: carga por folio o crédito y DMPHONE en SCBSDOS' AS p, N'3|2|1|486-102=MORA 3,486-500=|MORA 3|' AS e,
+             CONCAT((SELECT CONCAT(LEIDOS, '|', CARGADOS, '|', SIN_DATO) FROM @r), '|',
+                    (SELECT STRING_AGG(CONCAT(LLAVE, '=', VALOR), ',') WITHIN GROUP (ORDER BY LLAVE) FROM cfg.ETIQUETA WHERE TIPO = 'ETI486'), '|',
+                    (SELECT pru.fn_campo(LINEA, 'DMPHONE') FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS_ETI' AND LINEA LIKE N'____486-102 %'), '|',
+                    (SELECT pru.fn_campo(LINEA, 'DMPHONE') FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS_ETI' AND LINEA LIKE N'____486-500 %')) AS o) x;
+GO
+
+/* Lista negra (blacklist_486.prg) */
+DECLARE @r TABLE (TIPO VARCHAR(20), LEIDOS INT, VALIDOS INT, NUEVOS INT, YA_EXISTIAN INT);
+INSERT INTO @r EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'/datos/exclusiones/BLACKLIST.csv', @req = 'REQ PRUEBA', @solicita = N'Operación', @codepage = '';
+INSERT INTO @r EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'/datos/exclusiones/BLACKLIST.csv', @req = 'REQ PRUEBA', @solicita = N'Operación', @codepage = '';
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'EXCLUSION: carga de lista negra con REQ (sin duplicar)' AS p, N'1:1,1:0|REQ PRUEBA' AS e,
+             CONCAT((SELECT STRING_AGG(CONCAT(VALIDOS, ':', NUEVOS), ',') WITHIN GROUP (ORDER BY NUEVOS DESC) FROM @r), '|',
+                    (SELECT REQ FROM cfg.EXCLUSION WHERE TIPO = 'TELEFONO' AND VALOR = '5512345678')) AS o) x;
+GO
+
+/* Blanqueo de status (status.prg) sobre la asignación 2 (día 2: sí toca) */
+EXEC ops.sp_blanqueo_status @id_corrida = 2, @archivo = N'/datos/status/STATUSBAJ.txt', @codepage = '';
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'STATUS: blanquea nuevas/reasignadas salvo PP y sin status' AS p,
+             N'486-100003,486-100004|4|100003,486-100003,NC,CM|NO ES NUEVA NI REASIGNADA EN LA CORRIDA,OTRO CLIENTE,SIN STATUS NI ACCION,STATUS QUE NO SE BLANQUEA' AS e,
+             CONCAT((SELECT STRING_AGG(CUENTA, ',') WITHIN GROUP (ORDER BY CUENTA) FROM ops.STATUS_CYBER WHERE ID_CORRIDA = 2 AND BLANQUEA = 1), '|',
+                    (SELECT COUNT(*) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = 2 AND SCRIPT = 'BLANQUEO_STATUS'), '|',
+                    (SELECT LINEA FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = 2 AND ARCHIVO = 'BLANQUEO_LISTA' AND NUM = 1), '|',
+                    (SELECT STRING_AGG(MOTIVO, ',') WITHIN GROUP (ORDER BY MOTIVO) FROM ops.STATUS_CYBER WHERE ID_CORRIDA = 2 AND MOTIVO IS NOT NULL)) AS o) x;
+GO
+
+/* Aviso a Operación después del arribo (correo_486.prg) */
+DECLARE @m TABLE (PARA NVARCHAR(MAX), CC NVARCHAR(MAX), CCO NVARCHAR(MAX), ASUNTO NVARCHAR(255), CUERPO_HTML NVARCHAR(MAX), ADJUNTOS NVARCHAR(MAX));
+INSERT INTO @m EXEC ops.sp_avisar 2, 'ASIG_EXPRESS_486', 1;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'AVISO: correo express con sus destinatarios', CASE WHEN (SELECT CC FROM @m) LIKE N'%carlos.landa@sertec.com.mx%'
+       AND (SELECT ASUNTO FROM @m) LIKE N'Se realiza Asignacion Express Banco Bajio,%' THEN 1 ELSE 0 END, (SELECT ASUNTO FROM @m);
+
+/* Se revierten las dos corridas de etiquetado para seguir con el retroceso */
+DECLARE @e1 INT = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ETI');
+DECLARE @e0 INT = (SELECT MIN(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ETI');
+BEGIN TRY
+    EXEC ops.sp_revertir_corrida @e1, 1;
+    EXEC ops.sp_revertir_corrida @e0, 1;
+END TRY
+BEGIN CATCH
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'ETI: retroceso', 0, ERROR_MESSAGE();
+END CATCH;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ETI: retroceso deja el DAT como antes del etiquetado' AS p, N'900.00|REVERTIDA' AS e,
+             CONCAT((SELECT SALDO1 FROM dat.DAT_486 WHERE CUENTA = '20000001'), '|', (SELECT ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = @e0)) AS o) x;
 GO
 
 /* ---------------------------------------------------------------------

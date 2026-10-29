@@ -5,6 +5,7 @@
    ops.sp_actualizacion_486   reemplaza saldos.prg y pagos.prg
    ops.sp_retiro_solicitud    retiro fuera de proceso por folio o riesgo (sql/32)
 
+   Avisos a Operación: ops.sp_avisar después del arribo (sql/70).
    Los archivos planos quedan en ops.SALIDA_LINEA y los scripts de CYBER en
    ops.CYBER_SCRIPT; se escriben con tools/exportar_salidas.py y se arriban a mano.
 
@@ -58,21 +59,22 @@ BEGIN
         EXEC ops.sp_asig_unir_layout   @id_corrida;
         EXEC ops.sp_homologar          @id_corrida, 'stg.LAYOUT_486';
         EXEC ops.sp_asig_devolucion    @id_corrida, @forzar_devolucion;
-        EXEC ops.sp_asig_existentes    @id_corrida;
+        EXEC ops.sp_asig_existentes    @id_corrida;                    -- existentes: teléfonos tal como llegan
+        EXEC ops.sp_asig_normalizar_telefonos @id_corrida;             -- nuevas y reasignadas: op9.prg (AREA + TELEFONO)
         EXEC ops.sp_validar            @id_corrida, 'PRE_ALTA';
         EXEC ops.sp_asig_alta          @id_corrida;
         IF @aplicar_retiro = 1
             EXEC ops.sp_retiro         @id_corrida;                    -- genera también los archivos del retiro
         EXEC ops.sp_telefonos          @id_corrida;                    -- solo en asignación: CYBER purga y agrega
-        EXEC ops.sp_generar_salidas    @id_corrida, 'ASIG';            -- SCBSDOS, SCBTEL, sub_mst, gescar NVA y REA
+        EXEC ops.sp_correos            @id_corrida;                    -- email.PRG / act_mail.prg: CYBER purga y agrega
+        EXEC ops.sp_generar_salidas    @id_corrida, 'ASIG';            -- SCBSDOS, SCBTEL, sub_mst, sub_mail, gescar NVA y REA
 
         SET @msg = CONCAT(N'Archivos: ', @recibidos,
                           N' · devoluciones: ', (SELECT COUNT(*) FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id_corrida),
                           CASE WHEN @aplicar_retiro = 0 THEN N' (pendientes de aplicar con ops.sp_retiro)' ELSE N'' END);
         EXEC ops.sp_corrida_finalizar @id_corrida, 'OK', @msg;
-
-        SET @json = (SELECT @id_corrida AS CORRIDA, @msg AS RESUMEN FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
-        EXEC mail.sp_enviar @plantilla = 'CONFIRMACION_ASIG_486', @id_corrida = @id_corrida, @valores = @json;
+        /* La confirmación a Operación se manda después de arribar a CYBER:
+           EXEC ops.sp_avisar @id_corrida, 'CONFIRMACION_ASIG_486' (y 'ASIG_EXPRESS_486' si aplica) */
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
@@ -106,6 +108,7 @@ BEGIN
         EXEC ops.sp_validar            @id_corrida, 'RETIRO';         -- criterios de retiro -> ops.DEVOLUCION
         EXEC ops.sp_act_aplicar        @id_corrida;
         EXEC ops.sp_act_pagos          @id_corrida;
+        EXEC ops.sp_homologar          @id_corrida, 'dat.DAT_486';     -- estructura.prg: REE por segmento, tramo y tipo
         IF @aplicar_retiro = 1
             EXEC ops.sp_retiro         @id_corrida;
         EXEC ops.sp_generar_salidas    @id_corrida, 'ACT';             -- SCBSDOS y SCBPAG

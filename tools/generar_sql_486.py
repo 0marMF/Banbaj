@@ -64,6 +64,7 @@ def sql_dat(dat):
         "    ID_CORRIDA_ULT  INT          NULL",
         "    FE_ULT_ACT      DATETIME2(0) NULL",
     ]
+    vista = ", ".join("d.CUENTA2 AS CUENTA" if c == "CUENTA" else "d.CUENTA AS CUENTA3" if c == "CUENTA3" else f"d.{c}" for c, _, _ in dat)
     return f"""/* =====================================================================
    Banbaj · 05 Tabla fija DAT del cliente 486 (generado por tools/generar_sql_486.py)
    Misma estructura que DAT.DBF (hoja DAT_GENERAL del mapeo) + 3 columnas de control.
@@ -82,6 +83,12 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DAT_486_DES_PROD')
     CREATE INDEX IX_DAT_486_DES_PROD ON dat.DAT_486 (DES_PROD);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_DAT_486_RIESGO')
     CREATE INDEX IX_DAT_486_RIESGO ON dat.DAT_486 (RIESGO, SEGMENTO2);
+GO
+/* Lo que resdat.PRG copiaba a Q:\\MIS\\SERTEC98\\CLIENTES\\486\\DAT: el DAT con CUENTA = '486-folio' y CUENTA3 = crédito */
+CREATE OR ALTER VIEW ops.v_DAT_486_MIS
+AS
+SELECT {vista}
+FROM dat.DAT_486 d;
 GO
 /* Copia del DAT por corrida (retroceso). Misma estructura + ID_CORRIDA_RESPALDO. */
 IF OBJECT_ID('ops.RESPALDO_DAT_486') IS NULL
@@ -333,6 +340,41 @@ HOMOLOGACION = (
 )
 
 # ---------------------------------------------------------------- reglas
+# estructura.prg: REE del DAT en la actualización (se aplica en orden; la última que cumple gana).
+# VAL(TRAMO) de FoxPro = número al inicio del texto ('60-89' -> 60, '90+' -> 90, vacío -> 0).
+# Las comparaciones de FoxPro distinguen mayúsculas (CS) y '=' compara el inicio del texto.
+VT = "ISNULL(TRY_CONVERT(INT, LEFT(LTRIM(t.TRAMO), PATINDEX('%[^0-9]%', LTRIM(ISNULL(t.TRAMO, '')) + 'x') - 1)), 0)"
+CS = "COLLATE Latin1_General_CS_AS"
+TDC_, NOM_, AUT_, PER_ = "t.SEGMENTO2 = 'TDC'", f"t.TIPO {CS} LIKE '%NOMINA%'", f"t.TIPO {CS} LIKE '%AUTO%'", f"t.TIPO {CS} LIKE '%PERS%'"
+COVID_ = f"t.ETIQUETA {CS} LIKE 'COVID%'"
+T90_, TCAS_ = f"t.TRAMO {CS} LIKE '90+%'", f"t.TRAMO {CS} LIKE 'CASTIGADA%'"
+REEST, VACIO = "'REEST'", "NULL"
+ESTRUCTURA_REE = [
+    ("REE", REEST, f"{TDC_} AND {VT} BETWEEN 60 AND 89", "TDC tramo 60-89", None),
+    ("REE", REEST, f"{COVID_} AND {TDC_} AND {VT} BETWEEN 1 AND 89", "TDC COVID tramo 1-89", None),
+    ("REE", VACIO, f"{T90_} AND {TDC_}", "TDC 90+", None),
+    ("REE", VACIO, f"{TCAS_} AND {TDC_}", "TDC castigada", None),
+    ("REE", VACIO, f"(t.TRAMO IS NULL OR LTRIM(t.TRAMO) = '' OR t.TRAMO LIKE ' %') AND {TDC_}", "TDC sin tramo", None),
+    ("REE", VACIO, f"t.GARAN {CS} LIKE 'garantizada%' AND {TDC_}", "TDC garantizada", None),
+    ("REE", REEST, f"{NOM_} AND {VT} BETWEEN 1 AND 88", "Nómina tramo 1-88", None),
+    ("REE", VACIO, f"{NOM_} AND {VT} >= 89", "Nómina tramo >= 89", None),
+    ("REE", VACIO, f"{NOM_} AND {T90_}", "Nómina 90+", None),
+    ("REE", VACIO, f"{NOM_} AND {TCAS_}", "Nómina castigada", None),
+    ("REE", REEST, f"{AUT_} AND {VT} BETWEEN 60 AND 89", "Auto tramo 60-89", None),
+    ("REE", VACIO, f"{AUT_} AND {VT} > 89", "Auto tramo > 89", None),
+    ("REE", REEST, f"{COVID_} AND {AUT_} AND {VT} BETWEEN 1 AND 89", "Auto COVID tramo 1-89", None),
+    ("REE", VACIO, f"{COVID_} AND {AUT_} AND {VT} > 89", "Auto COVID tramo > 89", None),
+    ("REE", VACIO, f"{T90_} AND {AUT_}", "Auto 90+", None),
+    ("REE", VACIO, f"{TCAS_} AND {AUT_}", "Auto castigada", None),
+    ("REE", REEST, f"{PER_} AND {VT} BETWEEN 60 AND 89", "Personal tramo 60-89", None),
+    ("REE", VACIO, f"{PER_} AND {VT} > 89", "Personal tramo > 89", None),
+    ("REE", REEST, f"{COVID_} AND {PER_} AND {VT} BETWEEN 1 AND 89", "Personal COVID tramo 1-89", None),
+    ("REE", VACIO, f"{COVID_} AND {PER_} AND {VT} > 89", "Personal COVID tramo > 89", None),
+    ("REE", VACIO, f"{T90_} AND {PER_}", "Personal 90+", None),
+    ("REE", VACIO, f"{TCAS_} AND {PER_}", "Personal castigada", None),
+]
+HOMOLOGACION = HOMOLOGACION + [("dat.DAT_486",) + x for x in ESTRUCTURA_REE]
+
 # (PROCESO, PASO, CODIGO, TABLA, CONDICION, EVALUA, ACCION, MENSAJE, PLANTILLA, ORDEN, REQ)
 REGLAS = [
     ("ASIG", "POST_CARGA", "SDO_ACT_CONSUMO_CERO", "stg.ENT_MAESTRA_CONSUMO", "t.SDO_ACT <= 0", "FILAS", "ALERTAR",
@@ -364,6 +406,16 @@ PARAMETROS = [
     ("NEGATIVO_MODO", "ABS_LEGADO", "ABS_LEGADO (como hoy) | CERO | SIGNO. Pendiente de decidir (H-01)"),
     ("LADAS_2_DIGITOS", "33,55,56,81", "Ladas de 2 dígitos (telbnx.prg); el resto son de 3"),
     ("LADAS_044", "55,56", "Celulares de estas ladas van con área 044; el resto con 045"),
+    ("TEL_DAT_LADAS_2", "33,55,81", "op9.prg: ladas de 2 dígitos al guardar los teléfonos de cuentas nuevas en el DAT"),
+    ("TEL_DAT_AREA_MOVIL", "045", "op9.prg: área de los celulares al guardarlos en el DAT"),
+    ("CORREOS_INVALIDOS", "notiene@hotmail.com,notiene@gmail.com,notienecorreo@hotmail.com,notiene@mail.com,notiene@email.com",
+     "email.PRG: correos que no se mandan a CYBER"),
+    ("CORREOS_EXCLUIR_MALOS", "0", "1 = quitar EMAILMALO también de sub_mail.TXT (hoy no se quita: 0). Por definir"),
+    ("CYBER_PROC_CORREOS", "RCVRY.JSP_CORREOS_486", "Procedimiento de CYBER que purga y agrega los correos (INSERTA_MAIL.sql)"),
+    ("STATUS_NO_BLANQUEAR", "GS,PP,LQ,NP,PR,CD,CC,FA", "status.prg: status que no se blanquean (REQ 2021-051124)"),
+    ("DIAS_BLANQUEO_STATUS", "1-10", "status.prg: días del mes en que se blanquea status"),
+    ("ETIQUETADO_CAMPOS", "SALDO1,SALDO2,SALDO3,RIESGO,PVS,TIPO,CAPITAL,SEGMENTO,PAG_MIN,ETIQUETA,TRAMO,SEG,SDO_VDO,NOMBRE2",
+     "eti486.prg: columnas del DAT que Operación puede etiquetar"),
     ("CYBER_PROC_TELEFONOS", "RCVRY.JSP_TELEFONOS_REMESA_486", "Procedimiento de CYBER que purga y agrega los teléfonos (ACTUALIZA_PHONE.SQL)"),
     ("CAMPOS_ACTUALIZA_EXISTENTES",
      "TEL1,TEL2,TEL3,TEL4,TEL5,TEL6,TEL7,TEL8,TEL9,TEL10,TEL11,TEL12,TEL13,CORREO1,CORREO2,"
@@ -442,7 +494,18 @@ SALIDAS_ARCHIVO = [
      "d.CUENTA2", None, "SCBACTH_486NU.TXT", "Gescar de cuentas nuevas (ges_nuevas_rea.prg, REQ 2021-062065)"),
     ("GESCAR_REA", "ASIG", 50, "dat.HISTORIA_FOLIO d WHERE d.CLIENTE = @cliente AND d.ID_CORRIDA_ALTA = @id_corrida AND d.SUB_CTE = 'REA'",
      "d.CUENTA2", None, "SCBACTH_486REA.TXT", "Gescar de cuentas reasignadas (ges_nuevas_rea.prg)"),
+    ("MAIL_SUBMAIL", "ASIG", 35, "ops.CORREO d WHERE d.ID_CORRIDA = @id_corrida", "d.CUENTA2, d.CORREO", "|",
+     "sub_mail.TXT", "Correos para cargar en RCVRY.JSP_TAB_MAIL_REMESA_486 (email.PRG -> act_mail.prg)"),
+    ("GESCAR_SINTEL", "ASIG", 60,
+     "dat.DAT_486 d WHERE d.CLIENTE = @cliente AND EXISTS (SELECT 1 FROM dat.HISTORIA_FOLIO h WHERE h.CLIENTE = @cliente "
+     "AND h.ID_CORRIDA_ALTA = @id_corrida AND h.CUENTA = d.CUENTA) AND NOT EXISTS (SELECT 1 FROM ops.TELEFONO t "
+     "WHERE t.ID_CORRIDA = @id_corrida AND t.CUENTA2 = d.CUENTA2)",
+     "d.CUENTA2", None, "SCBACTH_SINTEL.TXT",
+     "Gescar de cuentas sin teléfono (ges486.prg). INACTIVO: hoy cruza contra los teléfonos activos en CYBER; aquí solo contra los que se mandan", 0),
     ("SCBSDOS_ACT", "ACT", 10, None, "d.CUENTA2", None, "SCBSDOS.TXT", "Cuentas del DAT después de la actualización"),
+    ("SCBSDOS_ETI", "ETI", 10, None, "d.CUENTA2", None, "SCBSDOS.TXT", "SCBSDOS de etiquetado o fuera de proceso (eti486.prg, moraeti.prg)"),
+    ("BLANQUEO_LISTA", "BLANQUEO", 10, "ops.STATUS_CYBER d WHERE d.ID_CORRIDA = @id_corrida AND d.BLANQUEA = 1", "d.CUENTA", ",",
+     "BLANQUEA_486_{AAAAMMDD}.csv", "Cuentas a las que se blanquea el status (status.prg)"),
     ("SCBPAG", "ACT", 20, "dat.PAGO_ARRIBADO d WHERE d.CLIENTE = @cliente AND d.ID_CORRIDA = @id_corrida AND d.ORIGEN = 'CORRIDA'",
      "d.FE_PAG, d.ID", None, "SCBPAG.TXT", "Arribo de pagos (pagos.prg)"),
     ("DEVOL_CYBER", "RETIRO", 10, BAJA_RETIRO, "d.CUENTA2", None, "MX_G1MCT_DVBJIG_{AAAAMMDD}_{HHMMSS}",
@@ -470,6 +533,10 @@ CAMPOS_SALIDA = {
     "GESCAR_NVA": GESCAR("CUENTA NUEVA ASIGNADA."),
     "GESCAR_REA": GESCAR("CUENTA REASIGNADA."),
     "GESCAR_RETIRO": GESCAR("RETIRO DE CUENTA."),
+    "GESCAR_SINTEL": [c if c[0] != "ORIGEN" else ("ORIGEN", 8, "CONSTANTE", "'zzasg'") for c in GESCAR("CUENTA SIN NUMERO TELEFONICO")],
+    "MAIL_SUBMAIL": [("CUENTA", 0, "TEXTO", "d.CUENTA2"), ("CORREO", 0, "TEXTO", "d.CORREO")],
+    "BLANQUEO_LISTA": [("FOLIO", 0, "TEXTO", "d.FOLIO"), ("CUENTA", 0, "TEXTO", "d.CUENTA"), ("STATUS", 0, "TEXTO", "d.STATUS"),
+                       ("ACCION", 0, "TEXTO", "d.ACCION")],
     "SCBPAG": [  # 104 posiciones
         ("IDE", 3, "CONSTANTE", "'500'"), ("GRUPO", 1, "CONSTANTE", "'1'"), ("CUENTA", 25, "TEXTO", "d.CUENTA"),
         ("FE_PAG", 8, "FECHA_MMDDAAAA", "d.FE_PAG"), ("MONT", 15, "IMPORTE", "d.IMPORTE"), ("SEGMENTO", 6, "CONSTANTE", "'pbank'"),
@@ -479,7 +546,7 @@ CAMPOS_SALIDA = {
     "DEVOL_CYBER": [("CUENTA2", 28, "TEXTO", "d.CUENTA2")],
     "RETIROS": [("FOLIO", 0, "TEXTO", "d.FOLIO"), ("CUENTA2", 0, "TEXTO", "d.CUENTA2"), ("MOTIVO", 0, "TEXTO", "d.MOTIVO_BAJA")],
 }
-ANCHOS_ESPERADOS = {"SCBTEL": 137, "GESCAR_NVA": 119, "GESCAR_REA": 119, "GESCAR_RETIRO": 119, "SCBPAG": 104, "DEVOL_CYBER": 28}
+ANCHOS_ESPERADOS = {"GESCAR_SINTEL": 119, "SCBTEL": 137, "GESCAR_NVA": 119, "GESCAR_REA": 119, "GESCAR_RETIRO": 119, "SCBPAG": 104, "DEVOL_CYBER": 28}
 
 # ---------------------------------------------------------------- correo
 FIRMA = ("<p><font face='Book Antiqua' color='#1C3D7B'><b>Asignaciones</b></font> | "
@@ -502,7 +569,32 @@ LISTAS = {
         [(e, "TO") for e in ["soluciones.486@sertec.com.mx", "supervisor.mc@sertec.com.mx", "supervisor.mc3@sertec.com.mx",
                              "supervisorbackoffice.mc@sertec.com.mx", "soluciones_banbajio@sertec.com.mx"]]
         + [(e, "BCC") for e in INTERNOS_BCC]),
-    "OPERACION_ASIG_486": ("PENDIENTE: destinatarios de MAIL.prg / correo_486 (no versionados)", [(BUZON, "TO")]),
+    "OPERACION_ASIG_486": ("Confirmación de asignación a Operación (MAIL.prg) y saldo <= 0 en Consumo (mail_sdo_act_cons.prg)",
+        [(e, "TO") for e in ["erika.ramos@sertec.com.mx", "administrativo.mc4@sertec.com.mx", "administrativo.mc5@sertec.com.mx", "supervisor.mc4@sertec.com.mx", "supervisorbackoffice.mc@sertec.com.mx"]] + [(e, "BCC") for e in INTERNOS_BCC]),
+    "ASIG_EXPRESS_486": ("Asignación express (correo_486.prg)",
+        [(e, "TO") for e in ["supervisor.mc5@sertec.com.mx", "erika.ramos@sertec.com.mx"]]
+        + [(e, "CC") for e in ["carlos.landa@sertec.com.mx", "aem.control1@sertec.com.mx", "aem.consultoria2@sertec.com.mx",
+                               "aem.consultoria3@sertec.com.mx", "aem.consultoria1@sertec.com.mx", "aem.entregables1@sertec.com.mx",
+                               "supervisor.aem.cdmx2@sertec.com.mx", "supervisor.aem.cdmx3@sertec.com.mx", "supervisor.aem.cdmx@sertec.com.mx",
+                               "aem.operativa1@sertec.com.mx", "aem.operativa2@sertec.com.mx"]]
+        + [(e, "BCC") for e in INTERNOS_BCC]),
+    "ACTUALIZACION_486": ("Confirmación de actualización (correo.prg)",
+        [(e, "TO") for e in ["administrativo.mc@sertec.com.mx", "administrativo.mc2@sertec.com.mx", "supervisor.mc2@sertec.com.mx",
+                             "supervisor.mc4@sertec.com.mx", "supervisor.mc3@sertec.com.mx", "supervisor.mc@sertec.com.mx",
+                             "administrativo.mc3@sertec.com.mx", "erika.ramos@sertec.com.mx"]]
+        + [(e, "CC") for e in ["administrativo.mc6@sertec.com.mx", "supervisor.mc6@sertec.com.mx", "supervisorbackoffice.mc@sertec.com.mx",
+                               "administrativo.mc4@sertec.com.mx"]]
+        + [(e, "BCC") for e in INTERNOS_BCC]),
+    "RETIROS_OPERACION_486": ("Notificación de retiros a Operación (correo_486noti.prg)",
+        [(e, "TO") for e in ["supervisor.mc4@sertec.com.mx", "erika.ramos@sertec.com.mx"]]
+        + [(e, "CC") for e in ["supervisorbackoffice.mc3@sertec.com.mx", "administrativo.mc6@sertec.com.mx",
+                               "supervisorbackoffice.mc2@sertec.com.mx", "supervisorbackoffice.mc@sertec.com.mx",
+                               "administrativo.mc4@sertec.com.mx"]]
+        + [(e, "BCC") for e in INTERNOS_BCC]),
+    "AEM_486": ("Alerta de asignación grande (aem_alerta.prg)",
+        [(e, "TO") for e in ["supervisor.aem.cdmx4@sertec.com.mx", "aem.control1@sertec.com.mx", "aem.proyectos1@sertec.com.mx",
+                             "aem.consultoria1@sertec.com.mx", "supervisor.aem.cdmx2@sertec.com.mx"]]
+        + [("asig.cdmx@sertec.com.mx", "BCC")]),
     "OPERACION_PAGOS_486": ("PENDIENTE: destinatarios de Operación para el aviso de pagos negativos", [(BUZON, "TO")]
         + [(e, "BCC") for e in INTERNOS_BCC]),
     "ASIGNACIONES_486": ("Equipo de asignaciones: alertas y errores del proceso", [(BUZON, "TO")] + [(e, "BCC") for e in INTERNOS_BCC]),
@@ -512,11 +604,18 @@ PLANTILLAS = [
      "Los pagos de Banco Bajío no traen movimientos a T-1. Favor de revisar.", "", "High"),
     ("RETIROS_ACT_486", "RETIROS_ACT_486", "Retiros actualizacion, {{FECHA}}",
      "Se comparte archivo retiro por actualizacion, FAVOR DE REVISAR.", "", "Normal"),
-    ("CONFIRMACION_ASIG_486", "OPERACION_ASIG_486", "Asignación Banco Bajío {{FECHA_PROCESO}}",
+    ("CONFIRMACION_ASIG_486", "OPERACION_ASIG_486", "Asignación BANCO BAJIO del día {{FECHA_PROCESO}}",
      "Se realiza asignación BANCO BAJIO. Favor de revisar y confirmar misma vía.", "<p>{{RESUMEN}}</p>", "Normal"),
-    ("ALERTA_NUEVAS_486", "ASIGNACIONES_486", "Alerta: {{NUEVAS}} cuentas nuevas en la asignación 486",
-     "La asignación trae más cuentas nuevas que el umbral.", "<p>Nuevas: {{NUEVAS}} · umbral: {{UMBRAL}}</p>", "High"),
-    ("ALERTA_SDO_ACT_CONS_486", "ASIGNACIONES_486", "Banco Bajío: cuentas de Consumo con saldo <= 0",
+    ("ASIG_EXPRESS_486", "ASIG_EXPRESS_486", "Se realiza Asignacion Express Banco Bajio, {{FECHA}}",
+     "Asignacion Banco Bajio en Cyber; dat actualizado en ftp, FAVOR DE CONSTRUIR.", "", "Normal"),
+    ("CONFIRMACION_ACT_486", "ACTUALIZACION_486", "Se realiza Actualizacion de Banco Bajio, {{FECHA}}",
+     "Actualizacion de Banco Bajio en Cyber; dat actualizado en ftp, FAVOR DE REVISAR.", "", "Normal"),
+    ("NOTIFICACION_RETIRO_486", "RETIROS_OPERACION_486", "Actualización de Banco Bajio, {{FECHA}}",
+     "Se realiza actualización de Saldos, pagos y devolución del cliente 486.", "", "Normal"),
+    ("ALERTA_NUEVAS_486", "AEM_486", "Asignaciones grande de 486 {{FECHA}}",
+     "Se recibe una asignacion con mas de 100 registros nuevos, favor de construir al finalizar.",
+     "<p>Nuevas: {{NUEVAS}} · umbral: {{UMBRAL}}</p>", "High"),
+    ("ALERTA_SDO_ACT_CONS_486", "OPERACION_ASIG_486", "EXISTEN CUENTAS NUEVAS DE CONSUMO CON SDO_ACT MENORES O IGUALES A CERO {{FECHA}}",
      "La base maestra de Consumo trae cuentas con saldo actual menor o igual a cero. Reportarlo al banco.",
      "<p>Registros: {{REGISTROS}}</p>", "High"),
     ("DEVOLUCION_MASIVA_486", "ASIGNACIONES_486", "Asignación 486 detenida: devolución masiva en {{SEGMENTO}}",
@@ -575,7 +674,7 @@ def sql_semilla(scb):
     L.append("/* Homologación */")
     orden = {}
     for tabla, campo, valor, cond, desc, req in HOMOLOGACION:
-        proc = "ASIG"
+        proc = "ACT" if tabla == "dat.DAT_486" else "ASIG"
         orden[tabla] = orden.get(tabla, 0) + 10
         L.append(f"INSERT INTO cfg.HOMOLOGACION (CLIENTE, PROCESO, TABLA, ORDEN, CAMPO_DESTINO, VALOR, CONDICION, DESCRIPCION, REQ) "
                  f"VALUES ({cli}, '{proc}', {q(tabla)}, {orden[tabla]}, {q(campo)}, {q(valor)}, {q(cond)}, {q(desc)}, {q(req)});")
@@ -595,8 +694,9 @@ def sql_semilla(scb):
     L.append("")
 
     L.append("/* SCBSDOS también sale en la actualización (mismos campos) */")
-    L.append(f"INSERT INTO cfg.SALIDA (CLIENTE, ARCHIVO, ORDEN, CAMPO, ANCHO, FORMATO, EXPRESION) "
-             f"SELECT CLIENTE, 'SCBSDOS_ACT', ORDEN, CAMPO, ANCHO, FORMATO, EXPRESION FROM cfg.SALIDA WHERE CLIENTE = {cli} AND ARCHIVO = 'SCBSDOS';")
+    for copia in ("SCBSDOS_ACT", "SCBSDOS_ETI"):
+        L.append(f"INSERT INTO cfg.SALIDA (CLIENTE, ARCHIVO, ORDEN, CAMPO, ANCHO, FORMATO, EXPRESION) "
+                 f"SELECT CLIENTE, '{copia}', ORDEN, CAMPO, ANCHO, FORMATO, EXPRESION FROM cfg.SALIDA WHERE CLIENTE = {cli} AND ARCHIVO = 'SCBSDOS';")
     L.append("")
     L.append("/* Otros archivos planos (arribo manual a CYBER y operación) */")
     for arch, campos in CAMPOS_SALIDA.items():
@@ -605,9 +705,10 @@ def sql_semilla(scb):
                      f"VALUES ({cli}, {q(arch)}, {i}, {q(campo)}, {ancho_c}, {q(fmt)}, {q(expr)});")
     L.append("")
     L.append("/* Catálogo de archivos planos */")
-    for arch, proc, orden_a, origen, orden_l, sep, nombre, desc in SALIDAS_ARCHIVO:
-        L.append(f"INSERT INTO cfg.SALIDA_ARCHIVO (CLIENTE, ARCHIVO, PROCESO, ORDEN, ORIGEN, ORDEN_LINEAS, SEPARADOR, NOMBRE, DESCRIPCION) "
-                 f"VALUES ({cli}, {q(arch)}, {q(proc)}, {orden_a}, {q(origen)}, {q(orden_l)}, {q(sep)}, {q(nombre)}, {q(desc)});")
+    for arch, proc, orden_a, origen, orden_l, sep, nombre, desc, *resto in SALIDAS_ARCHIVO:
+        activo = resto[0] if resto else 1
+        L.append(f"INSERT INTO cfg.SALIDA_ARCHIVO (CLIENTE, ARCHIVO, PROCESO, ORDEN, ORIGEN, ORDEN_LINEAS, SEPARADOR, NOMBRE, DESCRIPCION, ACTIVO) "
+                 f"VALUES ({cli}, {q(arch)}, {q(proc)}, {orden_a}, {q(origen)}, {q(orden_l)}, {q(sep)}, {q(nombre)}, {q(desc)}, {activo});")
     L.append("")
     L.append("/* Teléfonos de dueños del banco: nunca se arriban (telbnx.prg, REQ 2022-004456) */")
     for t in ("4777140350", "4777140308", "4777147689"):
@@ -642,7 +743,7 @@ def main():
     assert not faltan, faltan
     for arch, ancho in ANCHOS_ESPERADOS.items():
         assert sum(c[1] for c in CAMPOS_SALIDA[arch]) == ancho, f"{arch} debe medir {ancho}"
-    assert {a[0] for a in SALIDAS_ARCHIVO} - {"SCBSDOS", "SCBSDOS_ACT"} == set(CAMPOS_SALIDA), "salidas sin campos"
+    assert {a[0] for a in SALIDAS_ARCHIVO} - {"SCBSDOS", "SCBSDOS_ACT", "SCBSDOS_ETI"} == set(CAMPOS_SALIDA), "salidas sin campos"
     (RAIZ / "sql" / "05_tabla_dat_486.sql").write_text(sql_dat(dat), encoding="utf-8")
     (RAIZ / "sql" / "90_semilla_486.sql").write_text(sql_semilla(scb), encoding="utf-8")
     print("ok:", len(dat), "campos DAT,", len(scb), "campos SCBSDOS")

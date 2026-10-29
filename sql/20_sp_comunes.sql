@@ -341,10 +341,13 @@ BEGIN
         SET @cond  = REPLACE(REPLACE(@cond,  N'{FECHA}', CONVERT(CHAR(8), @fecha, 112)), N'{CLIENTE}', @cliente);
         SET @sql = N'UPDATE t SET ' + QUOTENAME(@campo) + N' = ' + @valor
                  + N' FROM ' + QUOTENAME(PARSENAME(@t, 2)) + N'.' + QUOTENAME(PARSENAME(@t, 1)) + N' t'
-                 + N' WHERE t.ID_CORRIDA = @id_corrida'
+                 /* Tablas de trabajo: solo la corrida; tablas fijas (dat.DAT_486): solo el cliente */
+                 + CASE WHEN COL_LENGTH(@t, 'ID_CORRIDA') IS NOT NULL THEN N' WHERE t.ID_CORRIDA = @id_corrida'
+                        WHEN COL_LENGTH(@t, 'CLIENTE') IS NOT NULL THEN N' WHERE t.CLIENTE = @cliente'
+                        ELSE N' WHERE 1 = 1' END
                  + CASE WHEN @cond IS NOT NULL THEN N' AND (' + @cond + N')' ELSE N'' END + N'; SET @n = @@ROWCOUNT;';
         BEGIN TRY
-            EXEC sp_executesql @sql, N'@id_corrida INT, @n INT OUTPUT', @id_corrida = @id_corrida, @n = @n OUTPUT;
+            EXEC sp_executesql @sql, N'@id_corrida INT, @cliente VARCHAR(10), @n INT OUTPUT', @id_corrida = @id_corrida, @cliente = @cliente, @n = @n OUTPUT;
         END TRY
         BEGIN CATCH
             SET @err = CONCAT(N'Homologación ID ', @id, N' (', @t, N'.', @campo, N'): ', ERROR_MESSAGE());

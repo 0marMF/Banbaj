@@ -34,7 +34,7 @@ def main(destino):
     con_h = [h.replace("{F}", FECHA_ENC) for h in enc["CONSUMO"]]
     F = FECHA_ENC
 
-    def tdc(prime, acc, nombre, sdo_act, sdo_vdo, tramo, estatus, cosecha="", tel="", enfoque="", cp="06600"):
+    def tdc(prime, acc, nombre, sdo_act, sdo_vdo, tramo, estatus, cosecha="", tel="", enfoque="", cp="06600", email1="", email2=""):
         return {
             "PRIME+4DIG": prime, "ACC_NUM": acc, "NAME2": nombre, "Tipo de TDC": "CLASICA", "GARANTIZADA": "0",
             f"Dias Vencidos VEN4/CCAS {F}": "120", "RFC": "XAXX010101000",
@@ -43,17 +43,18 @@ def main(destino):
             "MONTO A CUBRIR 1 PAGO LIQUIDACION": "3000.00", "MONTO A CUBRIR PLAZOS PAGO <= 6 LIQUIDACION": "4500.00",
             "ENFOQUE_LIQUIDACION_1_PAGO": enfoque, "TEL_CERT": tel, "CALLE": "CALLE FICTICIA 1", "COL": "Colonia Prueba",
             "CIUDAD": "Ciudad Prueba", "ESTADO": "CDMX", "CP": cp,
-            f"Estatus al {F}": estatus, f"Tramo {F}": tramo, "COSECHAS": cosecha,
+            f"Estatus al {F}": estatus, f"Tramo {F}": tramo, "COSECHAS": cosecha, "EMAIL 1": email1, "EMAIL 2": email2,
         }
 
     escribir(destino / "asig" / "BASE MAESTRA_TARJETA 31-10-2026 - SERTEC.csv", tdc_h, [
         tdc("10000000011111", "1000000001", "CLIENTE PRUEBA UNO", "1000.00", "1100.00", "45", "VEN4", "COSECHA 2", "5599999999"),
-        tdc("10000000033333", "1000000003", "CLIENTE PRUEBA TRES", "0", "750.00", "45", "VEN4"),
+        tdc("10000000033333", "1000000003", "CLIENTE PRUEBA TRES", "0", "750.00", "45", "VEN4", tel="477-123-4567",
+            email1=" Persona.Tres@Correo.COM ", email2="notiene@hotmail.com"),
         tdc("10000000044444", "1000000004", "CLIENTE PRUEBA CUATRO", "2000.00", "2000.00", "CASTIGADA", "CCAS"),
         tdc("10000000055555", "1000000005", "CLIENTE PRUEBA MALO", "abc", "10.00", "45", "VEN4"),
     ])
 
-    def con(credito, nombre, adeudo, vencido, tipo_cred, cartera, estatus, tramo, dias, tel="", cp="06600", cosecha=""):
+    def con(credito, nombre, adeudo, vencido, tipo_cred, cartera, estatus, tramo, dias, tel="", cp="06600", cosecha="", correo1="", correo2=""):
         return {
             "CREDITO": credito, "CRÉDITO CYBER": f"9{credito[1:]}-CRN-{credito}", "NOMBRE": nombre, "RFC": "XAXX010101000",
             "TIPO DE CRÉDITO": tipo_cred, "CARTERA": cartera, f"CAPITAL AL {F}": "1000.00",
@@ -61,12 +62,13 @@ def main(destino):
             "MONTO A 1 PAGO LIQUIDACION": "900.00", "MONTO A PAGO LIQUIDACION PLAZOS <= 6 MESES": "1200.00",
             f"DIAS MORA AL {F}": dias, f"ESTATUS AL {F}": estatus, f"TRAMO AL {F}": tramo,
             "TEL_CERT": tel, "CALLE": "CALLE FICTICIA 2", "COL": "Colonia Prueba", "CIUDAD": "Ciudad Prueba",
-            "ESTADO": "CDMX", "CP": cp, "COSECHAS": cosecha,
+            "ESTADO": "CDMX", "CP": cp, "COSECHAS": cosecha, "CORREO1": correo1, "CORREO2": correo2,
         }
 
     c4 = con("20000004", "CLIENTE PRUEBA C4", "$1,234.50", " -   ", "Adelanto de Nómina", "Anticipo Nómina", "VIGENTE", "1-29", "10", cp="6600")
     escribir(destino / "asig" / "BASE MAESTRA_CONSUMO 31-10-2026 - SERTEC.csv", con_h, [
-        con("20000001", "CLIENTE PRUEBA C1", "5000.00", "800.00", "PERSONAL", "PERSONAL", "VENCIDA", "90+", "96", tel="5577777777"),
+        con("20000001", "CLIENTE PRUEBA C1", "5000.00", "800.00", "PERSONAL", "PERSONAL", "VENCIDA", "90+", "96", tel="5577777777",
+            correo1="sin-arroba", correo2="uno@correo.com"),
         con("20000003", "CLIENTE PRUEBA C3", "3000.00", "300.00", "PERSONAL", "PERSONAL", "VENCIDA", "90+", "96", tel="5533333333"),
         c4, c4,
         con("20000005", "CLIENTE PRUEBA C5", "0", "0", "AUTO", "AUTO", "CASTIGADA", "CASTIGADA", "400"),
@@ -113,6 +115,34 @@ def main(destino):
         {"FOLIO": "100002", "ETIQUETA": ""},
         {"FOLIO": "100001", "ETIQUETA": "REE"},
     ])
+    # Etiquetado del DAT que manda Operación (eti486.prg): CUENTA + columnas
+    escribir(destino / "etiquetas" / "ETIQUETADO.csv", ["CUENTA", "SALDO1", "TIPO", "ETIQUETA"], [
+        {"CUENTA": "20000001", "SALDO1": "$1,500.00", "TIPO": "PERS_VIG", "ETIQUETA": ""},
+        {"CUENTA": "99999999", "SALDO1": "10", "TIPO": "X", "ETIQUETA": "Y"},
+        {"CUENTA": "3333XAXX010101000", "SALDO1": "abc", "TIPO": "", "ETIQUETA": "REE"},
+    ])
+    # Mora (moraeti.prg): folio o crédito + mora; '-' deja la mora vacía
+    escribir(destino / "etiquetas" / "MORA.csv", ["VALIDADOR", "MORA"], [
+        {"VALIDADOR": "102", "MORA": "MORA 3"},
+        {"VALIDADOR": "20000009", "MORA": "-"},
+        {"VALIDADOR": "777", "MORA": "MORA 1"},
+    ])
+    # Lista negra (blacklist_486.prg)
+    escribir(destino / "exclusiones" / "BLACKLIST.csv", ["TEL"], [{"TEL": "55 1234 5678"}, {"TEL": "5512345678"}, {"TEL": ""}])
+    # Lo que baja STATUS.SQL de CYBER (sqlplus con colsep '|', columnas con espacios)
+    (destino / "status").mkdir(parents=True, exist_ok=True)
+    filas = [
+        ("486", "100001", "486-100001", "PP", "CM", "01/11/26", "1", "20000004"),
+        ("486", "100003", "486-100003", "NC", "CM", "01/11/26", "1", "3333XAXX010101000"),
+        ("486", "500", "486-500", "", "", "", "", "20000009"),
+        ("486", "102", "486-102", "NC", "CM", "01/11/26", "1", "20000001"),
+        ("307", "1", "307-1", "NC", "CM", "01/11/26", "1", "X"),
+        ("486", "100004", "486-100004", "", "RP", "01/11/26", "1", "4444XAXX010101000"),
+    ]
+    anchos = (3, 10, 28, 6, 6, 9, 4, 25)
+    with open(destino / "status" / "STATUSBAJ.txt", "w", encoding="cp437", newline="") as f:
+        for fila in filas:
+            f.write("|".join(v.ljust(w) for v, w in zip(fila, anchos)).rstrip() + "\n")
     print("datos de prueba en", destino)
 
 

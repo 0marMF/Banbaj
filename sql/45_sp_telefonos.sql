@@ -107,3 +107,76 @@ BEGIN
            (@id_corrida, 'TEL_ACTUALIZA', 3, N'exit;');
 END;
 GO
+
+/* =====================================================================
+   ops.sp_asig_normalizar_telefonos (op9.prg "PEGADOS (PROGRAMA B)" + limpia.PRG)
+   ---------------------------------------------------------------------
+   Antes de dar de alta las cuentas (nuevas y reasignadas) en el DAT, sus
+   TEL1..TEL16 se guardan normalizados como AREA + TELEFONO:
+     fijo     '01' + lada + número (lada de 2 dígitos: TEL_DAT_LADAS_2 = 33, 55, 81)
+     celular  TEL_DAT_AREA_MOVIL ('045') + 10 dígitos (plan de numeración)
+   Los inválidos se borran. Solo quita espacios y guiones (como op9).
+   Las cuentas que ya estaban en el DAT no pasan por aquí: en paso.prg se
+   actualizan con los teléfonos tal como llegan y luego salen del layout.
+   Nota: op9 usa ladas 33/55/81 y 045 para todos los celulares; telbnx usa
+   33/55/56/81 y 044 para 55/56. Como telbnx vuelve a tomar los últimos 10
+   dígitos, lo que llega a CYBER es lo mismo.
+   ===================================================================== */
+CREATE OR ALTER PROCEDURE ops.sp_asig_normalizar_telefonos
+    @id_corrida INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @cliente VARCHAR(10) = (SELECT CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida);
+    DECLARE @movil VARCHAR(3) = ISNULL(cfg.fn_param(@cliente, 'TEL_DAT_AREA_MOVIL'), '045');
+    DECLARE @lada2 TABLE (LADA VARCHAR(3) PRIMARY KEY);
+    INSERT INTO @lada2 SELECT DISTINCT LTRIM(RTRIM(value)) FROM STRING_SPLIT(ISNULL(cfg.fn_param(@cliente, 'TEL_DAT_LADAS_2'), '33,55,81'), ',') WHERE LTRIM(RTRIM(value)) <> '';
+    DECLARE @n INT, @validos INT, @msg NVARCHAR(400);
+
+    SELECT l.CUENTA, v.N, RIGHT(REPLACE(REPLACE(LTRIM(RTRIM(v.TEL)), ' ', ''), '-', ''), 10) AS T
+    INTO #t
+    FROM stg.LAYOUT_486 l
+    CROSS APPLY (VALUES (1, l.TEL1), (2, l.TEL2), (3, l.TEL3), (4, l.TEL4), (5, l.TEL5), (6, l.TEL6), (7, l.TEL7), (8, l.TEL8),
+                        (9, l.TEL9), (10, l.TEL10), (11, l.TEL11), (12, l.TEL12), (13, l.TEL13), (14, l.TEL14), (15, l.TEL15),
+                        (16, l.TEL16)) v(N, TEL)
+    WHERE l.ID_CORRIDA = @id_corrida AND l.ES_EXISTENTE = 0 AND NULLIF(LTRIM(RTRIM(v.TEL)), '') IS NOT NULL;
+    SET @n = @@ROWCOUNT;
+
+    SELECT t.CUENTA, t.N,
+           CASE WHEN m.MOVIL = 1 THEN @movil + t.T ELSE '01' + l.LA2 + RIGHT(t.T, 10 - LEN(l.LA2)) END AS V
+    INTO #v
+    FROM #t t
+    CROSS APPLY (SELECT CASE WHEN EXISTS (SELECT 1 FROM @lada2 x WHERE x.LADA = LEFT(t.T, 2)) THEN LEFT(t.T, 2) ELSE LEFT(t.T, 3) END AS LA2) l
+    CROSS APPLY (SELECT CASE WHEN LEN(l.LA2) = 2 THEN SUBSTRING(t.T, 3, 4) ELSE SUBSTRING(t.T, 4, 3) END AS SE2,
+                        TRY_CONVERT(INT, RIGHT(t.T, 4)) AS TE2) s
+    CROSS APPLY (SELECT CASE WHEN EXISTS (SELECT 1 FROM cfg.PLAN_NUMERACION p
+                                          WHERE p.LADA = l.LA2 AND p.SERIE = s.SE2 AND s.TE2 BETWEEN p.N_INI AND p.N_FIN
+                                            AND p.TIPORED = 'MOVIL') THEN 1 ELSE 0 END AS MOVIL) m
+    WHERE LEN(t.T) = 10 AND t.T NOT LIKE '%[^0-9]%' AND t.T NOT LIKE '00000%'
+      AND t.T NOT IN ('1000000000', '9999999999', '0999999999') AND TRY_CONVERT(BIGINT, t.T) > 0;
+    SET @validos = @@ROWCOUNT;
+
+    UPDATE l SET
+        TEL1  = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 1),
+        TEL2  = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 2),
+        TEL3  = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 3),
+        TEL4  = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 4),
+        TEL5  = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 5),
+        TEL6  = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 6),
+        TEL7  = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 7),
+        TEL8  = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 8),
+        TEL9  = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 9),
+        TEL10 = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 10),
+        TEL11 = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 11),
+        TEL12 = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 12),
+        TEL13 = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 13),
+        TEL14 = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 14),
+        TEL15 = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 15),
+        TEL16 = (SELECT V FROM #v v WHERE v.CUENTA = l.CUENTA AND v.N = 16)
+    FROM stg.LAYOUT_486 l
+    WHERE l.ID_CORRIDA = @id_corrida AND l.ES_EXISTENTE = 0;
+
+    SET @msg = CONCAT(N'Teléfonos de cuentas nuevas y reasignadas: ', @n, N' · normalizados: ', @validos, N' · borrados por inválidos: ', @n - @validos);
+    EXEC ops.sp_log @id_corrida, 'ASIG TELEFONOS DAT', 'OK', @validos, @msg;
+END;
+GO

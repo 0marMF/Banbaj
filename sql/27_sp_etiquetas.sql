@@ -10,9 +10,18 @@
    cfg.sp_etiqueta_baja    baja de una etiqueta suelta
 
    @tipo_llave:
-     FOLIO   -> el archivo trae el folio (con o sin '486-'); se guarda como CUENTA2
-     CUENTA2 -> el archivo ya trae '486-folio'
-     CUENTA  -> crédito del banco (DAT.CUENTA), para tipos que cruzan por DMSSNUM
+     FOLIO          -> el archivo trae el folio (con o sin '486-'); se guarda como CUENTA2
+     CUENTA2        -> el archivo ya trae '486-folio'
+     CUENTA         -> crédito del banco (DAT.CUENTA), para tipos que cruzan por DMSSNUM
+     FOLIO_O_CUENTA -> moraeti.prg: el valor se busca primero como folio del DAT y,
+                       si no, como crédito (DAT.CUENTA); se guarda como CUENTA2.
+                       Lo que no está en el DAT se descarta (como hoy).
+
+   Etiqueta '-' = vacía a propósito (moraeti.prg): se guarda '' y en la salida
+   deja el campo en blanco aunque el banco traiga valor.
+
+   Mora (eti486): EXEC cfg.sp_etiqueta_cargar '486', 'ETI486', N'…\mora.csv', 'AGREGAR', 'FOLIO_O_CUENTA';
+                  EXEC ops.sp_regenerar_scbsdos @motivo = N'Actualización de mora';
    ===================================================================== */
 SET NOCOUNT ON;
 GO
@@ -46,6 +55,8 @@ BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
     IF @modo NOT IN ('REEMPLAZAR', 'AGREGAR') THROW 50400, '@modo debe ser REEMPLAZAR o AGREGAR.', 1;
+    IF @tipo_llave NOT IN ('FOLIO', 'CUENTA2', 'CUENTA', 'FOLIO_O_CUENTA') THROW 50403, '@tipo_llave debe ser FOLIO, CUENTA2, CUENTA o FOLIO_O_CUENTA.', 1;
+    DECLARE @prefijo VARCHAR(10) = ISNULL(cfg.fn_param(@cliente, 'PREFIJO_CUENTA2'), @cliente + '-');
 
     CREATE TABLE #e (LLAVE_ORIGEN NVARCHAR(100), ETIQUETA NVARCHAR(100));
     DECLARE @sql NVARCHAR(MAX) = N'BULK INSERT #e FROM ' + QUOTENAME(@archivo, '''')
@@ -54,10 +65,19 @@ BEGIN
     EXEC (@sql);
 
     ;WITH x AS (
-        SELECT cfg.fn_llave_etiqueta(@cliente, LLAVE_ORIGEN, @tipo_llave) AS LLAVE,
-               cfg.fn_texto(ETIQUETA) AS VALOR,
-               LLAVE_ORIGEN
-        FROM #e
+        SELECT CASE WHEN @tipo_llave = 'FOLIO_O_CUENTA'
+                    THEN COALESCE(
+                           (SELECT TOP (1) d.CUENTA2 FROM dat.DAT_486 d
+                            WHERE d.CLIENTE = @cliente
+                              AND TRY_CONVERT(BIGINT, LTRIM(d.FOLIO)) = TRY_CONVERT(BIGINT, CASE WHEN LTRIM(RTRIM(e.LLAVE_ORIGEN)) LIKE @prefijo + '%'
+                                                                                              THEN SUBSTRING(LTRIM(RTRIM(e.LLAVE_ORIGEN)), LEN(@prefijo) + 1, 50)
+                                                                                              ELSE LTRIM(RTRIM(e.LLAVE_ORIGEN)) END)),
+                           (SELECT TOP (1) d.CUENTA2 FROM dat.DAT_486 d
+                            WHERE d.CLIENTE = @cliente AND TRY_CONVERT(DECIMAL(38,0), d.CUENTA) = TRY_CONVERT(DECIMAL(38,0), LTRIM(RTRIM(e.LLAVE_ORIGEN)))))
+                    ELSE cfg.fn_llave_etiqueta(@cliente, e.LLAVE_ORIGEN, @tipo_llave) END AS LLAVE,
+               CASE WHEN LTRIM(RTRIM(REPLACE(e.ETIQUETA, CHAR(13), ''))) = N'-' THEN N'' ELSE cfg.fn_texto(e.ETIQUETA) END AS VALOR,
+               e.LLAVE_ORIGEN
+        FROM #e e
     )
     SELECT LLAVE, VALOR, LLAVE_ORIGEN,
            ROW_NUMBER() OVER (PARTITION BY LLAVE ORDER BY (SELECT NULL)) AS RN
@@ -85,7 +105,7 @@ BEGIN
     SELECT @fuera_dat = COUNT(*) FROM cfg.ETIQUETA e
     WHERE e.CLIENTE = @cliente AND e.TIPO = @tipo AND e.ACTIVO = 1
       AND NOT EXISTS (SELECT 1 FROM dat.DAT_486 d
-                      WHERE (@tipo_llave IN ('FOLIO', 'CUENTA2') AND d.CUENTA2 = e.LLAVE)
+                      WHERE (@tipo_llave IN ('FOLIO', 'CUENTA2', 'FOLIO_O_CUENTA') AND d.CUENTA2 = e.LLAVE)
                          OR (@tipo_llave = 'CUENTA' AND d.CUENTA = e.LLAVE));
 
     SELECT @tipo AS TIPO, @modo AS MODO, @leidos AS LEIDOS, @cargados AS CARGADOS,
