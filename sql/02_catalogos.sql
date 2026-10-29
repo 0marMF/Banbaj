@@ -125,8 +125,10 @@ CREATE TABLE cfg.REGLA (
 );
 GO
 
-/* Campos de los archivos de salida de ancho fijo (SCBSDOS, SCBTEL…).
-   EXPRESION es SQL sobre el DAT con alias d.
+/* Campos de los archivos de salida (SCBSDOS, SCBTEL, SCBPAG, SCBACTH…).
+   EXPRESION es SQL sobre el ORIGEN de cfg.SALIDA_ARCHIVO con alias d
+   (el DAT si no hay origen); puede usar @fecha (fecha de la corrida) y @hora (HH:MM:SS).
+   En archivos delimitados ANCHO no se usa (0).
    FORMATO: TEXTO | IMPORTE | IMPORTE_SIGNO | FECHA_MMDDAAAA | CONSTANTE */
 IF OBJECT_ID('cfg.SALIDA') IS NULL
 CREATE TABLE cfg.SALIDA (
@@ -143,6 +145,31 @@ CREATE TABLE cfg.SALIDA (
     ACTIVO       BIT            NOT NULL CONSTRAINT DF_SALIDA_ACT DEFAULT 1,
     CONSTRAINT UX_SALIDA UNIQUE (CLIENTE, ARCHIVO, ORDEN),
     CONSTRAINT CK_SALIDA_FMT CHECK (FORMATO IN ('TEXTO','IMPORTE','IMPORTE_SIGNO','FECHA_MMDDAAAA','CONSTANTE'))
+);
+GO
+
+/* Archivos planos de salida (para arribo manual a CYBER y para operación).
+   ORIGEN: FROM de la consulta, con alias d; puede usar @id_corrida, @cliente, @fecha.
+           NULL = el DAT del cliente.
+   SEPARADOR: NULL = ancho fijo (se valida la suma de ANCHO); '|' o ',' = delimitado.
+   NOMBRE: nombre del archivo al exportar; admite {AAAAMMDD}, {MMDDAAAA}, {HHMMSS}, {CORRIDA}.
+   PROCESO: grupo en que se genera (ASIG, ACT, RETIRO) con ops.sp_generar_salidas. */
+IF OBJECT_ID('cfg.SALIDA_ARCHIVO') IS NULL
+CREATE TABLE cfg.SALIDA_ARCHIVO (
+    CLIENTE       VARCHAR(10)    NOT NULL,
+    ARCHIVO       VARCHAR(50)    NOT NULL,
+    PROCESO       VARCHAR(10)    NOT NULL,
+    ORDEN         INT            NOT NULL CONSTRAINT DF_SALIDA_ARCHIVO_ORDEN DEFAULT 10,
+    ORIGEN        NVARCHAR(2000) NULL,
+    ORDEN_LINEAS  NVARCHAR(400)  NOT NULL CONSTRAINT DF_SALIDA_ARCHIVO_OL DEFAULT N'd.CUENTA2',
+    SEPARADOR     VARCHAR(5)     NULL,
+    NOMBRE        NVARCHAR(200)  NOT NULL,
+    FIN_DE_LINEA  VARCHAR(4)     NOT NULL CONSTRAINT DF_SALIDA_ARCHIVO_FIN DEFAULT 'CRLF',
+    CODIFICACION  VARCHAR(20)    NOT NULL CONSTRAINT DF_SALIDA_ARCHIVO_COD DEFAULT 'cp1252',
+    DESCRIPCION   NVARCHAR(400)  NULL,
+    ACTIVO        BIT            NOT NULL CONSTRAINT DF_SALIDA_ARCHIVO_ACT DEFAULT 1,
+    CONSTRAINT PK_SALIDA_ARCHIVO PRIMARY KEY (CLIENTE, ARCHIVO),
+    CONSTRAINT CK_SALIDA_ARCHIVO_FIN CHECK (FIN_DE_LINEA IN ('CRLF','LF'))
 );
 GO
 

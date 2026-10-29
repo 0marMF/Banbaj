@@ -340,8 +340,8 @@ REGLAS = [
     ("ASIG", "PRE_ALTA", "EXCLUSION_CUENTAS", "stg.LAYOUT_486",
      "t.ES_EXISTENTE = 0 AND EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'CUENTA' AND e.ACTIVO = 1 AND e.VALOR = t.CUENTA)",
      "FILAS", "EXCLUIR", "Cuenta en la lista de exclusión (exc486)", None, 10, "Yolanda Osornio 02/09/2020"),
-    ("ACT", "POST_CARGA", "PAGOS_NEGATIVOS", "stg.ENT_PAGOS", "t.IMPORTE < 0", "FILAS", "CANCELAR",
-     "Hay pagos negativos: se cancela la actualización hasta recibir la corrección del banco", "ERROR_PROCESO_486", 10, None),
+    ("ACT", "POST_CARGA", "PAGOS_NEGATIVOS", "stg.ENT_PAGOS", "t.IMPORTE < 0", "FILAS", "EXCLUIR",
+     "Llegaron pagos negativos: no se arriban (no salen en SCBPAG) y se avisa a Operación", "PAGOS_NEGATIVOS_486", 10, None),
     ("ACT", "POST_CARGA", "PAGOS_T1", "stg.ENT_PAGOS", "t.FECHA = DATEADD(DAY, -1, CAST('{FECHA}' AS DATE))", "SIN_FILAS", "ALERTAR",
      "No hay pagos con fecha de ayer (T-1)", "PAGOS_NO_ACTUALIZADOS_486", 20, None),
     ("ACT", "RETIRO", "RETIRO_TDC", "stg.SALDOS_486",
@@ -362,6 +362,9 @@ PARAMETROS = [
     ("ALERTA_NUEVAS", "100", "Más cuentas nuevas que esto dispara la alerta (aem_alerta)"),
     ("DIAS_FE_REG", "30", "FE_REG = FE_REC + días"),
     ("NEGATIVO_MODO", "ABS_LEGADO", "ABS_LEGADO (como hoy) | CERO | SIGNO. Pendiente de decidir (H-01)"),
+    ("LADAS_2_DIGITOS", "33,55,56,81", "Ladas de 2 dígitos (telbnx.prg); el resto son de 3"),
+    ("LADAS_044", "55,56", "Celulares de estas ladas van con área 044; el resto con 045"),
+    ("CYBER_PROC_TELEFONOS", "RCVRY.JSP_TELEFONOS_REMESA_486", "Procedimiento de CYBER que purga y agrega los teléfonos (ACTUALIZA_PHONE.SQL)"),
     ("CAMPOS_ACTUALIZA_EXISTENTES",
      "TEL1,TEL2,TEL3,TEL4,TEL5,TEL6,TEL7,TEL8,TEL9,TEL10,TEL11,TEL12,TEL13,CORREO1,CORREO2,"
      "DIRECC1,DIRECC2,DIRECC3,DIRECC4,DIRECC5,ESTADO,PVS,TRAMO,ETIQUETA1,SALDO1,SALDO2,SALDO3",
@@ -425,6 +428,59 @@ SCB_EXPR = {
     "U1ESTRATG3": ("TEXTO", "d.ESTRA3"),
 }
 
+# ---------------------------------------------------------------- otros archivos planos
+# (ARCHIVO, PROCESO, ORDEN, ORIGEN, ORDEN_LINEAS, SEPARADOR, NOMBRE, DESCRIPCION)
+BAJA_RETIRO = ("dat.HISTORIA_FOLIO d WHERE d.CLIENTE = @cliente AND d.ID_CORRIDA_BAJA = @id_corrida AND d.ESTATUS = 'B' "
+               "AND EXISTS (SELECT 1 FROM ops.DEVOLUCION v WHERE v.ID_CORRIDA = @id_corrida AND v.CUENTA = d.CUENTA)")
+SALIDAS_ARCHIVO = [
+    ("SCBSDOS", "ASIG", 10, None, "d.CUENTA2", None, "SCBSDOS.TXT", "Cuentas del DAT para CYBER (asi486.prg)"),
+    ("SCBTEL", "ASIG", 20, "ops.TELEFONO d WHERE d.ID_CORRIDA = @id_corrida", "d.CUENTA2, d.TIPOTEL, d.AREA, d.TELEFONO", None,
+     "SCBTEL.TXT", "Teléfonos (TELSAN) de ancho fijo"),
+    ("TEL_SUBMST", "ASIG", 30, "ops.TELEFONO d WHERE d.ID_CORRIDA = @id_corrida", "d.CUENTA2, d.AREA, d.TELEFONO", "|",
+     "sub_mst.TXT", "Teléfonos para cargar en RCVRY.JSP_TAB_TEL_REMESA_486 (act_phone.prg)"),
+    ("GESCAR_NVA", "ASIG", 40, "dat.HISTORIA_FOLIO d WHERE d.CLIENTE = @cliente AND d.ID_CORRIDA_ALTA = @id_corrida AND d.SUB_CTE = 'NVA'",
+     "d.CUENTA2", None, "SCBACTH_486NU.TXT", "Gescar de cuentas nuevas (ges_nuevas_rea.prg, REQ 2021-062065)"),
+    ("GESCAR_REA", "ASIG", 50, "dat.HISTORIA_FOLIO d WHERE d.CLIENTE = @cliente AND d.ID_CORRIDA_ALTA = @id_corrida AND d.SUB_CTE = 'REA'",
+     "d.CUENTA2", None, "SCBACTH_486REA.TXT", "Gescar de cuentas reasignadas (ges_nuevas_rea.prg)"),
+    ("SCBSDOS_ACT", "ACT", 10, None, "d.CUENTA2", None, "SCBSDOS.TXT", "Cuentas del DAT después de la actualización"),
+    ("SCBPAG", "ACT", 20, "dat.PAGO_ARRIBADO d WHERE d.CLIENTE = @cliente AND d.ID_CORRIDA = @id_corrida AND d.ORIGEN = 'CORRIDA'",
+     "d.FE_PAG, d.ID", None, "SCBPAG.TXT", "Arribo de pagos (pagos.prg)"),
+    ("DEVOL_CYBER", "RETIRO", 10, BAJA_RETIRO, "d.CUENTA2", None, "MX_G1MCT_DVBJIG_{AAAAMMDD}_{HHMMSS}",
+     "Devolución para CYBER: una CUENTA2 por línea (prog15.prg, \\\\192.168.50.1\\Cyber_00\\dev)"),
+    ("GESCAR_RETIRO", "RETIRO", 20, BAJA_RETIRO, "d.CUENTA2", None, "SCBACTH_486.TXT", "Gescar de retiro (ges_retiro.prg)"),
+    ("RETIROS", "RETIRO", 30, BAJA_RETIRO, "d.FOLIO", ",", "RETIROS_486_{AAAAMMDD}.csv", "Folios retirados para operación"),
+]
+GESCAR = lambda comentario: [  # SCBACTH: 119 posiciones
+    ("IDENTIFICA", 3, "CONSTANTE", "'200'"), ("GRUPO", 1, "CONSTANTE", "'1'"), ("CUENTA", 25, "TEXTO", "d.CUENTA2"),
+    ("FECHA1", 8, "FECHA_MMDDAAAA", "@fecha"), ("BLANCO", 1, "CONSTANTE", "''"), ("HORA", 8, "TEXTO", "@hora"),
+    ("SECU", 3, "CONSTANTE", "'000'"), ("ACCION", 2, "CONSTANTE", "'RS'"), ("RESULTADO", 2, "CONSTANTE", "'R1'"),
+    ("CARTA", 2, "CONSTANTE", "''"), ("ORIGEN", 8, "CONSTANTE", "'aaxrh'"), ("COMENTARIO", 56, "CONSTANTE", f"'{comentario}'"),
+]
+FECHA_HORA = "CONCAT(cfg.fn_fecha_mmddaaaa(@fecha), ' ', @hora)"
+CAMPOS_SALIDA = {
+    "SCBTEL": [  # 137 posiciones (TELSAN copiado SDF)
+        ("CAMPO", 3, "CONSTANTE", "'503'"), ("GRUPO", 1, "CONSTANTE", "'1'"), ("CUENTA", 25, "TEXTO", "d.CUENTA2"),
+        ("NOCLIENTE", 25, "CONSTANTE", "''"), ("TIPOTEL", 1, "TEXTO", "d.TIPOTEL"), ("AREA", 5, "TEXTO", "d.AREA"),
+        ("TELEFONO", 13, "TEXTO", "d.TELEFONO"), ("EXT", 8, "CONSTANTE", "''"), ("FECHA_G", 17, "TEXTO", FECHA_HORA),
+        ("GESTOR", 8, "CONSTANTE", "'HOSP'"), ("ESTATUS", 1, "CONSTANTE", "'A'"), ("FECHA_A", 17, "TEXTO", FECHA_HORA),
+        ("GESTOR2", 8, "CONSTANTE", "'HOSP'"), ("OTROS", 5, "CONSTANTE", "'00000'"),
+    ],
+    "TEL_SUBMST": [("CUENTA", 0, "TEXTO", "d.CUENTA2"), ("AREA", 0, "TEXTO", "d.AREA"), ("TELEFONO", 0, "TEXTO", "d.TELEFONO"),
+                   ("TIPOTEL", 0, "TEXTO", "d.TIPOTEL")],
+    "GESCAR_NVA": GESCAR("CUENTA NUEVA ASIGNADA."),
+    "GESCAR_REA": GESCAR("CUENTA REASIGNADA."),
+    "GESCAR_RETIRO": GESCAR("RETIRO DE CUENTA."),
+    "SCBPAG": [  # 104 posiciones
+        ("IDE", 3, "CONSTANTE", "'500'"), ("GRUPO", 1, "CONSTANTE", "'1'"), ("CUENTA", 25, "TEXTO", "d.CUENTA"),
+        ("FE_PAG", 8, "FECHA_MMDDAAAA", "d.FE_PAG"), ("MONT", 15, "IMPORTE", "d.IMPORTE"), ("SEGMENTO", 6, "CONSTANTE", "'pbank'"),
+        ("AGEN", 8, "CONSTANTE", "'SERTEC'"), ("FE_REG", 8, "FECHA_MMDDAAAA", "d.FE_REG"), ("TRAN", 15, "CONSTANTE", "'PAGO'"),
+        ("MOREAL", 15, "IMPORTE", "d.IMPORTE"),
+    ],
+    "DEVOL_CYBER": [("CUENTA2", 28, "TEXTO", "d.CUENTA2")],
+    "RETIROS": [("FOLIO", 0, "TEXTO", "d.FOLIO"), ("CUENTA2", 0, "TEXTO", "d.CUENTA2"), ("MOTIVO", 0, "TEXTO", "d.MOTIVO_BAJA")],
+}
+ANCHOS_ESPERADOS = {"SCBTEL": 137, "GESCAR_NVA": 119, "GESCAR_REA": 119, "GESCAR_RETIRO": 119, "SCBPAG": 104, "DEVOL_CYBER": 28}
+
 # ---------------------------------------------------------------- correo
 FIRMA = ("<p><font face='Book Antiqua' color='#1C3D7B'><b>Asignaciones</b></font> | "
          "<font face='Book Antiqua' color='#255BBF' size='2'>Especialista</font> | "
@@ -447,6 +503,8 @@ LISTAS = {
                              "supervisorbackoffice.mc@sertec.com.mx", "soluciones_banbajio@sertec.com.mx"]]
         + [(e, "BCC") for e in INTERNOS_BCC]),
     "OPERACION_ASIG_486": ("PENDIENTE: destinatarios de MAIL.prg / correo_486 (no versionados)", [(BUZON, "TO")]),
+    "OPERACION_PAGOS_486": ("PENDIENTE: destinatarios de Operación para el aviso de pagos negativos", [(BUZON, "TO")]
+        + [(e, "BCC") for e in INTERNOS_BCC]),
     "ASIGNACIONES_486": ("Equipo de asignaciones: alertas y errores del proceso", [(BUZON, "TO")] + [(e, "BCC") for e in INTERNOS_BCC]),
 }
 PLANTILLAS = [
@@ -464,6 +522,9 @@ PLANTILLAS = [
     ("DEVOLUCION_MASIVA_486", "ASIGNACIONES_486", "Asignación 486 detenida: devolución masiva en {{SEGMENTO}}",
      "La base maestra recibida dejaría fuera demasiadas cuentas del DAT. La asignación se detuvo.",
      "<p>Segmento: {{SEGMENTO}} · devoluciones: {{DEVOLUCIONES}} de {{TOTAL_DAT}} ({{PORCENTAJE}}%, tope {{TOPE}}%)</p>", "High"),
+    ("PAGOS_NEGATIVOS_486", "OPERACION_PAGOS_486", "Banco Bajío: llegaron pagos negativos {{FECHA}}",
+     "En el archivo de pagos de Banco Bajío llegaron pagos negativos. No se arribaron a CYBER.",
+     "<p>Pagos negativos: {{REGISTROS}}</p><pre>{{DETALLE}}</pre>", "High"),
     ("ERROR_PROCESO_486", "ASIGNACIONES_486", "Error en {{PROCESO}} (corrida {{ID_CORRIDA}})",
      "El proceso terminó con error.", "<p>{{ERROR}}{{MENSAJE}}</p>", "High"),
 ]
@@ -484,6 +545,7 @@ def sql_semilla(scb):
           f"DELETE FROM cfg.HOMOLOGACION WHERE CLIENTE = {cli};",
           f"DELETE FROM cfg.REGLA WHERE CLIENTE = {cli};",
           f"DELETE FROM cfg.SALIDA WHERE CLIENTE = {cli};",
+          f"DELETE FROM cfg.SALIDA_ARCHIVO WHERE CLIENTE = {cli};",
           f"DELETE FROM cfg.PARAMETRO WHERE CLIENTE = {cli};",
           "DELETE FROM cfg.CP_ESTADO;", ""]
 
@@ -532,6 +594,27 @@ def sql_semilla(scb):
                  f"VALUES ({cli}, 'SCBSDOS', {i}, {q(campo)}, {ancho_c}, {q(fmt)}, {q(expr)});")
     L.append("")
 
+    L.append("/* SCBSDOS también sale en la actualización (mismos campos) */")
+    L.append(f"INSERT INTO cfg.SALIDA (CLIENTE, ARCHIVO, ORDEN, CAMPO, ANCHO, FORMATO, EXPRESION) "
+             f"SELECT CLIENTE, 'SCBSDOS_ACT', ORDEN, CAMPO, ANCHO, FORMATO, EXPRESION FROM cfg.SALIDA WHERE CLIENTE = {cli} AND ARCHIVO = 'SCBSDOS';")
+    L.append("")
+    L.append("/* Otros archivos planos (arribo manual a CYBER y operación) */")
+    for arch, campos in CAMPOS_SALIDA.items():
+        for i, (campo, ancho_c, fmt, expr) in enumerate(campos, 1):
+            L.append(f"INSERT INTO cfg.SALIDA (CLIENTE, ARCHIVO, ORDEN, CAMPO, ANCHO, FORMATO, EXPRESION) "
+                     f"VALUES ({cli}, {q(arch)}, {i}, {q(campo)}, {ancho_c}, {q(fmt)}, {q(expr)});")
+    L.append("")
+    L.append("/* Catálogo de archivos planos */")
+    for arch, proc, orden_a, origen, orden_l, sep, nombre, desc in SALIDAS_ARCHIVO:
+        L.append(f"INSERT INTO cfg.SALIDA_ARCHIVO (CLIENTE, ARCHIVO, PROCESO, ORDEN, ORIGEN, ORDEN_LINEAS, SEPARADOR, NOMBRE, DESCRIPCION) "
+                 f"VALUES ({cli}, {q(arch)}, {q(proc)}, {orden_a}, {q(origen)}, {q(orden_l)}, {q(sep)}, {q(nombre)}, {q(desc)});")
+    L.append("")
+    L.append("/* Teléfonos de dueños del banco: nunca se arriban (telbnx.prg, REQ 2022-004456) */")
+    for t in ("4777140350", "4777140308", "4777147689"):
+        L.append(f"IF NOT EXISTS (SELECT 1 FROM cfg.EXCLUSION WHERE CLIENTE = {cli} AND TIPO = 'TELEFONO' AND VALOR = '{t}' AND VALOR2 IS NULL) "
+                 f"INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO, REQ) VALUES ({cli}, 'TELEFONO', '{t}', 'Teléfono de dueños del banco', 'REQ 2022-004456');")
+    L.append("")
+
     L.append("/* Correo: fragmentos, listas, destinatarios y plantillas */")
     for cod, html in (("FIRMA_ASIG_486", FIRMA), ("AVISO_CONFIDENCIALIDAD", AVISO)):
         L.append(f"IF NOT EXISTS (SELECT 1 FROM mail.FRAGMENTO WHERE CODIGO = {q(cod)}) "
@@ -557,6 +640,9 @@ def main():
     assert sum(a for _, a in scb) == 1559, "SCBSDOS debe medir 1559"
     faltan = set(SCB_EXPR) - {c for c, _ in scb}
     assert not faltan, faltan
+    for arch, ancho in ANCHOS_ESPERADOS.items():
+        assert sum(c[1] for c in CAMPOS_SALIDA[arch]) == ancho, f"{arch} debe medir {ancho}"
+    assert {a[0] for a in SALIDAS_ARCHIVO} - {"SCBSDOS", "SCBSDOS_ACT"} == set(CAMPOS_SALIDA), "salidas sin campos"
     (RAIZ / "sql" / "05_tabla_dat_486.sql").write_text(sql_dat(dat), encoding="utf-8")
     (RAIZ / "sql" / "90_semilla_486.sql").write_text(sql_semilla(scb), encoding="utf-8")
     print("ok:", len(dat), "campos DAT,", len(scb), "campos SCBSDOS")

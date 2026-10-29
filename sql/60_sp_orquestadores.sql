@@ -2,7 +2,11 @@
    Banbaj · 60 Orquestadores (un SP por proceso)
    ---------------------------------------------------------------------
    ops.sp_asignacion_486      reemplaza paso.prg (+ asig_bases, asi486)
-   ops.sp_actualizacion_486   reemplaza saldos.prg
+   ops.sp_actualizacion_486   reemplaza saldos.prg y pagos.prg
+   ops.sp_retiro_solicitud    retiro fuera de proceso por folio o riesgo (sql/32)
+
+   Los archivos planos quedan en ops.SALIDA_LINEA y los scripts de CYBER en
+   ops.CYBER_SCRIPT; se escriben con tools/exportar_salidas.py y se arriban a mano.
 
    @aplicar_retiro = 0 (default): las devoluciones quedan en ops.DEVOLUCION
    para revisión y se aplican después con EXEC ops.sp_retiro @id_corrida.
@@ -58,8 +62,9 @@ BEGIN
         EXEC ops.sp_validar            @id_corrida, 'PRE_ALTA';
         EXEC ops.sp_asig_alta          @id_corrida;
         IF @aplicar_retiro = 1
-            EXEC ops.sp_retiro         @id_corrida;
-        EXEC ops.sp_generar_salida     @id_corrida, 'SCBSDOS';
+            EXEC ops.sp_retiro         @id_corrida;                    -- genera también los archivos del retiro
+        EXEC ops.sp_telefonos          @id_corrida;                    -- solo en asignación: CYBER purga y agrega
+        EXEC ops.sp_generar_salidas    @id_corrida, 'ASIG';            -- SCBSDOS, SCBTEL, sub_mst, gescar NVA y REA
 
         SET @msg = CONCAT(N'Archivos: ', @recibidos,
                           N' · devoluciones: ', (SELECT COUNT(*) FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id_corrida),
@@ -96,14 +101,14 @@ BEGIN
         EXEC ops.sp_respaldo           @id_corrida;
         EXEC ops.sp_cargar_proceso     @id_corrida, @recibidos OUTPUT;
         EXEC ops.sp_homologar_entradas @id_corrida;
-        EXEC ops.sp_validar            @id_corrida, 'POST_CARGA';     -- pagos negativos (cancela), pagos a T-1 (alerta)
+        EXEC ops.sp_validar            @id_corrida, 'POST_CARGA';     -- pagos negativos (se excluyen y se avisa), pagos a T-1 (alerta)
         EXEC ops.sp_act_preparar       @id_corrida;
         EXEC ops.sp_validar            @id_corrida, 'RETIRO';         -- criterios de retiro -> ops.DEVOLUCION
         EXEC ops.sp_act_aplicar        @id_corrida;
         EXEC ops.sp_act_pagos          @id_corrida;
         IF @aplicar_retiro = 1
             EXEC ops.sp_retiro         @id_corrida;
-        EXEC ops.sp_generar_salida     @id_corrida, 'SCBSDOS';
+        EXEC ops.sp_generar_salidas    @id_corrida, 'ACT';             -- SCBSDOS y SCBPAG
 
         SET @msg = CONCAT(N'Archivos: ', @recibidos,
                           N' · devoluciones: ', (SELECT COUNT(*) FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id_corrida),

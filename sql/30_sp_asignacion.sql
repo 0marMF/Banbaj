@@ -285,9 +285,10 @@ END;
 GO
 
 /* ---------------------------------------------------------------------
-   Retiro (prog15.prg): baja en DAT, histórico y script para CYBER.
-   Se llama al final de la asignación o de la actualización, o a mano
-   después de revisar ops.DEVOLUCION.
+   Retiro (prog15.prg): baja en DAT, histórico, script para CYBER y
+   archivos planos del retiro. Se llama al final de la asignación o de la
+   actualización, a mano después de revisar ops.DEVOLUCION, o desde
+   ops.sp_retiro_solicitud.
    --------------------------------------------------------------------- */
 CREATE OR ALTER PROCEDURE ops.sp_retiro
     @id_corrida INT
@@ -300,22 +301,6 @@ BEGIN
     DECLARE @dmstatus VARCHAR(10) = cfg.fn_param(@cliente, 'DMSTATUS_RETIRO'), @n INT;
 
     BEGIN TRANSACTION;
-
-    /* Archivo de retiros (folios) para el correo a operación */
-    DELETE FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id_corrida AND ARCHIVO = 'RETIROS';
-    INSERT INTO ops.SALIDA_LINEA (ID_CORRIDA, ARCHIVO, NUM, LINEA)
-    SELECT @id_corrida, 'RETIROS', ROW_NUMBER() OVER (ORDER BY d.FOLIO), CONCAT(LTRIM(d.FOLIO), N',', d.CUENTA2, N',', v.MOTIVO)
-    FROM ops.DEVOLUCION v
-    JOIN dat.DAT_486 d ON d.CUENTA = v.CUENTA
-    WHERE v.ID_CORRIDA = @id_corrida AND v.PROCESADA = 0;
-
-    /* Archivo de devolución para CYBER (prog15: \\192.168.50.1\Cyber_00\dev\MX_G1MCT_DVBJIG_<fecha>_<hora>, una CUENTA2 por línea) */
-    DELETE FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id_corrida AND ARCHIVO = 'DEVOL_CYBER';
-    INSERT INTO ops.SALIDA_LINEA (ID_CORRIDA, ARCHIVO, NUM, LINEA)
-    SELECT @id_corrida, 'DEVOL_CYBER', ROW_NUMBER() OVER (ORDER BY d.CUENTA2), d.CUENTA2
-    FROM ops.DEVOLUCION v
-    JOIN dat.DAT_486 d ON d.CUENTA = v.CUENTA
-    WHERE v.ID_CORRIDA = @id_corrida AND v.PROCESADA = 0;
 
     /* Histórico: baja con foto del registro */
     UPDATE h SET ESTATUS = 'B', FE_BAJA = @fecha, MOTIVO_BAJA = LEFT(v.MOTIVO, 60), ID_CORRIDA_BAJA = @id_corrida,
@@ -364,5 +349,9 @@ BEGIN
 
     COMMIT TRANSACTION;
     EXEC ops.sp_log @id_corrida, 'RETIRO', 'OK', @n;
+
+    /* Archivos planos del retiro (cfg.SALIDA_ARCHIVO, PROCESO = 'RETIRO'): devolución para CYBER
+       (MX_G1MCT_DVBJIG_*), gescar de retiro (SCBACTH_486) y lista de folios para operación */
+    EXEC ops.sp_generar_salidas @id_corrida, 'RETIRO';
 END;
 GO

@@ -3,7 +3,7 @@
    ---------------------------------------------------------------------
    ops.sp_act_preparar   une los archivos de saldos y los cruza contra el DAT
    ops.sp_act_aplicar    actualiza el DAT y genera los scripts para CYBER
-   ops.sp_act_pagos      registra pagos nuevos (sin duplicar CUENTA2+IMPORTE+FECHA)
+   ops.sp_act_pagos      pagos a arribar (sin repetir CUENTA + FE_PAG + IMPORTE ya arribados)
    Equivale a saldos.prg (+ la parte de pagos documentada).
    ===================================================================== */
 SET NOCOUNT ON;
@@ -154,47 +154,59 @@ END;
 GO
 
 /* ---------------------------------------------------------------------
-   Pagos: se cruzan contra el DAT por RIESGO (CREDITO del banco) y solo
-   se registran los que no existen ya con la misma CUENTA2+IMPORTE+FECHA.
-   El layout del archivo de arribo de pagos (PAGOS.prg) está pendiente:
-   cuando se tenga, se agrega como cfg.SALIDA 'PAGOS_ARRIBO' sobre ops.PAGO.
+   Pagos (pagos.prg): el CREDITO del archivo se cruza contra DAT.RIESGO
+   (y DAT.CUENTA) para obtener CUENTA y CUENTA2. Se arriba lo que no esté
+   ya en dat.PAGO_ARRIBADO con la misma CUENTA + FE_PAG + IMPORTE (antes
+   PAGTOT). Dos pagos iguales en el mismo archivo se arriban los dos, como hoy.
+   Los pagos negativos ya no llegan aquí: la regla PAGOS_NEGATIVOS los
+   excluye y avisa a Operación. El archivo plano es SCBPAG (cfg.SALIDA).
    --------------------------------------------------------------------- */
 CREATE OR ALTER PROCEDURE ops.sp_act_pagos
     @id_corrida INT
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @cliente VARCHAR(10) = (SELECT CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida);
-    DECLARE @recibidos INT, @sin_dat INT, @nuevos INT;
+    DECLARE @cliente VARCHAR(10), @fecha DATE;
+    SELECT @cliente = CLIENTE, @fecha = FECHA_PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
+    DECLARE @recibidos INT, @sin_dat INT, @ya INT, @nuevos INT;
 
     IF OBJECT_ID('stg.ENT_PAGOS') IS NULL
        OR NOT EXISTS (SELECT 1 FROM stg.ENT_PAGOS WHERE ID_CORRIDA = @id_corrida)
     BEGIN
-        EXEC ops.sp_log @id_corrida, 'ACT PAGOS', 'AVISO', 0, N'No se recibió archivo de pagos.';
+        EXEC ops.sp_log @id_corrida, 'ACT PAGOS', 'AVISO', 0, N'No se recibió archivo de pagos (o todos se excluyeron).';
         RETURN;
     END;
 
-    SELECT @recibidos = COUNT(*) FROM stg.ENT_PAGOS WHERE ID_CORRIDA = @id_corrida;
+    SELECT p.FILA, p.RIESGO, p.IMPORTE, p.FECHA, x.CUENTA, x.CUENTA2
+    INTO #p
+    FROM stg.ENT_PAGOS p
+    OUTER APPLY (SELECT TOP (1) d.CUENTA, d.CUENTA2 FROM dat.DAT_486 d
+                 WHERE d.CLIENTE = @cliente AND (d.RIESGO = p.RIESGO OR d.CUENTA = p.RIESGO)
+                 ORDER BY CASE WHEN d.RIESGO = p.RIESGO THEN 0 ELSE 1 END, d.CUENTA2) x
+    WHERE p.ID_CORRIDA = @id_corrida AND p.IMPORTE >= 0;
+    SET @recibidos = @@ROWCOUNT;
 
     INSERT INTO ops.RECHAZO (ID_CORRIDA, ORIGEN, FILA, MOTIVO, DATOS)
-    SELECT @id_corrida, 'PAGOS', p.FILA, N'Crédito de pago que no existe en el DAT',
+    SELECT @id_corrida, 'PAGOS', FILA, N'Crédito de pago que no existe en el DAT',
            (SELECT p.RIESGO, p.IMPORTE, p.FECHA FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
-    FROM stg.ENT_PAGOS p
-    WHERE p.ID_CORRIDA = @id_corrida AND NOT EXISTS (SELECT 1 FROM dat.DAT_486 d WHERE d.RIESGO = p.RIESGO);
+    FROM #p p WHERE p.CUENTA IS NULL;
     SET @sin_dat = @@ROWCOUNT;
 
-    INSERT INTO ops.PAGO (CLIENTE, CUENTA2, IMPORTE, FECHA, TRX, EMPRESA, ID_CORRIDA)
-    SELECT @cliente, d.CUENTA2, p.IMPORTE, p.FECHA, MIN(p.TRX), MIN(p.EMPRESA), @id_corrida
-    FROM stg.ENT_PAGOS p
-    CROSS APPLY (SELECT TOP (1) CUENTA2 FROM dat.DAT_486 d WHERE d.RIESGO = p.RIESGO ORDER BY d.CUENTA2) d
-    WHERE p.ID_CORRIDA = @id_corrida
-      AND NOT EXISTS (SELECT 1 FROM ops.PAGO x
-                      WHERE x.CLIENTE = @cliente AND x.CUENTA2 = d.CUENTA2 AND x.IMPORTE = p.IMPORTE AND x.FECHA = p.FECHA)
-    GROUP BY d.CUENTA2, p.IMPORTE, p.FECHA;
+    SELECT @ya = COUNT(*) FROM #p p
+    WHERE p.CUENTA IS NOT NULL
+      AND EXISTS (SELECT 1 FROM dat.PAGO_ARRIBADO a
+                  WHERE a.CLIENTE = @cliente AND a.CUENTA = p.CUENTA AND a.FE_PAG = p.FECHA AND a.IMPORTE = p.IMPORTE);
+
+    INSERT INTO dat.PAGO_ARRIBADO (CLIENTE, CUENTA, CUENTA2, FE_PAG, IMPORTE, FE_REG, ID_CORRIDA, ORIGEN)
+    SELECT @cliente, p.CUENTA, p.CUENTA2, p.FECHA, p.IMPORTE, @fecha, @id_corrida, 'CORRIDA'
+    FROM #p p
+    WHERE p.CUENTA IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM dat.PAGO_ARRIBADO a
+                      WHERE a.CLIENTE = @cliente AND a.CUENTA = p.CUENTA AND a.FE_PAG = p.FECHA AND a.IMPORTE = p.IMPORTE);
     SET @nuevos = @@ROWCOUNT;
 
-    DECLARE @msg NVARCHAR(400) = CONCAT(N'Recibidos: ', @recibidos, N' · sin cuenta en DAT: ', @sin_dat, N' · nuevos: ', @nuevos,
-                N' · ya registrados o repetidos: ', @recibidos - @sin_dat - @nuevos);
+    DECLARE @msg NVARCHAR(400) = CONCAT(N'Recibidos: ', @recibidos, N' · sin cuenta en DAT: ', @sin_dat,
+                N' · ya arribados antes: ', @ya, N' · a arribar (SCBPAG): ', @nuevos);
     EXEC ops.sp_log @id_corrida, 'ACT PAGOS', 'OK', @nuevos, @msg;
 END;
 GO

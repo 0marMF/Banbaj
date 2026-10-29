@@ -12,10 +12,12 @@
 
 Destinos (se cargan en una sola transacción; si algo falla no queda nada a medias):
     DAT          DAT.DBF                                  -> dat.DAT_486
-    HISTORIA     DAT.DBF (activas) + PURGA.DBF (bajas)    -> dat.HISTORIA_FOLIO
-    CONSECUTIVO  TAB7.DBF (máximo folio)                  -> dat.FOLIO_CONSECUTIVO
+    HISTORIA     DAT.DBF (activas) + PURGA.DBF (bajas; si no hay PURGA, DEVOL.DBF) -> dat.HISTORIA_FOLIO
+    CONSECUTIVO  máximo folio de TAB7, DAT, PURGA, DEVOL e HISTORIA.DBF -> dat.FOLIO_CONSECUTIVO
+    PAGOS        PAGTOT.DBF (CUENTA + FE_PAG + MONT, lo único que usa la validación) -> dat.PAGO_ARRIBADO
     ETIQUETAS    ETI486, ETI, DM1, TOP, STATUS            -> cfg.ETIQUETA
-    EXCLUSIONES  EXC486, DIRMAL, EMAILMALO, BLACKLIST, TELBAJ + teléfonos del banco -> cfg.EXCLUSION
+    EXCLUSIONES  EXC486, DIRMAL, EMAILMALO, BLACKLIST, TELBAJ   -> cfg.EXCLUSION
+                 (los 3 teléfonos de dueños del banco vienen en la semilla, sql/90)
     LADA         LADA.DBF                                 -> cfg.LADA
     PNC          PNC.DBF                                  -> cfg.PLAN_NUMERACION
 
@@ -31,8 +33,15 @@ from pathlib import Path
 from dbfread import DBF
 
 MIGRACION = "MIGRACION DBF"
-# Teléfonos de dueños del banco excluidos en telbnx.prg (REQ 2022-004456)
-TELEFONOS_BANCO = ["4777140350", "4777140308", "4777147689"]
+
+# Fuentes grandes: solo se leen los campos que se usan (historia tiene 1.8 M de registros)
+CAMPOS_FUENTE = {
+    "PURGA": ["CUENTA", "FOLIO", "CUENTA2", "SEGMENTO2", "SEGMENTO", "SUB_CTE", "FE_ASIG", "FE_BAJA", "FECHA_BAJA",
+              "FE_PURGA", "FE_DEV", "FECHA"],
+    "DEVOL": ["CUENTA", "FOLIO", "CUENTA2", "SEGMENTO2", "SEGMENTO", "SUB_CTE", "FE_ASIG", "FE_DEV", "FE_CAPT"],
+    "HISTORIA": ["FOLIO"],
+    "PAGTOT": ["CUENTA", "FE_PAG", "MONT", "FE_REG"],
+}
 
 # Etiquetas: tipo -> (campo llave, tipo de llave, campo valor)   (cruces de asi486.prg)
 ETIQUETAS = {
@@ -49,21 +58,38 @@ class ErrorFuente(Exception):
 
 
 # ------------------------------------------------------------------ lectura
-def leer(ruta):
+def leer(ruta, solo=None):
     p = Path(ruta)
     if not p.exists():
         raise FileNotFoundError(ruta)
     tabla = DBF(str(p), encoding="cp1252", char_decode_errors="replace", ignore_missing_memofile=True)
     campos = [f.name.upper() for f in tabla.fields]
+    quedan = set(solo) if solo else None
     filas = []
     for r in tabla:                      # dbfread omite los registros marcados como borrados
         fila = {}
         for k, v in r.items():
+            k = k.upper()
+            if quedan is not None and k not in quedan:
+                continue
             if isinstance(v, str):
                 v = v.strip() or None
-            fila[k.upper()] = v
+            fila[k] = v
         filas.append(fila)
     return campos, filas
+
+
+def fecha_mmddaaaa(v):
+    """'10282026' -> date; None si no es fecha válida."""
+    v = (v or "").strip() if isinstance(v, str) else v
+    if isinstance(v, dt.date):
+        return v
+    if not v or len(v) != 8 or not v.isdigit():
+        return None
+    try:
+        return dt.date(int(v[4:]), int(v[:2]), int(v[2:4]))
+    except ValueError:
+        return None
 
 
 def exigir(nombre, campos, requeridos):
@@ -116,27 +142,36 @@ def destino_historia(cfg, fuentes, avisos):
         sub = f.get("SUB_CTE") if f.get("SUB_CTE") in ("NVA", "REA") else "NVA"
         filas.append((cli, f["CUENTA"], fol, f.get("CUENTA2") or f"{cli}-{fol}", f.get("SEGMENTO2"), sub, "A",
                       f.get("FE_ASIG") or dt.date(1900, 1, 1), None, None))
-    if "PURGA" in fuentes:
-        campos, purga = fuentes["PURGA"]
-        exigir("PURGA", campos, ["CUENTA", "FOLIO"])
-        vistas = set()
+    fuente = "PURGA" if "PURGA" in fuentes else ("DEVOL" if "DEVOL" in fuentes else None)
+    if fuente:
+        if fuente == "DEVOL":
+            avisos.append("HISTORIA: no hay PURGA; las bajas se toman de DEVOL (prog15 agrega lo mismo a las dos)")
+        campos, purga = fuentes[fuente]
+        exigir(fuente, campos, ["CUENTA", "FOLIO"])
+        bajas, sin_dato = {}, 0
         for f in purga:
             fol = folio_int(f.get("FOLIO"))
             if f.get("CUENTA") is None or fol is None:
-                avisos.append("PURGA: registro sin CUENTA o FOLIO numérico omitido")
+                sin_dato += 1
                 continue
             k = (f["CUENTA"], fol)
-            if k in activas or k in vistas:
+            if k in activas:
                 continue
-            vistas.add(k)
-            sub = f.get("SUB_CTE") if f.get("SUB_CTE") in ("NVA", "REA") else "NVA"
-            fe_baja = primero(f, "FE_BAJA", "FECHA_BAJA", "FE_PURGA", "FE_DEV", "FECHA")
+            fe_baja = primero(f, "FE_BAJA", "FECHA_BAJA", "FE_PURGA", "FE_DEV", "FE_CAPT", "FECHA")
             if not isinstance(fe_baja, dt.date):
                 fe_baja = None
-            filas.append((cli, f["CUENTA"], fol, f.get("CUENTA2") or f"{cli}-{fol}", f.get("SEGMENTO2"), sub, "B",
-                          f.get("FE_ASIG") or dt.date(1900, 1, 1), fe_baja, "MIGRACION PURGA"))
+            previo = bajas.get(k)
+            if previo and (previo[8] or dt.date(1900, 1, 1)) >= (fe_baja or dt.date(1900, 1, 1)):
+                continue                                   # se queda la baja más reciente
+            sub = f.get("SUB_CTE") if f.get("SUB_CTE") in ("NVA", "REA") else "NVA"
+            seg = f.get("SEGMENTO2") or None
+            bajas[k] = (cli, f["CUENTA"], fol, (f.get("CUENTA2") if str(f.get("CUENTA2") or "").startswith(f"{cli}-") else None)
+                        or f"{cli}-{fol}", seg, sub, "B", f.get("FE_ASIG") or dt.date(1900, 1, 1), fe_baja, f"MIGRACION {fuente}")
+        if sin_dato:
+            avisos.append(f"{fuente}: {sin_dato} registros sin CUENTA o FOLIO numérico omitidos")
+        filas += list(bajas.values())
     else:
-        avisos.append("HISTORIA: sin PURGA, las cuentas que regresen no se reconocerán como REA")
+        avisos.append("HISTORIA: sin PURGA ni DEVOL, las cuentas que regresen no se reconocerán como REA")
     return ["CLIENTE", "CUENTA", "FOLIO", "CUENTA2", "SEGMENTO2", "SUB_CTE", "ESTATUS", "FE_ALTA", "FE_BAJA", "MOTIVO_BAJA"], filas
 
 
@@ -146,7 +181,7 @@ def destino_consecutivo(cfg, fuentes, avisos):
         campos, tab7 = fuentes["TAB7"]
         exigir("TAB7", campos, ["FOLIO"])
         maximos["TAB7"] = max((folio_int(f.get("FOLIO")) or 0 for f in tab7), default=0)
-    for k in ("DAT", "PURGA"):
+    for k in ("DAT", "PURGA", "DEVOL", "HISTORIA"):
         if k in fuentes:
             maximos[k] = max((folio_int(f.get("FOLIO")) or 0 for f in fuentes[k][1]), default=0)
     if not maximos:
@@ -176,7 +211,7 @@ def destino_etiquetas(cfg, fuentes, avisos):
 
 def destino_exclusiones(cfg, fuentes, avisos, cuentas_486):
     cli = cfg["cliente"]
-    filas = [(cli, "TELEFONO", t, None, "Teléfono de dueños del banco", MIGRACION) for t in TELEFONOS_BANCO]
+    filas = []
 
     def del_486(c):
         return c and (c.startswith(f"{cli}-") or c in cuentas_486)
@@ -210,6 +245,27 @@ def destino_exclusiones(cfg, fuentes, avisos, cuentas_486):
             filas.append((cli, tipo, str(k[1])[:200], (str(v2)[:200] if v2 else None), motivo, MIGRACION))
         avisos.append(f"{fuente}: {len(filas) - antes} de {len(datos)} registros aplican al {cli}")
     return ["CLIENTE", "TIPO", "VALOR", "VALOR2", "MOTIVO", "REQ"], filas
+
+
+def destino_pagos(cfg, fuentes, avisos):
+    """PAGTOT: solo CUENTA + FE_PAG + MONT (y FE_REG informativo). Lo demás son constantes del layout SCBPAG."""
+    campos, datos = fuentes["PAGTOT"]
+    exigir("PAGTOT", campos, ["CUENTA", "FE_PAG", "MONT"])
+    filas, malos = [], 0
+    for f in datos:
+        cuenta, fe = f.get("CUENTA"), fecha_mmddaaaa(f.get("FE_PAG"))
+        try:
+            imp = Decimal(str(f.get("MONT") or "").strip())
+        except Exception:
+            imp = None
+        if not cuenta or fe is None or imp is None or abs(imp) >= Decimal("1e13"):
+            malos += 1
+            continue
+        filas.append((cfg["cliente"], cuenta[:25], fe, imp.quantize(Decimal("0.01")), fecha_mmddaaaa(f.get("FE_REG")), 0, "PAGTOT"))
+    if malos:
+        avisos.append(f"PAGTOT: {malos} registros omitidos por FE_PAG incompleta (no de 8 posiciones), monto ilegible o sin "
+                      "cuenta; pagos.prg compara FE_PAG de 8 posiciones, así que nunca coincidirían con un pago nuevo")
+    return ["CLIENTE", "CUENTA", "FE_PAG", "IMPORTE", "FE_REG", "ID_CORRIDA", "ORIGEN"], filas
 
 
 def destino_lada(cfg, fuentes, avisos):
@@ -258,12 +314,12 @@ def main():
     ap.add_argument("--config", required=True)
     ap.add_argument("--conexion", help="cadena ODBC; sin ella solo se revisa")
     ap.add_argument("--reemplazar", action="store_true", help="borra lo que haya en los destinos antes de cargar")
-    ap.add_argument("--solo", help="destinos separados por coma: DAT,HISTORIA,CONSECUTIVO,ETIQUETAS,EXCLUSIONES,LADA,PNC")
+    ap.add_argument("--solo", help="destinos separados por coma: DAT,HISTORIA,CONSECUTIVO,PAGOS,ETIQUETAS,EXCLUSIONES,LADA,PNC")
     a = ap.parse_args()
 
     cfg = json.loads(Path(a.config).read_text(encoding="utf-8"))
     cli = cfg["cliente"]
-    destinos = ["DAT", "HISTORIA", "CONSECUTIVO", "ETIQUETAS", "EXCLUSIONES", "LADA", "PNC"]
+    destinos = ["DAT", "HISTORIA", "CONSECUTIVO", "PAGOS", "ETIQUETAS", "EXCLUSIONES", "LADA", "PNC"]
     if a.solo:
         destinos = [d.strip().upper() for d in a.solo.split(",")]
 
@@ -274,7 +330,7 @@ def main():
         if not ruta:
             continue
         try:
-            fuentes[nombre] = leer(ruta)
+            fuentes[nombre] = leer(ruta, CAMPOS_FUENTE.get(nombre))
             print(f"  {nombre:<10} {len(fuentes[nombre][1]):>8} registros  {ruta}")
         except FileNotFoundError:
             print(f"  {nombre:<10}      --- no encontrado: {ruta}")
@@ -303,10 +359,11 @@ def main():
 
     plan("DAT", lambda: destino_dat(cfg, fuentes, avisos), ["DAT"])
     plan("HISTORIA", lambda: destino_historia(cfg, fuentes, avisos), ["DAT"])
-    plan("CONSECUTIVO", lambda: destino_consecutivo(cfg, fuentes, avisos), ["TAB7", "DAT"])
+    plan("CONSECUTIVO", lambda: destino_consecutivo(cfg, fuentes, avisos), ["TAB7", "DAT", "HISTORIA", "DEVOL"])
+    plan("PAGOS", lambda: destino_pagos(cfg, fuentes, avisos), ["PAGTOT"])
     plan("ETIQUETAS", lambda: destino_etiquetas(cfg, fuentes, avisos), list(ETIQUETAS))
     plan("EXCLUSIONES", lambda: destino_exclusiones(cfg, fuentes, avisos, cuentas_486),
-         ["EXC486", "DIRMAL", "EMAILMALO", "BLACKLIST", "TELBAJ", "DAT"])
+         ["EXC486", "DIRMAL", "EMAILMALO", "BLACKLIST", "TELBAJ"])
     plan("LADA", lambda: destino_lada(cfg, fuentes, avisos), ["LADA"])
     plan("PNC", lambda: destino_pnc(cfg, fuentes, avisos), ["PNC"])
 
@@ -343,6 +400,12 @@ def main():
                 cur.execute(f"DELETE FROM {tablas[nombre]}" + (" WHERE CLIENTE = ?" if nombre == "HISTORIA" else ""),
                             *([cli] if nombre == "HISTORIA" else []))
                 n = insertar(cur, tablas[nombre], p[1], p[2])
+            elif nombre == "PAGOS":
+                previos = contar(cur, "SELECT COUNT(*) FROM dat.PAGO_ARRIBADO WHERE CLIENTE = ? AND ORIGEN = 'PAGTOT'", cli)
+                if previos and not a.reemplazar:
+                    raise RuntimeError(f"dat.PAGO_ARRIBADO ya tiene {previos} pagos de PAGTOT; usa --reemplazar")
+                cur.execute("DELETE FROM dat.PAGO_ARRIBADO WHERE CLIENTE = ? AND ORIGEN = 'PAGTOT'", cli)
+                n = insertar(cur, "dat.PAGO_ARRIBADO", p[1], p[2])
             elif nombre == "CONSECUTIVO":
                 cur.execute("DELETE FROM dat.FOLIO_CONSECUTIVO WHERE CLIENTE = ?", cli)
                 n = insertar(cur, "dat.FOLIO_CONSECUTIVO", p[1], p[2])

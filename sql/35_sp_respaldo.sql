@@ -72,7 +72,7 @@ BEGIN
     UNION ALL SELECT 'DAT en el respaldo', COUNT(*) FROM ops.RESPALDO_DAT_486 WHERE ID_CORRIDA_RESPALDO = @id_corrida
     UNION ALL SELECT 'Altas en el histórico a borrar', COUNT(*) FROM dat.HISTORIA_FOLIO WHERE ID_CORRIDA_ALTA = @id_corrida
     UNION ALL SELECT 'Bajas en el histórico a reabrir', COUNT(*) FROM dat.HISTORIA_FOLIO WHERE ID_CORRIDA_BAJA = @id_corrida
-    UNION ALL SELECT 'Pagos a borrar', COUNT(*) FROM ops.PAGO WHERE ID_CORRIDA = @id_corrida
+    UNION ALL SELECT 'Pagos arribados a borrar', COUNT(*) FROM dat.PAGO_ARRIBADO WHERE ID_CORRIDA = @id_corrida AND ORIGEN = 'CORRIDA'
     UNION ALL SELECT CONCAT('Consecutivo de folios: actual ', (SELECT ULTIMO_FOLIO FROM dat.FOLIO_CONSECUTIVO WHERE CLIENTE = @cliente),
                             ' -> ', @folio), NULL;
 
@@ -102,7 +102,8 @@ BEGIN
     IF @folio IS NOT NULL
         UPDATE dat.FOLIO_CONSECUTIVO SET ULTIMO_FOLIO = @folio, FE_ACT = SYSDATETIME() WHERE CLIENTE = @cliente;
 
-    DELETE FROM ops.PAGO WHERE ID_CORRIDA = @id_corrida;
+    DELETE FROM dat.PAGO_ARRIBADO WHERE ID_CORRIDA = @id_corrida AND ORIGEN = 'CORRIDA';
+    DELETE FROM ops.TELEFONO WHERE ID_CORRIDA = @id_corrida;
     UPDATE ops.DEVOLUCION SET PROCESADA = 0 WHERE ID_CORRIDA = @id_corrida;
 
     SET @msg = CONCAT(N'Revertida (estatus previo ', @estatus, N'). Lo que ya se haya arribado a CYBER no se revierte.');

@@ -42,6 +42,9 @@ WHERE CLIENTE = '486' AND PROCESO = 'ASIG';
 UPDATE cfg.ARCHIVO SET RUTA = '/datos/act_ok/', CODEPAGE = '' WHERE CLIENTE = '486' AND PROCESO = 'ACT';
 INSERT INTO dat.FOLIO_CONSECUTIVO (CLIENTE, ULTIMO_FOLIO) VALUES ('486', 100000);
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO) VALUES ('486', 'CUENTA', '20000008', 'Prueba de exclusión');
+INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'TELEFONO', '5533333333', '486-104', 'Prueba de queja (TELBAJ)');
+INSERT INTO cfg.PLAN_NUMERACION (LADA, SERIE, N_INI, N_FIN, TIPORED)
+VALUES ('55', '1111', 0, 9999, 'MOVIL'), ('477', '123', 4000, 4999, 'MOVIL'), ('477', '123', 0, 3999, 'FIJO'), ('477', '700', 0, 9999, 'FIJO');
 
 INSERT INTO dat.DAT_486 (FOLIO, CLIENTE, SUB_CTE, NOMBRE1, CUENTA, CUENTA2, RIESGO, DES_PROD, SEGMENTO2, TIPO, SDO_ACT, SDO_VDO,
                          PAG_MIN, SALDO1, SALDO2, SALDO3, TEL1, ETIQUETA1, PVS, TRAMO, SEG, DIRECC1, DIRECC2, DIRECC3, DIRECC4, ESTADO,
@@ -60,6 +63,10 @@ VALUES
 ('104', '486', 'NVA', 'CLIENTE PRUEBA C3', '20000003', '486-104', '20000003', '90000003-CRN-20000003', 'CONSUMO', 'PERS_VEN', 3000, 300,
  0, 900, 1200, 400, '5533333333', NULL, '96', '90+', NULL, 'CALLE FICTICIA 2', 'Colonia Prueba', '06600', 'Ciudad Prueba', 'CDMX',
  '2026-10-01', '2026-10-01', '2026-10-31');
+
+/* Teléfonos de prueba en TEL14..TEL16 (no se tocan al actualizar existentes) */
+UPDATE dat.DAT_486 SET TEL14 = '4771234567', TEL15 = '477-700-1234', TEL16 = '4777140350' WHERE CUENTA = '1111XAXX010101000';
+UPDATE dat.DAT_486 SET TEL14 = '55-4444-5555', TEL15 = '044 55 1111 1111', TEL16 = '12345' WHERE CUENTA = '20000003';
 
 INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA)
 VALUES ('486', '1111XAXX010101000', 100, '486-100', 'TDC', 'NVA', 'A', '2026-10-01', NULL),
@@ -177,9 +184,40 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o 
 FROM (SELECT N'ASIG: histórico de bajas (retiro)' AS p, CAST(N'2' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.HISTORIA_FOLIO WHERE ID_CORRIDA_BAJA = @id AND ESTATUS = 'B' AND DATOS_BAJA IS NOT NULL) AS NVARCHAR(4000)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'ASIG: archivo de devolución para CYBER (CUENTA2)' AS p, N'486-101,486-103' AS e,
-             (SELECT STRING_AGG(LINEA, ',') WITHIN GROUP (ORDER BY NUM) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'DEVOL_CYBER') AS o) x;
+             (SELECT STRING_AGG(RTRIM(LINEA), ',') WITHIN GROUP (ORDER BY NUM) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'DEVOL_CYBER') AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'ASIG: script de retiro para CYBER' AS p, CAST(N'update RCVRY.delqmst set dmstatus=''R'' where dmacctg=''1'' and dmacct=''486-101'';' AS NVARCHAR(4000)) AS e, CAST((SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'RETIRO' AND NUM = 1) AS NVARCHAR(4000)) AS o) x;
+
+/* Teléfonos (telbnx.prg): limpieza, celular por plan de numeración, lada de 2 y 3 dígitos, banco, queja, repetidos */
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'TEL: sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL)' AS p,
+             N'486-100|01477|7001234|4,486-100|0155|99999999|1,486-100|045|4771234567|5,486-102|0155|77777777|1,486-104|0155|44445555|4,486-104|044|5511111111|5' AS e,
+             (SELECT STRING_AGG(LINEA, ',') WITHIN GROUP (ORDER BY NUM) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'TEL_SUBMST') AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'TEL: SCBTEL 6 líneas de 137 con fecha y gestor' AS p, N'6|0|11022026|HOSP' AS e,
+             CONCAT((SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBTEL'), '|',
+                    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBTEL' AND DATALENGTH(LINEA) / 2 <> 137), '|',
+                    (SELECT SUBSTRING(LINEA, 82, 8) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBTEL' AND NUM = 1), '|',
+                    (SELECT SUBSTRING(LINEA, 99, 4) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBTEL' AND NUM = 1)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'TEL: bitácora (quejas TELBAJ) y script de CYBER' AS p, N'1|EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;' AS e,
+             CONCAT((SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'TELEFONOS' AND MENSAJE LIKE N'%quejas (TELBAJ): 1 %'), '|',
+                    (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'TEL_ACTUALIZA' AND NUM = 1)) AS o) x;
+
+/* Gescar (ges_nuevas_rea.prg y ges_retiro.prg): 119 posiciones */
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'GESCAR: nuevas, reasignadas y retiro (líneas y ancho)' AS p, N'4|1|2|0' AS e,
+             CONCAT((SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'GESCAR_NVA'), '|',
+                    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'GESCAR_REA'), '|',
+                    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'GESCAR_RETIRO'), '|',
+                    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO LIKE 'GESCAR%' AND DATALENGTH(LINEA) / 2 <> 119)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'GESCAR: campos de la línea' AS p,
+             N'2001486-100001|11022026|000RSR1|aaxrh|CUENTA NUEVA ASIGNADA.#2001486-500|CUENTA REASIGNADA.#2001486-101|RETIRO DE CUENTA.' AS e,
+             CONCAT((SELECT CONCAT(RTRIM(LEFT(LINEA, 29)), '|', SUBSTRING(LINEA, 30, 8), '|', SUBSTRING(LINEA, 47, 7), '|', RTRIM(SUBSTRING(LINEA, 56, 8)), '|', RTRIM(SUBSTRING(LINEA, 64, 56)))
+                     FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'GESCAR_NVA' AND NUM = 1), '#',
+                    (SELECT CONCAT(RTRIM(LEFT(LINEA, 29)), '|', RTRIM(SUBSTRING(LINEA, 64, 56))) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'GESCAR_REA' AND NUM = 1), '#',
+                    (SELECT CONCAT(RTRIM(LEFT(LINEA, 29)), '|', RTRIM(SUBSTRING(LINEA, 64, 56))) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'GESCAR_RETIRO' AND NUM = 1)) AS o) x;
 
 DECLARE @lin NVARCHAR(4000) = (SELECT l.LINEA FROM ops.SALIDA_LINEA l WHERE l.ID_CORRIDA = @id AND l.ARCHIVO = 'SCBSDOS'
                                AND l.LINEA LIKE N'____486-100001 %');
@@ -252,7 +290,15 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o 
 FROM (SELECT N'ACT: cada script termina en commit y exit' AS p, CAST(N'commit;|exit;' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(SENTENCIA, '|') WITHIN GROUP (ORDER BY NUM) FROM (SELECT TOP (2) SENTENCIA, NUM FROM ops.CYBER_SCRIPT
       WHERE ID_CORRIDA = @id AND SCRIPT = 'ACT_PAGMIN' ORDER BY NUM DESC) x) AS NVARCHAR(4000)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'ACT: pagos nuevos (duplicado y crédito inexistente fuera)' AS p, CAST(N'486-100001:500.00,486-102:1000.00' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(CONCAT(CUENTA2, ':', IMPORTE), ',') WITHIN GROUP (ORDER BY CUENTA2) FROM ops.PAGO WHERE ID_CORRIDA = @id) AS NVARCHAR(4000)) AS o) x;
+FROM (SELECT N'ACT: pagos a arribar (dos iguales en el archivo van los dos; crédito inexistente fuera)' AS p, CAST(N'486-100001:500.00,486-100001:500.00,486-102:1000.00' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(CONCAT(CUENTA2, ':', IMPORTE), ',') WITHIN GROUP (ORDER BY CUENTA2, ID) FROM dat.PAGO_ARRIBADO WHERE ID_CORRIDA = @id) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'SCBPAG: 3 líneas de 104' AS p, N'3|0' AS e,
+             CONCAT((SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBPAG'), '|',
+                    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBPAG' AND DATALENGTH(LINEA) / 2 <> 104)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'SCBPAG: línea completa (pagos.prg)' AS p,
+             CONCAT(N'5001', LEFT(N'20000001' + SPACE(25), 25), N'11022026', N'000000001000.00', N'pbank ', N'SERTEC  ', N'11032026', LEFT(N'PAGO' + SPACE(15), 15), N'000000001000.00') AS e,
+             (SELECT LINEA FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBPAG' AND LINEA LIKE N'500120000001 %') AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'ACT: DAT después del retiro' AS p, CAST(N'4' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.DAT_486) AS NVARCHAR(4000)) AS o) x;
 GO
@@ -266,7 +312,7 @@ BEGIN CATCH
     INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Segunda actualización termina OK', ISNULL(0, 0), CAST(ERROR_MESSAGE() AS NVARCHAR(4000));
 END CATCH;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'ACT 2: pagos no se registran dos veces' AS p, CAST(N'2' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.PAGO) AS NVARCHAR(4000)) AS o) x;
+FROM (SELECT N'ACT 2: pagos ya arribados no se repiten' AS p, CAST(N'3|0' AS NVARCHAR(4000)) AS e, CAST(CONCAT((SELECT COUNT(*) FROM dat.PAGO_ARRIBADO), '|', (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBPAG')) AS NVARCHAR(4000)) AS o) x;
 GO
 
 /* Pagos negativos: la actualización se cancela */
@@ -274,16 +320,73 @@ UPDATE cfg.ARCHIVO SET RUTA = '/datos/act_neg/' WHERE CLIENTE = '486' AND PROCES
 DECLARE @id INT;
 BEGIN TRY
     EXEC ops.sp_actualizacion_486 @fecha = '2026-11-03', @id_corrida = @id OUTPUT;
-    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Pagos negativos deben cancelar', ISNULL(0, 0), CAST(N'No se canceló' AS NVARCHAR(4000));
 END TRY
 BEGIN CATCH
-    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-    FROM (SELECT N'Pagos negativos cancelan la actualización' AS p, CAST(N'CANCELADA' AS NVARCHAR(4000)) AS e, CAST((SELECT TOP (1) ESTATUS FROM ops.CORRIDA WHERE PROCESO = 'ACT' ORDER BY ID_CORRIDA DESC) AS NVARCHAR(4000)) AS o) x;
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Pagos negativos: la actualización sigue', 0, ERROR_MESSAGE();
 END CATCH;
+SET @id = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ACT');
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'Pagos negativos: no se arriban, quedan en rechazos y se avisa a Operación' AS p, N'OK|1|0|3|1' AS e,
+             CONCAT((SELECT ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = @id), '|',
+                    (SELECT COUNT(*) FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'PAGOS_NEGATIVOS'), '|',
+                    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBPAG'), '|',
+                    (SELECT COUNT(*) FROM dat.PAGO_ARRIBADO), '|',
+                    (SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @id AND PLANTILLA = 'PAGOS_NEGATIVOS_486')) AS o) x;
+GO
+
+/* ---------------------------------------------------------------------
+   RETIRO POR SOLICITUD (folio o riesgo)
+   DAT en este punto: 486-102 (riesgo 20000001), 486-100003 (1000000003),
+   486-100004 (1000000004) y 486-500, al que se le pone riesgo 100004 para
+   probar el caso ambiguo (riesgo de una cuenta = folio de otra).
+   --------------------------------------------------------------------- */
+UPDATE dat.DAT_486 SET RIESGO = '100004' WHERE CUENTA2 = '486-500';
+DECLARE @v NVARCHAR(MAX) = N'486-100003, 1000000004
+777777;486-100003, 100004';
+DECLARE @t TABLE (ID INT IDENTITY(1,1), VALOR NVARCHAR(200), TIPO VARCHAR(10), RESULTADO VARCHAR(20), CUENTA2 VARCHAR(28), FOLIO VARCHAR(10), SEGMENTO2 VARCHAR(20), SDO_ACT DECIMAL(18,2));
+INSERT INTO @t (VALOR, TIPO, RESULTADO, CUENTA2, FOLIO, SEGMENTO2, SDO_ACT) EXEC ops.sp_retiro_solicitud @valores = @v;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'RET: vista previa (folio, riesgo, no existe, repetido, ambiguo)' AS p,
+             N'486-100003:FOLIO:A RETIRAR:486-100003|1000000004:RIESGO:A RETIRAR:486-100004|777777::NO ESTA EN EL DAT:|486-100003:FOLIO:REPETIDO:486-100003|100004::AMBIGUO:|4' AS e,
+             CONCAT((SELECT STRING_AGG(CONCAT(VALOR, ':', TIPO, ':', RESULTADO, ':', CUENTA2), '|') WITHIN GROUP (ORDER BY ID) FROM @t), '|',
+                    (SELECT COUNT(*) FROM dat.DAT_486)) AS o) x;
+
+DECLARE @id INT;
+BEGIN TRY
+    EXEC ops.sp_retiro_solicitud @valores = @v, @motivo = N'SOLICITUD DE PRUEBA', @confirmar = 1, @id_corrida = @id OUTPUT;
+END TRY
+BEGIN CATCH
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'RET: retiro por solicitud termina OK', 0, ERROR_MESSAGE();
+END CATCH;
+SET @id = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'RET');
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'RET: retira 2, rechaza 3, archivos de retiro y script de CYBER' AS p, N'OK|2|3|486-100003,486-100004|2|4|B,B' AS e,
+             CONCAT((SELECT ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = @id), '|',
+                    (SELECT COUNT(*) FROM dat.DAT_486), '|',
+                    (SELECT COUNT(*) FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'RETIRO_SOLICITUD'), '|',
+                    (SELECT STRING_AGG(RTRIM(LINEA), ',') WITHIN GROUP (ORDER BY NUM) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'DEVOL_CYBER'), '|',
+                    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'GESCAR_RETIRO'), '|',
+                    (SELECT COUNT(*) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'RETIRO'), '|',
+                    (SELECT STRING_AGG(ESTATUS, ',') FROM dat.HISTORIA_FOLIO WHERE ID_CORRIDA_BAJA = @id)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'RET: lista de folios para operación (FOLIO,CUENTA2,MOTIVO)' AS p, N'100003,486-100003,SOLICITUD DE PRUEBA' AS e,
+             (SELECT LINEA FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'RETIROS' AND NUM = 1) AS o) x;
+
+BEGIN TRY
+    EXEC ops.sp_revertir_corrida @id, 1;
+END TRY
+BEGIN CATCH
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'RET: retroceso', 0, ERROR_MESSAGE();
+END CATCH;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'RET: retroceso devuelve las cuentas al DAT' AS p, N'4|A,A' AS e,
+             CONCAT((SELECT COUNT(*) FROM dat.DAT_486), '|',
+                    (SELECT STRING_AGG(ESTATUS, ',') FROM dat.HISTORIA_FOLIO WHERE CUENTA IN ('3333XAXX010101000', '4444XAXX010101000'))) AS o) x;
 GO
 
 /* ---------------------------------------------------------------------
    RETROCESO: corridas 5, 4 y 3 (actualizaciones) y luego la 2 (asignación)
+   (la 6, retiro por solicitud, ya se revirtió arriba)
    --------------------------------------------------------------------- */
 BEGIN TRY
     EXEC ops.sp_revertir_corrida 3, 1;
@@ -304,7 +407,7 @@ BEGIN CATCH
 END CATCH;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'Retroceso ACT: DAT como después de la asignación' AS p, N'8|0|1000.00|5000.00' AS e,
-             CONCAT((SELECT COUNT(*) FROM dat.DAT_486), '|', (SELECT COUNT(*) FROM ops.PAGO), '|',
+             CONCAT((SELECT COUNT(*) FROM dat.DAT_486), '|', (SELECT COUNT(*) FROM dat.PAGO_ARRIBADO), '|',
                     (SELECT SDO_ACT FROM dat.DAT_486 WHERE CUENTA = '1111XAXX010101000'), '|',
                     (SELECT SDO_ACT FROM dat.DAT_486 WHERE CUENTA = '20000001')) AS o) x;
 GO

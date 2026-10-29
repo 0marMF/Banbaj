@@ -402,8 +402,14 @@ BEGIN
             DECLARE @est VARCHAR(15) = CASE WHEN @accion = 'CANCELAR' THEN 'ERROR' ELSE 'AVISO' END;
             EXEC ops.sp_log @id_corrida, @codigo, @est, @n, @msg;
 
+            DECLARE @detalle NVARCHAR(MAX) = NULL;
             IF @accion = 'EXCLUIR'
             BEGIN
+                /* Detalle para el correo (hasta 200 filas), antes de quitarlas */
+                SET @sql = N'SELECT @detalle = STRING_AGG(CAST(x.J AS NVARCHAR(MAX)), NCHAR(10)) FROM (SELECT TOP (200) '
+                         + N'(SELECT t.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) AS J' + @from + N') x;';
+                EXEC sp_executesql @sql, N'@id_corrida INT, @detalle NVARCHAR(MAX) OUTPUT', @id_corrida = @id_corrida, @detalle = @detalle OUTPUT;
+
                 SET @sql = N'INSERT INTO ops.RECHAZO (ID_CORRIDA, ORIGEN, FILA, MOTIVO, DATOS) '
                          + N'SELECT @id_corrida, @codigo, NULL, @msg, (SELECT t.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)' + @from + N'; '
                          + N'DELETE t' + @from + N';';
@@ -423,7 +429,8 @@ BEGIN
 
             IF @plantilla IS NOT NULL
             BEGIN
-                DECLARE @json NVARCHAR(MAX) = (SELECT @codigo AS REGLA, @msg AS MENSAJE, @n AS REGISTROS FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
+                DECLARE @json NVARCHAR(MAX) = (SELECT @codigo AS REGLA, @msg AS MENSAJE, @n AS REGISTROS, ISNULL(@detalle, N'') AS DETALLE
+                                               FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
                 EXEC mail.sp_enviar @plantilla = @plantilla, @id_corrida = @id_corrida, @valores = @json;
             END;
         END;
