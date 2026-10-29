@@ -47,8 +47,8 @@ Se cargan con `tools/migrar_dbf.py`. Para cada una necesito la **estructura** pa
 | PURGA | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` (bajas) | Falta. `prog15` le agrega lo mismo que a DEVOL (486BAJ). ¿Es igual a DEVOL? | [ ] |
 | historia | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` | Recibida: 1.8 M filas (una por cada asignación desde 2016), folio máx. 179,688 | Lista |
 | DEVOL | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` (bajas) | Recibida: 580 mil retiros con FE_DEV | Lista |
-| PAGTOT | `O:\PRG\GPO1\486\PAGOS\` | `ops.PAGO` (pagos ya arribados) | Recibida: 543 mil pagos | Lista |
-| TELSAN | `O:\PRG\MEXGPO1\ASI486\` | Teléfonos | Recibida: 15 mil teléfonos | Lista |
+| PAGTOT | `O:\PRG\GPO1\486\PAGOS\` | `dat.PAGO_ARRIBADO` (tabla fija) | Recibida: 543 mil pagos. Solo se guardan CUENTA + FE_PAG + importe (lo que usa la validación); 12,865 renglones viejos con FE_PAG incompleta no pueden coincidir y se omiten | Lista |
+| TELSAN | `O:\PRG\MEXGPO1\ASI486\` | `ops.TELEFONO` (se arma en cada asignación) | Recibida: la regla nueva reproduce sus 15,353 teléfonos; no se migra | Lista |
 | TAB7 | `O:\DAT\GPO1\486\` | `dat.FOLIO_CONSECUTIVO` | FOLIO, CLIENTE, FE_CAPT, TIME | [ ] |
 | eti486 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (ETI486) | CUENTA2, MORA | [ ] |
 | eti | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (ETI) | CUENTA, ETIQUETA | [ ] |
@@ -66,14 +66,12 @@ Se cargan con `tools/migrar_dbf.py`. Para cada una necesito la **estructura** pa
 
 ## 3. Tablas y archivos compartidos con otros procesos
 
-No son del 486, pero los procesos escriben o leen en ellos. Hay que decidir si el SQL los sigue alimentando.
+Las bitácoras que se subían a Oracle y a server (`RCVRY.JSP_VALIDADOR_TELEFONOS`, `RCVRY.asig`, `asignaciones..tiempos`, `cyberdti.flags_cyber*`) **se descartan**: la bitácora es `ops.CORRIDA` + `ops.BITACORA`.
 
-- [ ] **`cyberdti.flags_cyber2`, `flags_cyber_his`, `flags_cyber_COM`** (SQL Server 192.168.50.53) — banderas de proceso. ¿Alguien las monitorea?
-- [ ] **`asignaciones..tiempos`** (bcp) y **`RCVRY.asig`** (Oracle) — bitácora de tiempos de asignación. ¿Quién las consulta? Ahora la bitácora vive en `ops.CORRIDA` y `ops.BITACORA`.
-- [ ] **`O:\asigna\asignaciones`** y **`O:\ASIGNA\NUEVAS`** — control de horarios y cuentas nuevas por cliente.
+- [ ] **`O:\asigna\asignaciones`** y **`O:\ASIGNA\NUEVAS`** — control de horarios y cuentas nuevas por cliente. ¿Se descartan también?
 - [ ] **`Q:\MIS\SERTEC98\CLIENTES\486\DAT`** — `prog15.prg` copia ahí el DAT después de cada retiro. ¿Quién lo usa? Si sigue haciendo falta, se reemplaza por una vista o una exportación.
-- [ ] **`\\192.168.50.1\Cyber_00\dev\MX_G1MCT_DVBJIG_<fecha>_<hora>`** — archivo de devolución para CYBER (CUENTA2). Ya se genera en `ops.SALIDA_LINEA` (`DEVOL_CYBER`); falta confirmar si es lo único que CYBER necesita para el retiro.
-- [ ] **`cyber.reg_serv`** (SQL Server) — de ahí salen usuario y servidor de sqlplus. En el SQL nuevo no se guarda ninguna contraseña: la conexión a CYBER va por linked server o por el paso del job.
+- [x] **Devolución para CYBER** (`MX_G1MCT_DVBJIG_<fecha>_<hora>`) — se genera como archivo plano para arribo manual.
+- [x] **`cyber.reg_serv`** — ya no hace falta: el arribo es manual con los archivos y scripts que deja `tools/exportar_salidas.py`.
 
 ## 4. Formatos de archivos (ejemplo con datos ficticios)
 
@@ -90,26 +88,29 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 ## 6. Preguntas abiertas
 
-- [ ] **TIPOTEL:** qué significa cada valor (hoy TEL1 → 1, TEL2 → 2, el resto → 4, celular → 5).
-- [ ] **Teléfonos:** ¿se mandan cada día todos los del DAT (como hoy) o solo los nuevos?
 - [ ] **`eti486`:** hoy cambia la mora de 307 cuentas contra lo que trae el banco. ¿Se sigue usando?
 - [ ] **GARAN (DMCPHONE) y ETIQUETA/COVID (U1ARCOD2):** vienen de la base maestra, no de las bases eliminadas. ¿Se quedan?
 - [ ] **Importes negativos en SCBSDOS:** ¿se mandan en cero o con signo? Hoy salen positivos (H-01).
-- [ ] **Pagos negativos:** ¿se cancela toda la actualización (como hoy) o solo se excluyen esos pagos?
+- [ ] **Pagos de cuentas que ya no están en el DAT:** en `pagos.prg` solo se arriban los que cruzan contra DAT.RIESGO (la búsqueda en PURGA y en CYBER nunca encuentra nada porque `pagos486` no trae CUENTA). Así quedó. ¿Se deberían arribar los de cuentas retiradas?
+- [ ] **Destinatarios de Operación** para el aviso de pagos negativos (lista `OPERACION_PAGOS_486`, hoy solo el buzón de asignaciones).
 - [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.
 - [ ] **Quién mantiene** `TELBAJ_G1`, `pnc` y las etiquetas `eti`, `dm1`, `STATUS`, y cada cuánto.
 
-## 7. CYBER (Oracle): lo que hacen los procedimientos
+## 7. CYBER (Oracle)
 
-- [ ] Código de **`RCVRY.JSP_TELEFONOS_REMESA_486`**: aplica los teléfonos de la remesa. Sin él no sé si da de alta, de baja o reemplaza.
-- [ ] Estructura de **`RCVRY.JSP_TAB_TEL_REMESA_486`** y **`RCVRY.JSP_VALIDADOR_TELEFONOS`**.
-- [ ] **`INSERTA_PHONE.SQL`** (`RCVRY.RPT_INSERTA_PHONE('1','486')`): ningún .prg lo llama. ¿Se usa?
+El procedimiento `RCVRY.JSP_TELEFONOS_REMESA_486` no se puede compartir (política de CYBER): se trata como caja negra. SQL Server le entrega `sub_mst.TXT` completo en cada asignación y él purga y agrega.
+
 - [ ] **`borra.sql` de ACT_PHONE:** el que subieron borra `RCVRY.BANA`, pero la carga va a `JSP_TAB_TEL_REMESA_486`. ¿Hay otro en esa carpeta o el procedimiento limpia la tabla?
-- [ ] **Conexión SQL Server → CYBER:** ¿hay linked server a Oracle o los scripts seguirán corriendo con sqlplus/sqlldr desde un job? Pagos lo necesita para buscar en CYBER las cuentas que no están en DAT ni PURGA (`amex` → `bade.txt`).
-- [ ] **Subida de archivos:** SCBSDOS, SCBTEL, SCBPAG y SCBACTH ¿se suben a mano al SSH o hay un proceso? (`DO SSHP` está comentado).
+- [ ] **`INSERTA_PHONE.SQL`** (`RCVRY.RPT_INSERTA_PHONE('1','486')`): ningún .prg lo llama. ¿Se usa?
 
 ## Ya resuelto
 
+- Los archivos planos se siguen arribando a mano: `tools/exportar_salidas.py` los escribe con su nombre, Windows-1252 y CRLF (ver `cyber/486/ARRIBO_MANUAL.md`).
+- Teléfonos: solo en la asignación, completos, para que CYBER purgue y agregue.
+- Pagos negativos: no salen en SCBPAG, quedan en rechazos y se avisa a Operación (ya no cancelan la actualización).
+- PAGTOT pasa a tabla fija con solo los campos de la validación.
+- Retiro por solicitud con folio o riesgo: `ops.sp_retiro_solicitud` (vista previa, retroceso).
+- TIPOTEL: 1 = TEL1, 2 = TEL2, 4 = otro fijo, 5 = celular (según telbnx.prg).
 - Formato de teléfonos confirmado con TELSAN: celular AREA 044/045 + 10 dígitos (TIPOTEL 5); fijo AREA 01+lada + 7 u 8 dígitos (TIPOTEL 4); TIPOTEL 1 y 2 para TEL1/TEL2.
 - CYBER sigue aceptando solo el formato actual de teléfonos (044/045 para celular, 01 + lada para fijo): se conserva.
 - Estatus de retiro en CYBER: `dmstatus = 'R'` (de `prog15.prg`).

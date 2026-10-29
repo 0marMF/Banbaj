@@ -1,6 +1,6 @@
 # Scripts SQL Server · Banbaj (cliente 486)
 
-Migración dinámica de la asignación y la actualización del 486. Las únicas tablas fijas del negocio son el **DAT** (`dat.DAT_486`) y el **histórico de folios** (`dat.FOLIO_CONSECUTIVO` + `dat.HISTORIA_FOLIO`). Todo lo demás vive en catálogos (`cfg.*`) y en stored procedures.
+Migración dinámica de la asignación y la actualización del 486. Las únicas tablas fijas del negocio son el **DAT** (`dat.DAT_486`), el **histórico de folios** (`dat.FOLIO_CONSECUTIVO` + `dat.HISTORIA_FOLIO`) y los **pagos arribados** (`dat.PAGO_ARRIBADO`, antes PAGTOT). Todo lo demás vive en catálogos (`cfg.*`) y en stored procedures.
 
 Requiere SQL Server 2017 o superior y Database Mail configurado.
 
@@ -17,9 +17,11 @@ Requiere SQL Server 2017 o superior y Database Mail configurado.
 | `25_sp_correo.sql` | Envío de correo dinámico y alta / baja de destinatarios |
 | `27_sp_etiquetas.sql` | Carga de etiquetas externas (TOP: folio + etiqueta de Operación) |
 | `30_sp_asignacion.sql` | Unión de bases, devolución, existentes, folios y alta, retiro |
+| `32_sp_retiro_solicitud.sql` | Retiro por solicitud con folio o riesgo (`ops.sp_retiro_solicitud`) |
 | `35_sp_respaldo.sql` | Respaldo del DAT por corrida y retroceso (`ops.sp_revertir_corrida`) |
 | `40_sp_actualizacion.sql` | Saldos, scripts para CYBER, pagos |
-| `50_sp_salidas.sql` | SCBSDOS (y cualquier salida de ancho fijo de `cfg.SALIDA`) |
+| `45_sp_telefonos.sql` | Teléfonos para CYBER en la asignación (`ops.sp_telefonos`, antes telbnx.prg) |
+| `50_sp_salidas.sql` | Archivos planos de `cfg.SALIDA_ARCHIVO` + `cfg.SALIDA` (ancho fijo o delimitados) |
 | `60_sp_orquestadores.sql` | `ops.sp_asignacion_486` y `ops.sp_actualizacion_486` |
 | `90_semilla_486.sql` | Configuración del 486 (generada con `tools/generar_sql_486.py`) |
 
@@ -36,8 +38,13 @@ EXEC ops.sp_asignacion_486 @hora_llegada = '09:15', @id_corrida = @id OUTPUT;
 SELECT * FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id;
 EXEC ops.sp_retiro @id;
 
--- Actualización de saldos y pagos
+-- Actualización de saldos y pagos (los pagos negativos se excluyen y se avisa a Operación)
 EXEC ops.sp_actualizacion_486 @id_corrida = @id OUTPUT;
+
+-- Retiro por solicitud: folio (con o sin 486-) o riesgo; primero vista previa
+EXEC ops.sp_retiro_solicitud @valores = N'486-100001, 1000000004';
+EXEC ops.sp_retiro_solicitud @valores = N'486-100001, 1000000004', @motivo = N'SOLICITUD BANCO', @confirmar = 1;
+EXEC ops.sp_retiro_solicitud @archivo = N'D:\Banbaj\486\retiros\solicitud.csv', @confirmar = 1;
 
 -- Retroceso: deja DAT, histórico de folios, consecutivo y pagos como antes de la corrida
 EXEC ops.sp_revertir_corrida @id;                 -- vista previa
@@ -48,7 +55,19 @@ SELECT * FROM ops.BITACORA WHERE ID_CORRIDA = @id ORDER BY ID;
 SELECT * FROM ops.RECHAZO  WHERE ID_CORRIDA = @id;
 ```
 
-Exportar los archivos (paso de SQL Agent tipo CmdExec):
+Escribir los archivos planos y los scripts de CYBER para el arribo manual (ver `cyber/486/ARRIBO_MANUAL.md`):
+
+```
+python tools/exportar_salidas.py --conexion "DRIVER={ODBC Driver 18 for SQL Server};SERVER=<servidor>;DATABASE=Banbaj;Trusted_Connection=yes;TrustServerCertificate=yes" --corrida 123 --carpeta D:\Banbaj\486\salida
+```
+
+| Proceso | Archivos |
+| --- | --- |
+| Asignación | `SCBSDOS.TXT`, `SCBTEL.TXT`, `sub_mst.TXT`, `SCBACTH_486NU.TXT`, `SCBACTH_486REA.TXT`, `cyber/TEL_ACTUALIZA.sql` |
+| Actualización | `SCBSDOS.TXT`, `SCBPAG.TXT`, `cyber/ACT_SALDOS.sql`, `ACT_VENCIDO.sql`, `ACT_PAGMIN.sql` |
+| Retiro | `MX_G1MCT_DVBJIG_<fecha>_<hora>`, `SCBACTH_486.TXT`, `RETIROS_486_<fecha>.csv`, `cyber/RETIRO.sql` |
+
+Un archivo nuevo o un cambio de layout se configura en `cfg.SALIDA_ARCHIVO` (origen, nombre, separador) y `cfg.SALIDA` (campos), sin tocar los procedimientos. Alternativa con bcp:
 
 ```
 bcp "SELECT LINEA FROM Banbaj.ops.SALIDA_LINEA WHERE ID_CORRIDA = 123 AND ARCHIVO = 'SCBSDOS' ORDER BY NUM" queryout SCBSDOS.TXT -c -C 1252 -T -S <servidor>
@@ -87,8 +106,7 @@ Lista completa de programas, tablas y preguntas en [`docs/FALTANTES_486.md`](../
 - `cfg.ARCHIVO.RUTA` real y `mail.PLANTILLA.PERFIL_DBMAIL` real.
 - `NEGATIVO_MODO` (hoy igual que el legado: el negativo sale positivo, H-01). `TOPE_DEVOLUCION_PCT` va vacío: la base maestra se trabaja como llega; poner un número solo si se quiere el freno.
 - Columnas marcadas POR CONFIRMAR en `cfg.ARCHIVO_COLUMNA` (ENFOQUE, ETIQUETA, REE) y el archivo de Hipotecario.
-- Destinatarios de `OPERACION_ASIG_486` (MAIL.prg / correo_486 no están versionados).
-- Layout de arribo de pagos (PAGOS.prg) y salida SCBTEL (telbnx.prg): siguientes pasos.
+- Destinatarios de `OPERACION_ASIG_486` (MAIL.prg / correo_486 no están versionados) y de `OPERACION_PAGOS_486` (aviso de pagos negativos).
 - Carga inicial desde los DBF: `tools/migrar_dbf.py` (ver abajo).
 
 ## Migración de los DBF
@@ -98,10 +116,11 @@ Los DBF dejan de usarse. `tools/migrar_dbf.py` pasa todo a tablas en una sola tr
 | DBF | Tabla |
 | --- | --- |
 | DAT | `dat.DAT_486` |
-| DAT (activas) + PURGA (bajas) | `dat.HISTORIA_FOLIO` |
-| TAB7 (máximo folio, comparado con DAT y PURGA) | `dat.FOLIO_CONSECUTIVO` |
+| DAT (activas) + PURGA (bajas; si no hay PURGA, DEVOL) | `dat.HISTORIA_FOLIO` |
+| TAB7 (máximo folio, comparado con DAT, PURGA, DEVOL e HISTORIA) | `dat.FOLIO_CONSECUTIVO` |
+| PAGTOT (solo CUENTA + FE_PAG + MONT) | `dat.PAGO_ARRIBADO` |
 | ETI486, ETI, DM1, TOP, STATUS | `cfg.ETIQUETA` |
-| EXC486, DIRMAL, EMAILMALO, BLACKLIST_486, TELBAJ_G1 + 3 teléfonos del banco | `cfg.EXCLUSION` (solo lo que aplica al 486) |
+| EXC486, DIRMAL, EMAILMALO, BLACKLIST_486, TELBAJ_G1 | `cfg.EXCLUSION` (solo lo que aplica al 486; los 3 teléfonos del banco van en la semilla) |
 | LADA, PNC | `cfg.LADA`, `cfg.PLAN_NUMERACION` |
 
 ```
@@ -118,4 +137,4 @@ Los CSV que guarda Excel vienen en Windows-1252: en el servidor Windows `cfg.ARC
 
 ## Pruebas
 
-`.github/workflows/pruebas-sql.yml` levanta SQL Server 2022 en GitHub Actions, ejecuta estos scripts y `tests/pruebas.sql` con datos ficticios (`tests/generar_datos_prueba.py`). El resultado queda en la rama `ci-resultados` (última corrida: 60 de 60 pruebas OK).
+`.github/workflows/pruebas-sql.yml` levanta SQL Server 2022 en GitHub Actions, ejecuta estos scripts y `tests/pruebas.sql` con datos ficticios (`tests/generar_datos_prueba.py`). También prueba la migración DBF (`tests/prueba_migracion.py`) y la escritura de los archivos planos (`tests/prueba_exportar.py`). El resultado queda en la rama `ci-resultados` (última corrida: 75 de 75 pruebas SQL, 12 de 12 de migración y 14 de 14 de exportación).
