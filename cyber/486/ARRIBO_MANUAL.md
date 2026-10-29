@@ -25,6 +25,15 @@ Eso crea `D:\Banbaj\486\salida\<AAAAMMDD>_corrida<ID>\` con los archivos y la ca
 
 La bitácora `RCVRY.JSP_VALIDADOR_TELEFONOS` ya no se alimenta: la bitácora es `ops.BITACORA` (paso `TELEFONOS`, con capturados, inválidos, repetidos, quejas y enviados).
 
+**Correos (solo en la asignación).** Igual que los teléfonos: se mandan todos y CYBER purga y agrega.
+1. `cyber\MAIL_BORRA.sql` (vacía `RCVRY.JSP_TAB_MAIL_REMESA_486`).
+2. Cargar `sub_mail.TXT` con `LOAD_MAIL_REMESA.CTL` (sqlldr).
+3. Revisar que la tabla tenga la información y ejecutar `cyber\MAIL_ACTUALIZA.sql` (`EXECUTE RCVRY.JSP_CORREOS_486`).
+
+**Después de arribar:** `EXEC ops.sp_avisar <corrida>, 'CONFIRMACION_ASIG_486'` (y `ASIG_EXPRESS_486` si aplica).
+
+**Blanqueo de status (día 1 al 10).** Correr `STATUS.SQL` (deja `C:\STATUSBAJ.txt`), cargarlo con `ops.sp_blanqueo_status`, revisar `BLANQUEA_486_<fecha>.csv` y correr `cyber\BLANQUEO_STATUS.sql`.
+
 ## Actualización (`ops.sp_actualizacion_486`)
 
 | Archivo | Qué es |
@@ -32,6 +41,8 @@ La bitácora `RCVRY.JSP_VALIDADOR_TELEFONOS` ya no se alimenta: la bitácora es 
 | `SCBSDOS.TXT` | Cuentas del DAT actualizadas |
 | `SCBPAG.TXT` | Arribo de pagos, 104 posiciones (pagos.prg) |
 | `cyber\ACT_SALDOS.sql`, `ACT_VENCIDO.sql`, `ACT_PAGMIN.sql` | Saldos, vencido y pago mínimo |
+
+Después de arribar: `EXEC ops.sp_avisar <corrida>, 'CONFIRMACION_ACT_486'` y, si hubo retiro, `'NOTIFICACION_RETIRO_486'`.
 
 Los pagos negativos no salen en `SCBPAG.TXT`: quedan en `ops.RECHAZO` (origen `PAGOS_NEGATIVOS`) y se avisa a Operación con la plantilla `PAGOS_NEGATIVOS_486`.
 

@@ -20,9 +20,11 @@ Requiere SQL Server 2017 o superior y Database Mail configurado.
 | `32_sp_retiro_solicitud.sql` | Retiro por solicitud con folio o riesgo (`ops.sp_retiro_solicitud`) |
 | `35_sp_respaldo.sql` | Respaldo del DAT por corrida y retroceso (`ops.sp_revertir_corrida`) |
 | `40_sp_actualizacion.sql` | Saldos, scripts para CYBER, pagos |
-| `45_sp_telefonos.sql` | Teléfonos para CYBER en la asignación (`ops.sp_telefonos`, antes telbnx.prg) |
+| `45_sp_telefonos.sql` | Teléfonos de cuentas nuevas en el DAT (op9.prg) y teléfonos para CYBER (telbnx.prg) |
+| `46_sp_correos_cyber.sql` | Correos para CYBER en la asignación (email.PRG + act_mail.prg) |
 | `50_sp_salidas.sql` | Archivos planos de `cfg.SALIDA_ARCHIVO` + `cfg.SALIDA` (ancho fijo o delimitados) |
 | `60_sp_orquestadores.sql` | `ops.sp_asignacion_486` y `ops.sp_actualizacion_486` |
+| `70_sp_procesos_manuales.sql` | Etiquetado del DAT, SCBSDOS fuera de proceso, blanqueo de status, exclusiones, avisos a Operación |
 | `90_semilla_486.sql` | Configuración del 486 (generada con `tools/generar_sql_486.py`) |
 
 Con `sqlcmd` usar siempre `-I` (QUOTED_IDENTIFIER ON) y `-f 65001` (los scripts están en UTF-8; sin esto los acentos de la semilla se dañan). SSMS ya maneja ambos.
@@ -40,6 +42,21 @@ EXEC ops.sp_retiro @id;
 
 -- Actualización de saldos y pagos (los pagos negativos se excluyen y se avisa a Operación)
 EXEC ops.sp_actualizacion_486 @id_corrida = @id OUTPUT;
+
+-- Después de arribar a CYBER: avisos a Operación (antes MAIL, correo_486, correo, correo_486noti)
+EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486';     -- o ASIG_EXPRESS_486, CONFIRMACION_ACT_486, NOTIFICACION_RETIRO_486
+
+-- Blanqueo de status (día 1 al 10): correr cyber/486/STATUS.SQL y cargar lo que baja
+EXEC ops.sp_blanqueo_status @id_corrida = @id, @archivo = N'C:\STATUSBAJ.txt';
+
+-- Etiquetado del DAT que manda Operación (CUENTA + columnas) y mora (folio o crédito)
+EXEC ops.sp_etiquetado_dat @archivo = N'D:\Banbaj\486\etiquetas\etiquetado.csv';                -- vista previa
+EXEC ops.sp_etiquetado_dat @archivo = N'D:\Banbaj\486\etiquetas\etiquetado.csv', @confirmar = 1;
+EXEC cfg.sp_etiqueta_cargar '486', 'ETI486', N'D:\Banbaj\486\etiquetas\mora.csv', 'AGREGAR', 'FOLIO_O_CUENTA';
+EXEC ops.sp_regenerar_scbsdos @motivo = N'Actualización de mora';
+
+-- Lista negra de teléfonos con requerimiento
+EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'D:\Banbaj\486\blacklist.csv', @req = 'REQ 2026-…', @solicita = N'…';
 
 -- Retiro por solicitud: folio (con o sin 486-) o riesgo; primero vista previa
 EXEC ops.sp_retiro_solicitud @valores = N'486-100001, 1000000004';
@@ -63,7 +80,9 @@ python tools/exportar_salidas.py --conexion "DRIVER={ODBC Driver 18 for SQL Serv
 
 | Proceso | Archivos |
 | --- | --- |
-| Asignación | `SCBSDOS.TXT`, `SCBTEL.TXT`, `sub_mst.TXT`, `SCBACTH_486NU.TXT`, `SCBACTH_486REA.TXT`, `cyber/TEL_ACTUALIZA.sql` |
+| Asignación | `SCBSDOS.TXT`, `SCBTEL.TXT`, `sub_mst.TXT`, `sub_mail.TXT`, `SCBACTH_486NU.TXT`, `SCBACTH_486REA.TXT`, `cyber/TEL_ACTUALIZA.sql`, `cyber/MAIL_BORRA.sql`, `cyber/MAIL_ACTUALIZA.sql` |
+| Blanqueo de status | `BLANQUEA_486_<fecha>.csv`, `cyber/BLANQUEO_STATUS.sql` |
+| Etiquetado / mora | `SCBSDOS.TXT` |
 | Actualización | `SCBSDOS.TXT`, `SCBPAG.TXT`, `cyber/ACT_SALDOS.sql`, `ACT_VENCIDO.sql`, `ACT_PAGMIN.sql` |
 | Retiro | `MX_G1MCT_DVBJIG_<fecha>_<hora>`, `SCBACTH_486.TXT`, `RETIROS_486_<fecha>.csv`, `cyber/RETIRO.sql` |
 
@@ -137,4 +156,4 @@ Los CSV que guarda Excel vienen en Windows-1252: en el servidor Windows `cfg.ARC
 
 ## Pruebas
 
-`.github/workflows/pruebas-sql.yml` levanta SQL Server 2022 en GitHub Actions, ejecuta estos scripts y `tests/pruebas.sql` con datos ficticios (`tests/generar_datos_prueba.py`). También prueba la migración DBF (`tests/prueba_migracion.py`) y la escritura de los archivos planos (`tests/prueba_exportar.py`). El resultado queda en la rama `ci-resultados` (última corrida: 75 de 75 pruebas SQL, 12 de 12 de migración y 14 de 14 de exportación).
+`.github/workflows/pruebas-sql.yml` levanta SQL Server 2022 en GitHub Actions, ejecuta estos scripts y `tests/pruebas.sql` con datos ficticios (`tests/generar_datos_prueba.py`). También prueba la migración DBF (`tests/prueba_migracion.py`) y la escritura de los archivos planos (`tests/prueba_exportar.py`). El resultado queda en la rama `ci-resultados` (última corrida: 86 de 86 pruebas SQL, 12 de 12 de migración y 14 de 14 de exportación).
