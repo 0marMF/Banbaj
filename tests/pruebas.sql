@@ -458,17 +458,15 @@ FROM (SELECT N'ETI: DAT etiquetado (vacío no cambia) y SCBSDOS' AS p, N'OK|1500
                     (SELECT COUNT(*) FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'ETIQUETADO_DAT')) AS o) x;
 GO
 
-/* Mora (moraeti.prg): folio o crédito; '-' deja la mora vacía; luego SCBSDOS */
-DECLARE @r TABLE (TIPO VARCHAR(20), MODO VARCHAR(10), LEIDOS INT, CARGADOS INT, SIN_DATO INT, REPETIDOS INT, NO_DAT INT);
-INSERT INTO @r EXEC cfg.sp_etiqueta_cargar '486', 'ETI486', '/datos/etiquetas/MORA.csv', 'AGREGAR', 'FOLIO_O_CUENTA', '';
+/* eti486 ya no se usa: aunque exista una etiqueta ETI486, DMPHONE sale de la ETIQUETA1 que llegó */
+INSERT INTO cfg.ETIQUETA (CLIENTE, TIPO, LLAVE, VALOR) VALUES ('486', 'ETI486', '486-102', 'MORA 3');
 DECLARE @id INT;
-EXEC ops.sp_regenerar_scbsdos @motivo = N'Prueba de mora', @id_corrida = @id OUTPUT;
-INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'MORA: carga por folio o crédito y DMPHONE en SCBSDOS' AS p, N'3|2|1|486-102=MORA 3,486-500=|MORA 3|' AS e,
-             CONCAT((SELECT CONCAT(LEIDOS, '|', CARGADOS, '|', SIN_DATO) FROM @r), '|',
-                    (SELECT STRING_AGG(CONCAT(LLAVE, '=', VALOR), ',') WITHIN GROUP (ORDER BY LLAVE) FROM cfg.ETIQUETA WHERE TIPO = 'ETI486'), '|',
-                    (SELECT pru.fn_campo(LINEA, 'DMPHONE') FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS_ETI' AND LINEA LIKE N'____486-102 %'), '|',
-                    (SELECT pru.fn_campo(LINEA, 'DMPHONE') FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS_ETI' AND LINEA LIKE N'____486-500 %')) AS o) x;
+EXEC ops.sp_regenerar_scbsdos @motivo = N'Prueba de SCBSDOS fuera de proceso', @id_corrida = @id OUTPUT;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'SCBSDOS: DMPHONE = ETIQUETA1 recibida (sin eti486)' AS p,
+             CAST((SELECT ISNULL(ETIQUETA1, '') FROM dat.DAT_486 WHERE CUENTA2 = '486-102') AS NVARCHAR(4000)) AS e,
+             CAST((SELECT pru.fn_campo(LINEA, 'DMPHONE') FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS_ETI' AND LINEA LIKE N'____486-102 %') AS NVARCHAR(4000)) AS o) x;
+DELETE FROM cfg.ETIQUETA WHERE TIPO = 'ETI486';
 GO
 
 /* Lista negra (blacklist_486.prg) */

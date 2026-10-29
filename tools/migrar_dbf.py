@@ -15,7 +15,7 @@ Destinos (se cargan en una sola transacción; si algo falla no queda nada a medi
     HISTORIA     DAT.DBF (activas) + PURGA.DBF (bajas; si no hay PURGA, DEVOL.DBF) -> dat.HISTORIA_FOLIO
     CONSECUTIVO  máximo folio de TAB7, DAT, PURGA, DEVOL e HISTORIA.DBF -> dat.FOLIO_CONSECUTIVO
     PAGOS        PAGTOT.DBF (CUENTA + FE_PAG + MONT, lo único que usa la validación) -> dat.PAGO_ARRIBADO
-    ETIQUETAS    ETI486, ETI, DM1, TOP, STATUS            -> cfg.ETIQUETA
+    ETIQUETAS    ETI, DM1, TOP, STATUS                    -> cfg.ETIQUETA   (eti486 ya no se usa)
     EXCLUSIONES  EXC486, DIRMAL, EMAILMALO, BLACKLIST, TELBAJ   -> cfg.EXCLUSION
                  (los 3 teléfonos de dueños del banco vienen en la semilla, sql/90)
     LADA         LADA.DBF                                 -> cfg.LADA
@@ -45,7 +45,6 @@ CAMPOS_FUENTE = {
 
 # Etiquetas: tipo -> (campo llave, tipo de llave, campo valor)   (cruces de asi486.prg)
 ETIQUETAS = {
-    "ETI486": ("CUENTA2", "CUENTA2", "MORA"),
     "ETI":    ("CUENTA", "CUENTA", "ETIQUETA"),
     "DM1":    ("CUENTA", "CUENTA", "ETIQUETA"),
     "TOP":    ("CUENTA2", "CUENTA2", "ETIQUETA"),

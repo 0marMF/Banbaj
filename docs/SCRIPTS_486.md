@@ -49,7 +49,7 @@ En el repo hay varios scripts con el mismo nombre porque cada programa los busca
 | `ges486.prg` | Gescar "CUENTA SIN NUMERO TELEFONICO" para nuevas sin teléfono en CYBER | `tools/bajar_cyber.py telefonos` → `ops.sp_gescar_sin_telefono` |
 | `status.prg` | Blanqueo de status del día 1 al 10 | `ops.sp_blanqueo_status` |
 | `eti486.prg` | Etiquetado del DAT desde archivo de Operación | `ops.sp_etiquetado_dat` |
-| `moraeti.prg` | Mora (eti486) por folio o crédito; '-' = vacío | `cfg.sp_etiqueta_cargar … 'FOLIO_O_CUENTA'` + `ops.sp_regenerar_scbsdos` |
+| `moraeti.prg` | Mora (tabla eti486) | **Ya no se usa**: DMPHONE es la ETIQUETA1 recibida |
 | `blacklist_486.prg` | Lista negra de teléfonos con requerimiento | `cfg.sp_exclusion_cargar` |
 | `respaldo2.prg` | Copia del DAT antes de cada proceso | `ops.sp_respaldo` (por corrida) |
 | `resdat.PRG` | Copia el DAT a `Q:\MIS` y `B:\asignaciones\dats` con CUENTA = 486-folio | `DAT486_<fecha>.csv` (vista `ops.v_DAT_486_MIS`) |

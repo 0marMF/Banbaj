@@ -183,7 +183,7 @@ IF COL_LENGTH('cfg.SALIDA_ARCHIVO', 'COMILLAS') IS NULL
                                        ENCABEZADO BIT NOT NULL CONSTRAINT DF_SALIDA_ARCHIVO_ENC DEFAULT 0;
 GO
 
-/* Etiquetas externas por cuenta (hoy DBF sueltas: eti486, eti, dm1, top, STATUS, covid, garantizada) */
+/* Etiquetas externas por cuenta (antes DBF sueltas: eti, dm1, top, STATUS; eti486, covid y garantizada ya no se usan) */
 IF OBJECT_ID('cfg.ETIQUETA') IS NULL
 CREATE TABLE cfg.ETIQUETA (
     CLIENTE   VARCHAR(10)   NOT NULL,

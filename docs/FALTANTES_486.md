@@ -88,7 +88,6 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 ## 6. Preguntas abiertas
 
-- [ ] **`eti486`:** hoy cambia la mora de 307 cuentas contra lo que trae el banco. ¿Se sigue usando? (la carga ya está lista: `cfg.sp_etiqueta_cargar … 'FOLIO_O_CUENTA'`).
 - [ ] **GARAN (DMCPHONE) y ETIQUETA/COVID (U1ARCOD2):** vienen de la base maestra, no de las bases eliminadas. ¿Se quedan?
 - [ ] **Importes negativos en SCBSDOS:** ¿se mandan en cero o con signo? Hoy salen positivos (H-01, parámetro `NEGATIVO_MODO`).
 - [ ] **Pagos de cuentas que ya no están en el DAT:** hoy solo se arriban los que cruzan contra DAT.RIESGO. ¿Se deberían arribar los de cuentas retiradas?
@@ -102,6 +101,8 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 ## Ya resuelto
 
+- `eti486` (mora) ya no se usa: DMPHONE es la ETIQUETA1 que llega en la base.
+- Ruta de entrada: `Q:\CYBER\C_486\<año>\<mes en español>\<día>\` para asignación y actualización.
 - Remesa de teléfonos: se vacía antes de volver a insertar (`TEL_BORRA`).
 - Banderas de CYBER (`RPT_LOG_CYBER_REG`, id_proc 416) se mantienen alrededor de la depuración de correos.
 - Correos: se insertan los nuevos en `RCVRY.ADDRESS` (`ops.sp_correos_nuevos`) y la remesa + `JSP_CORREOS_486` purga lo que ya no llega. EMAILMALO se aplica a ambos.

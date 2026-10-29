@@ -447,7 +447,7 @@ SCB_EXPR = {
     "DMADDR2": ("TEXTO", "UPPER(d.DIRECC2)"),
     "DMCITY": ("TEXTO", "UPPER(REPLACE(d.DIRECC4, '\\', ''))"),
     "DMZIP": ("TEXTO", "CASE WHEN LEN(d.DIRECC3) = 4 THEN '0' + d.DIRECC3 ELSE d.DIRECC3 END"),
-    "DMPHONE": ("TEXTO", "COALESCE(cfg.fn_etiqueta('{CLIENTE}', 'ETI486', d.CUENTA2), d.ETIQUETA1)"),
+    "DMPHONE": ("TEXTO", "d.ETIQUETA1"),     # eti486 ya no se usa: solo lo que llega en la base
     "DMBPHONE": ("TEXTO", "d.SEG"),
     "U1EXT2": ("TEXTO", "cfg.fn_etiqueta('{CLIENTE}', 'TOP', d.CUENTA2)"),
     "DMCPHONE": ("TEXTO", "d.GARAN"),
@@ -503,7 +503,7 @@ SALIDAS_ARCHIVO = [
      "d.CUENTA2", None, "SCBACTH_SINTEL.TXT",
      "Gescar de nuevas y reasignadas sin teléfono activo en CYBER (ges486.prg); lo genera ops.sp_gescar_sin_telefono"),
     ("SCBSDOS_ACT", "ACT", 10, None, "d.CUENTA2", None, "SCBSDOS.TXT", "Cuentas del DAT después de la actualización"),
-    ("SCBSDOS_ETI", "ETI", 10, None, "d.CUENTA2", None, "SCBSDOS.TXT", "SCBSDOS de etiquetado o fuera de proceso (eti486.prg, moraeti.prg)"),
+    ("SCBSDOS_ETI", "ETI", 10, None, "d.CUENTA2", None, "SCBSDOS.TXT", "SCBSDOS de etiquetado del DAT (eti486.prg) o fuera de proceso"),
     ("BLANQUEO_LISTA", "BLANQUEO", 10, "ops.STATUS_CYBER d WHERE d.ID_CORRIDA = @id_corrida AND d.BLANQUEA = 1", "d.CUENTA", ",",
      "BLANQUEA_486_{AAAAMMDD}.csv", "Cuentas a las que se blanquea el status (status.prg)"),
     ("SCBPAG", "ACT", 20, "dat.PAGO_ARRIBADO d WHERE d.CLIENTE = @cliente AND d.ID_CORRIDA = @id_corrida AND d.ORIGEN = 'CORRIDA'",

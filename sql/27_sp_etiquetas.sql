@@ -13,15 +13,12 @@
      FOLIO          -> el archivo trae el folio (con o sin '486-'); se guarda como CUENTA2
      CUENTA2        -> el archivo ya trae '486-folio'
      CUENTA         -> crédito del banco (DAT.CUENTA), para tipos que cruzan por DMSSNUM
-     FOLIO_O_CUENTA -> moraeti.prg: el valor se busca primero como folio del DAT y,
-                       si no, como crédito (DAT.CUENTA); se guarda como CUENTA2.
-                       Lo que no está en el DAT se descarta (como hoy).
+     FOLIO_O_CUENTA -> el valor se busca primero como folio del DAT y, si no, como
+                       crédito (DAT.CUENTA); se guarda como CUENTA2. Lo que no está
+                       en el DAT se descarta.
 
-   Etiqueta '-' = vacía a propósito (moraeti.prg): se guarda '' y en la salida
-   deja el campo en blanco aunque el banco traiga valor.
-
-   Mora (eti486): EXEC cfg.sp_etiqueta_cargar '486', 'ETI486', N'…\mora.csv', 'AGREGAR', 'FOLIO_O_CUENTA';
-                  EXEC ops.sp_regenerar_scbsdos @motivo = N'Actualización de mora';
+   Etiqueta '-' = vacía a propósito: se guarda '' y en la salida deja el campo en blanco.
+   (eti486 / moraeti.prg ya no se usan: la mora es la ETIQUETA1 que llega en la base.)
    ===================================================================== */
 SET NOCOUNT ON;
 GO

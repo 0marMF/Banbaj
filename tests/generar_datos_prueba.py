@@ -122,12 +122,6 @@ def main(destino):
         {"CUENTA": "99999999", "SALDO1": "10", "TIPO": "X", "ETIQUETA": "Y"},
         {"CUENTA": "3333XAXX010101000", "SALDO1": "abc", "TIPO": "", "ETIQUETA": "REE"},
     ])
-    # Mora (moraeti.prg): folio o crédito + mora; '-' deja la mora vacía
-    escribir(destino / "etiquetas" / "MORA.csv", ["VALIDADOR", "MORA"], [
-        {"VALIDADOR": "102", "MORA": "MORA 3"},
-        {"VALIDADOR": "20000009", "MORA": "-"},
-        {"VALIDADOR": "777", "MORA": "MORA 1"},
-    ])
     # Lista negra (blacklist_486.prg)
     escribir(destino / "exclusiones" / "BLACKLIST.csv", ["TEL"], [{"TEL": "55 1234 5678"}, {"TEL": "5512345678"}, {"TEL": ""}])
     print("datos de prueba en", destino)

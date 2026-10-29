@@ -45,7 +45,6 @@ def main(conexion):
         ("500", "1", "2000000", "1C  0603", "2abc", "SERTE", "C  06032", "", "", "", "", "", None),   # renglón corrido
     ])
     tabla(d / "TOP.DBF", "CUENTA2 C(28); ETIQUETA C(15)", [("486-100", "REE"), ("486-999", "REE")])
-    tabla(d / "ETI486.DBF", "CUENTA2 C(28); MORA C(10)", [("486-100", "MORA 2")])
     tabla(d / "EXC486.DBF", "CUENTA C(20)", [("20000008",)])
     tabla(d / "BLACKLIST.DBF", "TEL C(15)", [("5500000000",)])
     tabla(d / "TELBAJ.DBF", "CUENTA C(28); TEL C(15)", [("486-100", "5511111111"), ("307-55", "5522222222")])
@@ -54,7 +53,7 @@ def main(conexion):
           [("55", "1234", 0, 9999, "MOVIL"), ("477", "714", 0, 4999, "FIJO")])
 
     cfg = {"cliente": "486", "fuentes": {k: str(d / f"{k}.DBF") for k in
-           ["DAT", "PURGA", "TAB7", "HISTORIA", "PAGTOT", "TOP", "ETI486", "EXC486", "BLACKLIST", "TELBAJ", "LADA", "PNC"]}}
+           ["DAT", "PURGA", "TAB7", "HISTORIA", "PAGTOT", "TOP", "EXC486", "BLACKLIST", "TELBAJ", "LADA", "PNC"]}}
     (d / "cfg.json").write_text(json.dumps(cfg), encoding="utf-8")
     cmd = [sys.executable, str(RAIZ / "tools" / "migrar_dbf.py"), "--config", str(d / "cfg.json")]
 
@@ -90,8 +89,8 @@ def main(conexion):
     ok("PAGOS: PAGTOT con solo cuenta, fecha e importe (renglón corrido omitido, iguales se conservan)",
        q("SELECT CONCAT(COUNT(*), '|', MIN(CUENTA), '|', MIN(FE_PAG), '|', MIN(IMPORTE), '|', MIN(ORIGEN), '|', MIN(FE_REG)) FROM dat.PAGO_ARRIBADO")
        == "2|20000001|2026-10-02|1000.00|PAGTOT|2026-10-03")
-    ok("ETIQUETAS: TOP y ETI486", q("SELECT STRING_AGG(CONCAT(TIPO, ':', LLAVE, ':', VALOR), ',') WITHIN GROUP (ORDER BY TIPO, LLAVE) "
-                                    "FROM cfg.ETIQUETA") == "ETI486:486-100:MORA 2,TOP:486-100:REE,TOP:486-999:REE")
+    ok("ETIQUETAS: TOP", q("SELECT STRING_AGG(CONCAT(TIPO, ':', LLAVE, ':', VALOR), ',') WITHIN GROUP (ORDER BY TIPO, LLAVE) "
+                           "FROM cfg.ETIQUETA") == "TOP:486-100:REE,TOP:486-999:REE")
     ok("EXCLUSIONES: 3 del banco (semilla) + exc486 + blacklist + TELBAJ solo del 486",
        q("SELECT CONCAT(COUNT(*), '|', SUM(CASE WHEN VALOR2 = '486-100' THEN 1 ELSE 0 END), '|', "
          "SUM(CASE WHEN VALOR = '5522222222' THEN 1 ELSE 0 END)) FROM cfg.EXCLUSION") == "6|1|0")
