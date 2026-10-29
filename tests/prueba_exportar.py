@@ -31,7 +31,7 @@ def main(conexion):
         datos = ruta.read_bytes()
         return datos, datos.split(b"\r\n")[:-1]
 
-    for nombre, ancho, n in [("SCBSDOS.TXT", 1559, 8), ("SCBTEL.TXT", 137, 6), ("SCBACTH_486NU.TXT", 119, 4),
+    for nombre, ancho, n in [("SCBSDOS.TXT", 1559, 8), ("SCBTEL.TXT", 137, 7), ("SCBACTH_486NU.TXT", 119, 4),
                              ("SCBACTH_486REA.TXT", 119, 1), ("SCBACTH_486.TXT", 119, 2)]:
         ruta = asig / nombre
         if not ruta.exists():
@@ -42,7 +42,7 @@ def main(conexion):
            and datos.count(b"\n") == datos.count(b"\r\n"), f"{len(ls)} líneas, anchos {sorted({len(x) for x in ls})}")
 
     datos, ls = lineas(asig / "sub_mst.TXT") if (asig / "sub_mst.TXT").exists() else (b"", [])
-    ok("sub_mst.TXT: delimitado por | sin comillas", len(ls) == 6 and ls[0] == b"486-100|01477|7001234|4", ls[:1])
+    ok("sub_mst.TXT: delimitado por | sin comillas", len(ls) == 7 and ls[0] == b"486-100|01477|7001234|4", ls[:1])
 
     devol = list(asig.glob("MX_G1MCT_DVBJIG_20261102_*"))
     ok("Devolución para CYBER con fecha y hora en el nombre", len(devol) == 1 and lineas(devol[0])[1][0].rstrip() == b"486-101")

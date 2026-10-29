@@ -48,7 +48,7 @@ CREATE OR ALTER PROCEDURE cfg.sp_etiqueta_cargar
     @tipo       VARCHAR(20),
     @archivo    NVARCHAR(500),              -- CSV con encabezado: FOLIO,ETIQUETA
     @modo       VARCHAR(10) = 'REEMPLAZAR', -- REEMPLAZAR: la lista nueva sustituye a la anterior | AGREGAR
-    @tipo_llave VARCHAR(10) = 'FOLIO',
+    @tipo_llave VARCHAR(20) = 'FOLIO',
     @codepage   VARCHAR(10) = 'ACP'         -- '' en SQL Server Linux
 AS
 BEGIN
