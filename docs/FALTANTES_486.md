@@ -68,7 +68,7 @@ Se cargan con `tools/migrar_dbf.py`. Para cada una necesito la **estructura** pa
 
 Las bitácoras que se subían a Oracle y a server (`RCVRY.JSP_VALIDADOR_TELEFONOS`, `RCVRY.asig`, `asignaciones..tiempos`, `cyberdti.flags_cyber*`) **se descartan**: la bitácora es `ops.CORRIDA` + `ops.BITACORA`.
 
-- [ ] **`O:\asigna\asignaciones`** y **`O:\ASIGNA\NUEVAS`** — control de horarios y cuentas nuevas por cliente. ¿Se descartan también?
+- [x] **`O:\asigna\asignaciones`** y **`O:\ASIGNA\NUEVAS`** — se descartan.
 - [ ] **`Q:\MIS\SERTEC98\CLIENTES\486\DAT`** — `prog15.prg` copia ahí el DAT después de cada retiro. ¿Quién lo usa? Si sigue haciendo falta, se reemplaza por una vista o una exportación.
 - [x] **Devolución para CYBER** (`MX_G1MCT_DVBJIG_<fecha>_<hora>`) — se genera como archivo plano para arribo manual.
 - [x] **`cyber.reg_serv`** — ya no hace falta: el arribo es manual con los archivos y scripts que deja `tools/exportar_salidas.py`.
