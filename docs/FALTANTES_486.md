@@ -10,17 +10,17 @@ Formato preferido para compartir:
 
 ### Prioridad alta (cambian lo que se arriba a CYBER)
 
-- [ ] **`ACT_PHONE.prg`** (`O:\PRG\MEXGPO1\ASI486\ACT_PHONE\`) — sube los teléfonos a CYBER desde `sub_mst.TXT`. Sin él no se puede cerrar la salida de teléfonos.
-- [ ] **`PAGOS.prg`** (`O:\PRG\GPO1\486\PAGOS\`) — arma el TXT de arribo de pagos. Falta el layout de salida (orden, anchos, separador).
+- [x] **`ACT_PHONE.prg`** — recibido. Carga `sub_mst.TXT` (CUENTA2|AREA|TELEFONO|TIPOTEL) en `RCVRY.JSP_TAB_TEL_REMESA_486` y ejecuta `RCVRY.JSP_TELEFONOS_REMESA_486`. **La lógica real está en ese procedimiento de Oracle** (ver sección 7).
+- [x] **`PAGOS.prg`** — recibido. SCBPAG de 104 posiciones: IDE '500', GRUPO '1', CUENTA (crédito del banco, 25), FE_PAG MMDDAAAA, MONT (15, con punto), SEGMENTO 'pbank', AGEN 'SERTEC', FE_REG, TRAN 'PAGO', MOREAL. Quita lo que ya está en PAGTOT (CUENTA + FE_PAG + monto).
 - [ ] **`OP9.prg`** (`O:\PRG\GPO1\486\`) — en `paso.prg` aparece como "PEGADOS (PROGRAMA B)" justo antes de agregar las cuentas al DAT. No se sabe qué modifica.
 - [ ] **`estructura.prg`** (`O:\PRG\GPO1\486\`) — se corre en la actualización antes de regenerar SCBSDOS.
-- [ ] **`baj.sql`** (`O:\PRG\GPO1\486\PAGOS\`) — baja de CYBER los pagos arribados para cuadrarlos (`BAJPAG.TXT`).
+- [x] **`baj.sql`** — recibido (pagos del día en `RCVRY.pmtfil` de la compañía 486).
 - [ ] **`STATUS.SQL`** (`O:\PRG\GPO1\486\CYBER\`) — baja los status de CYBER para el blanqueo (`C:\STATUSBAJ.txt`).
 
 ### Prioridad media (gestiones y retiro)
 
-- [ ] **`ges_nuevas_rea.prg`** (`O:\PRG\GPO1\486\GESCAR\`) — gescar de cuentas nuevas y reasignadas (REQ 2021-062065).
-- [ ] **`ges_retiro.prg`** (`O:\PRG\GPO1\486\GESCAR\`) — gescar de retiro.
+- [x] **`ges_nuevas_rea.prg`** — recibido. SCBACTH de 119 posiciones, RS/R1, origen 'aaxrh', "CUENTA NUEVA ASIGNADA." / "CUENTA REASIGNADA.".
+- [x] **`ges_retiro.prg`** — recibido. Mismo layout, "RETIRO DE CUENTA.", sale de `cybdev`.
 - [ ] **`devfianey.prg`** (`O:\ASIGNA\`) — se llama en el retiro con `DEVOL`; es compartido con otros clientes.
 - [ ] **`RESPALDO2.prg`** y **`resdat.prg`** (`O:\PRG\GPO1\486\`) — respaldos. El SQL ya respalda por corrida; solo hace falta confirmar que no hagan algo más.
 - [ ] **`ACT_MAIL.prg`** (`O:\PRG\MEXGPO1\ASI486\ACT_MAIL\`) — "depuración de correos" después de subirlos a CYBER.
@@ -44,9 +44,12 @@ Se cargan con `tools/migrar_dbf.py`. Para cada una necesito la **estructura** pa
 
 | Tabla DBF | Ruta en los .prg | Destino | Campos que supuse | Confirmar |
 | --- | --- | --- | --- | --- |
-| PURGA | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` (bajas) | CUENTA, FOLIO, CUENTA2, SEGMENTO2, SUB_CTE, FE_ASIG y una fecha de baja | [ ] |
+| PURGA | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` (bajas) | Falta. `prog15` le agrega lo mismo que a DEVOL (486BAJ). ¿Es igual a DEVOL? | [ ] |
+| historia | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` | Recibida: 1.8 M filas (una por cada asignación desde 2016), folio máx. 179,688 | Lista |
+| DEVOL | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` (bajas) | Recibida: 580 mil retiros con FE_DEV | Lista |
+| PAGTOT | `O:\PRG\GPO1\486\PAGOS\` | `ops.PAGO` (pagos ya arribados) | Recibida: 543 mil pagos | Lista |
+| TELSAN | `O:\PRG\MEXGPO1\ASI486\` | Teléfonos | Recibida: 15 mil teléfonos | Lista |
 | TAB7 | `O:\DAT\GPO1\486\` | `dat.FOLIO_CONSECUTIVO` | FOLIO, CLIENTE, FE_CAPT, TIME | [ ] |
-| DEVOL / 486BAJ / DEVOLR | `O:\HISTORIA\GPO1\486\`, `O:\DAT\GPO1\486\` | `dat.HISTORIA_FOLIO` | Igual que el DAT + fecha de captura | [ ] |
 | eti486 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (ETI486) | CUENTA2, MORA | [ ] |
 | eti | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (ETI) | CUENTA, ETIQUETA | [ ] |
 | dm1 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (DM1) | CUENTA, ETIQUETA | [ ] |
@@ -74,10 +77,10 @@ No son del 486, pero los procesos escriben o leen en ellos. Hay que decidir si e
 
 ## 4. Formatos de archivos (ejemplo con datos ficticios)
 
-- [ ] TXT de arribo de pagos (salida de `PAGOS.prg`).
-- [ ] `sub_mst.TXT` que lee `ACT_PHONE` (hoy: CUENTA|AREA|TELEFONO|TIPOTEL).
+- [x] TXT de arribo de pagos (`SCBPAG.TXT`).
+- [x] `sub_mst.TXT` de `ACT_PHONE`: CUENTA2|AREA|TELEFONO|TIPOTEL (confirmado con TELSAN).
 - [ ] `C:\STATUSBAJ.txt` (salida de `STATUS.SQL`).
-- [ ] `BAJPAG.TXT` (salida de `baj.sql`).
+- [x] `BAJPAG.TXT`: cuenta|monto|fecha.
 - [ ] `SERTEC_Saldos_Hip` (archivo de saldos de Hipotecario; no hay ejemplo).
 - [ ] Base maestra de Hipotecario (no hay ejemplo; columnas tomadas de la hoja RAW).
 
@@ -96,8 +99,18 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 - [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.
 - [ ] **Quién mantiene** `TELBAJ_G1`, `pnc` y las etiquetas `eti`, `dm1`, `STATUS`, y cada cuánto.
 
+## 7. CYBER (Oracle): lo que hacen los procedimientos
+
+- [ ] Código de **`RCVRY.JSP_TELEFONOS_REMESA_486`**: aplica los teléfonos de la remesa. Sin él no sé si da de alta, de baja o reemplaza.
+- [ ] Estructura de **`RCVRY.JSP_TAB_TEL_REMESA_486`** y **`RCVRY.JSP_VALIDADOR_TELEFONOS`**.
+- [ ] **`INSERTA_PHONE.SQL`** (`RCVRY.RPT_INSERTA_PHONE('1','486')`): ningún .prg lo llama. ¿Se usa?
+- [ ] **`borra.sql` de ACT_PHONE:** el que subieron borra `RCVRY.BANA`, pero la carga va a `JSP_TAB_TEL_REMESA_486`. ¿Hay otro en esa carpeta o el procedimiento limpia la tabla?
+- [ ] **Conexión SQL Server → CYBER:** ¿hay linked server a Oracle o los scripts seguirán corriendo con sqlplus/sqlldr desde un job? Pagos lo necesita para buscar en CYBER las cuentas que no están en DAT ni PURGA (`amex` → `bade.txt`).
+- [ ] **Subida de archivos:** SCBSDOS, SCBTEL, SCBPAG y SCBACTH ¿se suben a mano al SSH o hay un proceso? (`DO SSHP` está comentado).
+
 ## Ya resuelto
 
+- Formato de teléfonos confirmado con TELSAN: celular AREA 044/045 + 10 dígitos (TIPOTEL 5); fijo AREA 01+lada + 7 u 8 dígitos (TIPOTEL 4); TIPOTEL 1 y 2 para TEL1/TEL2.
 - CYBER sigue aceptando solo el formato actual de teléfonos (044/045 para celular, 01 + lada para fijo): se conserva.
 - Estatus de retiro en CYBER: `dmstatus = 'R'` (de `prog15.prg`).
 - `covid` y `garantizada` se eliminan; las bases comentadas en `asi486.prg` se omiten.
