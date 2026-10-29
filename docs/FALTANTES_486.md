@@ -89,7 +89,6 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 ## 6. Preguntas abiertas
 
 - [ ] **Importes negativos** (ej. saldo TDC -87.13): SCBSDOS hoy manda `000000000087.13` (positivo) y el script de saldos `000000000-87.13`. Opciones: como hoy, `000000000000.00` (cero) o `-00000000087.13` (signo). Parámetro `NEGATIVO_MODO`.
-- [ ] **Controles compartidos `O:\ASIGNA\NUEVAS` y `O:\ASIGNA\asignaciones`**: ¿alguien más los lee? Lo mismo queda en `ops.CORRIDA` y `ops.BITACORA`.
 - [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.
 - [ ] **Acceso a CYBER desde la máquina que corra `tools/bajar_cyber.py`:** usuario de Oracle de solo lectura, host/servicio y versión.
 - [ ] **Ruta de red de `Q:`** para la cuenta de servicio de SQL Server.
@@ -97,6 +96,7 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 ## Ya resuelto
 
+- Controles `O:\ASIGNA\NUEVAS` y `O:\ASIGNA\asignaciones` se descartan (queda `ops.CORRIDA` + `ops.BITACORA`).
 - GARAN y ETIQUETA de la base maestra se quedan.
 - Se arriban todos los pagos: DAT, histórico de cuentas retiradas o, si no aparece, el crédito tal como llegó.
 - Aviso de pagos negativos: queda en la lista actual hasta que se actualice `mail.DESTINATARIO`.
