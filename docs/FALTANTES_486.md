@@ -92,10 +92,12 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 - [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.
 - [ ] **Acceso a CYBER desde la máquina que corra `tools/bajar_cyber.py`:** usuario de Oracle de solo lectura, host/servicio y versión.
 - [ ] **Ruta de red de `Q:`** para la cuenta de servicio de SQL Server.
+- [ ] **Días festivos:** el T-1 de pagos y el job solo distinguen fin de semana. ¿Se agrega un calendario de días inhábiles (ej. después de un festivo, T-1 sería el último día hábil)?
 - [ ] **¿Se sigue usando `eti486.prg`** (etiquetado de columnas del DAT con archivo de Operación)? Está como `ops.sp_etiquetado_dat`.
 
 ## Ya resuelto
 
+- Flujo diario: de lunes a viernes llega la actualización; la asignación puede o no llegar y siempre después. `ops.sp_diario_486` (job cada 30 min) corre la actualización y luego la asignación si llegó; la asignación no corre sin la actualización OK del día; T-1 de pagos = día hábil anterior.
 - Controles `O:\ASIGNA\NUEVAS` y `O:\ASIGNA\asignaciones` se descartan (queda `ops.CORRIDA` + `ops.BITACORA`).
 - GARAN y ETIQUETA de la base maestra se quedan.
 - Se arriban todos los pagos: DAT, histórico de cuentas retiradas o, si no aparece, el crédito tal como llegó.
