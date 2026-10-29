@@ -46,8 +46,15 @@ EXEC ops.sp_actualizacion_486 @id_corrida = @id OUTPUT;
 -- Después de arribar a CYBER: avisos a Operación (antes MAIL, correo_486, correo, correo_486noti)
 EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486';     -- o ASIG_EXPRESS_486, CONFIRMACION_ACT_486, NOTIFICACION_RETIRO_486
 
--- Blanqueo de status (día 1 al 10): correr cyber/486/STATUS.SQL y cargar lo que baja
-EXEC ops.sp_blanqueo_status @id_corrida = @id, @archivo = N'C:\STATUSBAJ.txt';
+-- Cruces con CYBER sin archivos: tools/bajar_cyber.py consulta Oracle, llena stg.CYBER_* y ejecuta el procedimiento
+--   python tools/bajar_cyber.py status    --corrida <ID> --oracle usuario@host:1521/servicio --conexion "<ODBC>"   (blanqueo, día 1 al 10)
+--   python tools/bajar_cyber.py correos   --corrida <ID> …   (INSERT de correos nuevos)
+--   python tools/bajar_cyber.py telefonos --corrida <ID> …   (gescar de cuentas sin teléfono)
+-- Con linked server a CYBER también se puede llenar stg.CYBER_* con OPENQUERY y ejecutar
+-- ops.sp_blanqueo_status / ops.sp_correos_nuevos / ops.sp_gescar_sin_telefono.
+
+-- Bases maestras completas (todas las columnas)
+SELECT JSON_VALUE(DATOS, '$."ACC_NUM"') FROM dat.BASE_RECIBIDA WHERE ID_CORRIDA = @id AND CODIGO = 'MAESTRA_TDC';
 
 -- Etiquetado del DAT que manda Operación (CUENTA + columnas) y mora (folio o crédito)
 EXEC ops.sp_etiquetado_dat @archivo = N'D:\Banbaj\486\etiquetas\etiquetado.csv';                -- vista previa
@@ -156,4 +163,4 @@ Los CSV que guarda Excel vienen en Windows-1252: en el servidor Windows `cfg.ARC
 
 ## Pruebas
 
-`.github/workflows/pruebas-sql.yml` levanta SQL Server 2022 en GitHub Actions, ejecuta estos scripts y `tests/pruebas.sql` con datos ficticios (`tests/generar_datos_prueba.py`). También prueba la migración DBF (`tests/prueba_migracion.py`) y la escritura de los archivos planos (`tests/prueba_exportar.py`). El resultado queda en la rama `ci-resultados` (última corrida: 86 de 86 pruebas SQL, 12 de 12 de migración y 14 de 14 de exportación).
+`.github/workflows/pruebas-sql.yml` levanta SQL Server 2022 en GitHub Actions, ejecuta estos scripts y `tests/pruebas.sql` con datos ficticios (`tests/generar_datos_prueba.py`). También prueba la migración DBF (`tests/prueba_migracion.py`) y la escritura de los archivos planos (`tests/prueba_exportar.py`). El resultado queda en la rama `ci-resultados` (última corrida: 93 de 93 pruebas SQL, 12 de 12 de migración y 15 de 15 de exportación).

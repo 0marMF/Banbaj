@@ -19,20 +19,24 @@ Eso crea `D:\Banbaj\486\salida\<AAAAMMDD>_corrida<ID>\` con los archivos y la ca
 | `SCBACTH_486REA.TXT` | Gescar de reasignadas, 119 posiciones | ges_nuevas_rea.prg |
 
 **Teléfonos (solo en la asignación).** Se mandan todos los del DAT; CYBER purga y agrega.
-1. Cargar `sub_mst.TXT` en `RCVRY.JSP_TAB_TEL_REMESA_486` con `LOAD_TEL_REMESA.CTL` (sqlldr, igual que hoy).
-2. Revisar que la tabla tenga la información.
+1. `cyber\TEL_BORRA.sql` (vacía la remesa).
+2. Cargar `sub_mst.TXT` en `RCVRY.JSP_TAB_TEL_REMESA_486` con `LOAD_TEL_REMESA.CTL` (sqlldr, igual que hoy) y revisar que la tabla tenga la información.
 3. Ejecutar `cyber\TEL_ACTUALIZA.sql` (`EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486`).
 
 La bitácora `RCVRY.JSP_VALIDADOR_TELEFONOS` ya no se alimenta: la bitácora es `ops.BITACORA` (paso `TELEFONOS`, con capturados, inválidos, repetidos, quejas y enviados).
 
-**Correos (solo en la asignación).** Igual que los teléfonos: se mandan todos y CYBER purga y agrega.
-1. `cyber\MAIL_BORRA.sql` (vacía `RCVRY.JSP_TAB_MAIL_REMESA_486`).
-2. Cargar `sub_mail.TXT` con `LOAD_MAIL_REMESA.CTL` (sqlldr).
-3. Revisar que la tabla tenga la información y ejecutar `cyber\MAIL_ACTUALIZA.sql` (`EXECUTE RCVRY.JSP_CORREOS_486`).
+**Correos (solo en la asignación).** Como hoy (email.PRG + act_mail.prg):
+1. `python tools/bajar_cyber.py correos --corrida <ID> …` baja los correos que ya tiene CYBER (sin archivos) y arma `cyber\MAIL_INSERTA_NUEVOS.sql`; volver a exportar la corrida.
+2. Correr `cyber\MAIL_INSERTA_NUEVOS.sql` (INSERT en `RCVRY.ADDRESS` de los nuevos).
+3. Depuración: `cyber\MAIL_ACTIVA_BANDERA.sql` → `cyber\MAIL_BORRA.sql` → cargar `sub_mail.TXT` con `LOAD_MAIL_REMESA.CTL` → revisar la tabla → `cyber\MAIL_ACTUALIZA.sql` (`JSP_CORREOS_486` purga lo que ya no llega) → `cyber\MAIL_INACTIVA_BANDERA.sql`.
+
+**Gescar de cuentas sin teléfono.** Después de arribar los teléfonos: `python tools/bajar_cyber.py telefonos --corrida <ID> …`, volver a exportar y arribar `SCBACTH_SINTEL.TXT`.
 
 **Después de arribar:** `EXEC ops.sp_avisar <corrida>, 'CONFIRMACION_ASIG_486'` (y `ASIG_EXPRESS_486` si aplica).
 
-**Blanqueo de status (día 1 al 10).** Correr `STATUS.SQL` (deja `C:\STATUSBAJ.txt`), cargarlo con `ops.sp_blanqueo_status`, revisar `BLANQUEA_486_<fecha>.csv` y correr `cyber\BLANQUEO_STATUS.sql`.
+**Blanqueo de status (día 1 al 10).** `python tools/bajar_cyber.py status --corrida <ID> …` (sin archivos), volver a exportar, revisar `BLANQUEA_486_<fecha>.csv` y correr `cyber\BLANQUEO_STATUS.sql`.
+
+**DAT para MIS.** En cada proceso sale `DAT486_<fecha>.csv` (CUENTA = 486-folio, CUENTA3 = crédito), con encabezado.
 
 ## Actualización (`ops.sp_actualizacion_486`)
 

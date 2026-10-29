@@ -88,28 +88,28 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 ## 6. Preguntas abiertas
 
-- [ ] **`eti486`:** hoy cambia la mora de 307 cuentas contra lo que trae el banco. ¿Se sigue usando?
+- [ ] **`eti486`:** hoy cambia la mora de 307 cuentas contra lo que trae el banco. ¿Se sigue usando? (la carga ya está lista: `cfg.sp_etiqueta_cargar … 'FOLIO_O_CUENTA'`).
 - [ ] **GARAN (DMCPHONE) y ETIQUETA/COVID (U1ARCOD2):** vienen de la base maestra, no de las bases eliminadas. ¿Se quedan?
-- [ ] **Importes negativos en SCBSDOS:** ¿se mandan en cero o con signo? Hoy salen positivos (H-01).
-- [ ] **Pagos de cuentas que ya no están en el DAT:** en `pagos.prg` solo se arriban los que cruzan contra DAT.RIESGO (la búsqueda en PURGA y en CYBER nunca encuentra nada porque `pagos486` no trae CUENTA). Así quedó. ¿Se deberían arribar los de cuentas retiradas?
+- [ ] **Importes negativos en SCBSDOS:** ¿se mandan en cero o con signo? Hoy salen positivos (H-01, parámetro `NEGATIVO_MODO`).
+- [ ] **Pagos de cuentas que ya no están en el DAT:** hoy solo se arriban los que cruzan contra DAT.RIESGO. ¿Se deberían arribar los de cuentas retiradas?
 - [ ] **Destinatarios de Operación** para el aviso de pagos negativos (lista `OPERACION_PAGOS_486`, hoy solo el buzón de asignaciones).
-- [ ] **Copia del DAT para MIS** (`Q:\MIS\…\DAT` y `B:\asignaciones\dats\dat486`, resdat.PRG): ¿quién la usa y en qué formato la necesita? Hoy queda la vista `ops.v_DAT_486_MIS`.
-- [ ] **correo_486noti.prg** trae `dministrativo.mc6@sertec.com.mx` (sin la a). Lo puse como `administrativo.mc6@`. ¿Correcto?
 - [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.
 - [ ] **Quién mantiene** `TELBAJ_G1`, `pnc` y las etiquetas `eti`, `dm1`, `STATUS`, y cada cuánto.
-
-## 7. CYBER (Oracle)
-
-El procedimiento `RCVRY.JSP_TELEFONOS_REMESA_486` no se puede compartir (política de CYBER): se trata como caja negra. SQL Server le entrega `sub_mst.TXT` completo en cada asignación y él purga y agrega.
-
-- [ ] **`borra.sql` de ACT_PHONE:** sigue faltando. El `borra.sql` del repo es el de `ges486.prg` (BANA) y `borra (2).sql` el de `act_mail.prg`. ¿El de ACT_PHONE vacía `RCVRY.JSP_TAB_TEL_REMESA_486` como el de correos? (ver `docs/SCRIPTS_486.md`)
-- [ ] **`INSERTA_PHONE.SQL`**, `PROMESA.SQL`, `TEL_486.sql`, `TELADICIONAL.SQL`, `baja.sql`, `LOAD_ORACLE_AMEX.CTL`, `BORRA_AMX.SQL`: ningún programa activo los llama. ¿Se pueden dejar fuera?
-- [ ] **Banderas `ACTIVA_BANDERA` / `INACTIVA_BANDERA`** (`RCVRY.RPT_LOG_CYBER_REG`, id_proc 416): las quité como bitácora. ¿CYBER las usa como candado mientras se actualizan los correos?
-- [ ] **Correos directos (`email.sql`):** hoy, además de la remesa, se insertan en `RCVRY.ADDRESS` los correos nuevos. Lo dejé solo con la remesa + `JSP_CORREOS_486` (como teléfonos). ¿Es suficiente?
-- [ ] **EMAILMALO en la remesa:** hoy `sub_mail.TXT` sale sin quitar EMAILMALO. Lo dejé igual (`CORREOS_EXCLUIR_MALOS = 0`). ¿Se quitan?
-- [ ] **Gescar de cuentas sin teléfono (ges486.prg):** cruza contra los teléfonos activos que ya tiene CYBER (`TELs_486.sql`). Sin acceso a CYBER solo puedo cruzar contra los que mandamos, y saldrían cuentas que en CYBER sí tienen teléfono. Lo dejé inactivo. ¿Se arma con un archivo que bajen de CYBER (como el blanqueo) o se quita?
+- [ ] **Scripts sin uso** (`INSERTA_PHONE`, `PROMESA`, `TEL_486`, `TELADICIONAL`, `baja.sql`, `LOAD_ORACLE_AMEX`, `BORRA_AMX`): confirmar que se quedan fuera.
+- [ ] **`O:\ASIGNA\asignaciones` y `O:\ASIGNA\NUEVAS`** (controles por cliente): ¿se descartan como las bitácoras?
+- [ ] **Acceso a CYBER desde la máquina que corra `tools/bajar_cyber.py`:** usuario de Oracle de solo lectura, host/servicio y versión de Oracle (antes de 12.1 necesita Instant Client).
+- [ ] **Conservación de las bases maestras completas** (`dat.BASE_RECIBIDA`, ~6,800 renglones por base por día): ¿se guardan para siempre o se depuran después de N meses?
 
 ## Ya resuelto
+
+- Remesa de teléfonos: se vacía antes de volver a insertar (`TEL_BORRA`).
+- Banderas de CYBER (`RPT_LOG_CYBER_REG`, id_proc 416) se mantienen alrededor de la depuración de correos.
+- Correos: se insertan los nuevos en `RCVRY.ADDRESS` (`ops.sp_correos_nuevos`) y la remesa + `JSP_CORREOS_486` purga lo que ya no llega. EMAILMALO se aplica a ambos.
+- Gescar de cuentas sin teléfono: contra los teléfonos activos en CYBER (`ops.sp_gescar_sin_telefono`).
+- Lo que se baja de CYBER para cruzar (status, correos, teléfonos) va directo a tablas de paso (`tools/bajar_cyber.py` → `stg.CYBER_*`); no se guardan archivos en la máquina.
+- La copia del DAT para MIS sale en CSV (`DAT486_<fecha>.csv`, con encabezado).
+- Las bases maestras se guardan completas (`dat.BASE_RECIBIDA`); los procesos solo toman las columnas mapeadas.
+- `administrativo.mc6@` corregido.
 
 - Los archivos planos se siguen arribando a mano: `tools/exportar_salidas.py` los escribe con su nombre, Windows-1252 y CRLF (ver `cyber/486/ARRIBO_MANUAL.md`).
 - Teléfonos: solo en la asignación, completos, para que CYBER purgue y agregue.
