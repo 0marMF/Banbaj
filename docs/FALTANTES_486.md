@@ -88,18 +88,21 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 ## 6. Preguntas abiertas
 
-- [ ] **GARAN (DMCPHONE) y ETIQUETA/COVID (U1ARCOD2):** vienen de la base maestra, no de las bases eliminadas. ¿Se quedan?
-- [ ] **Importes negativos en SCBSDOS:** ¿se mandan en cero o con signo? Hoy salen positivos (H-01, parámetro `NEGATIVO_MODO`).
-- [ ] **Pagos de cuentas que ya no están en el DAT:** hoy solo se arriban los que cruzan contra DAT.RIESGO. ¿Se deberían arribar los de cuentas retiradas?
-- [ ] **Destinatarios de Operación** para el aviso de pagos negativos (lista `OPERACION_PAGOS_486`, hoy solo el buzón de asignaciones).
+- [ ] **Importes negativos** (ej. saldo TDC -87.13): SCBSDOS hoy manda `000000000087.13` (positivo) y el script de saldos `000000000-87.13`. Opciones: como hoy, `000000000000.00` (cero) o `-00000000087.13` (signo). Parámetro `NEGATIVO_MODO`.
+- [ ] **Controles compartidos `O:\ASIGNA\NUEVAS` y `O:\ASIGNA\asignaciones`**: ¿alguien más los lee? Lo mismo queda en `ops.CORRIDA` y `ops.BITACORA`.
 - [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.
-- [ ] **Quién mantiene** `TELBAJ_G1`, `pnc` y las etiquetas `eti`, `dm1`, `STATUS`, y cada cuánto.
-- [ ] **Scripts sin uso** (`INSERTA_PHONE`, `PROMESA`, `TEL_486`, `TELADICIONAL`, `baja.sql`, `LOAD_ORACLE_AMEX`, `BORRA_AMX`): confirmar que se quedan fuera.
-- [ ] **`O:\ASIGNA\asignaciones` y `O:\ASIGNA\NUEVAS`** (controles por cliente): ¿se descartan como las bitácoras?
-- [ ] **Acceso a CYBER desde la máquina que corra `tools/bajar_cyber.py`:** usuario de Oracle de solo lectura, host/servicio y versión de Oracle (antes de 12.1 necesita Instant Client).
-- [ ] **Conservación de las bases maestras completas** (`dat.BASE_RECIBIDA`, ~6,800 renglones por base por día): ¿se guardan para siempre o se depuran después de N meses?
+- [ ] **Acceso a CYBER desde la máquina que corra `tools/bajar_cyber.py`:** usuario de Oracle de solo lectura, host/servicio y versión.
+- [ ] **Ruta de red de `Q:`** para la cuenta de servicio de SQL Server.
+- [ ] **¿Se sigue usando `eti486.prg`** (etiquetado de columnas del DAT con archivo de Operación)? Está como `ops.sp_etiquetado_dat`.
 
 ## Ya resuelto
+
+- GARAN y ETIQUETA de la base maestra se quedan.
+- Se arriban todos los pagos: DAT, histórico de cuentas retiradas o, si no aparece, el crédito tal como llegó.
+- Aviso de pagos negativos: queda en la lista actual hasta que se actualice `mail.DESTINATARIO`.
+- TELBAJ, plan de numeración y etiquetas los actualiza CYBER; por ahora se usa lo migrado.
+- Scripts sin uso quedan fuera.
+- Base maestra completa: solo la última de cada segmento (se reemplaza al llegar otra); la historia por cuenta queda en `dat.HISTORIA_FOLIO`.
 
 - `eti486` (mora) ya no se usa: DMPHONE es la ETIQUETA1 que llega en la base.
 - Ruta de entrada: `Q:\CYBER\C_486\<año>\<mes en español>\<día>\` para asignación y actualización.
