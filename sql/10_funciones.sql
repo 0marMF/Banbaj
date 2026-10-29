@@ -162,3 +162,21 @@ BEGIN
            N'{DD}',   RIGHT(N'0' + CAST(DAY(@fecha) AS NVARCHAR(2)), 2));
 END;
 GO
+
+/* Día hábil anterior (lunes a viernes): el lunes regresa el viernes. No considera días festivos.
+   Sin depender de SET DATEFIRST: el 01/01/1900 fue lunes. */
+CREATE OR ALTER FUNCTION cfg.fn_dia_habil_anterior (@fecha DATE)
+RETURNS DATE
+AS
+BEGIN
+    RETURN DATEADD(DAY, CASE DATEDIFF(DAY, '19000101', @fecha) % 7 WHEN 0 THEN -3 WHEN 6 THEN -2 ELSE -1 END, @fecha);
+END;
+GO
+/* 1 si la fecha es sábado o domingo */
+CREATE OR ALTER FUNCTION cfg.fn_es_fin_de_semana (@fecha DATE)
+RETURNS BIT
+AS
+BEGIN
+    RETURN CASE WHEN DATEDIFF(DAY, '19000101', @fecha) % 7 IN (5, 6) THEN 1 ELSE 0 END;
+END;
+GO

@@ -31,6 +31,14 @@ Con `sqlcmd` usar siempre `-I` (QUOTED_IDENTIFIER ON) y `-f 65001` (los scripts 
 
 ## Uso diario
 
+De lunes a viernes llega la actualización de saldos y pagos; la asignación puede o no llegar y siempre llega después. Un job de SQL Agent llama cada 30 minutos (lunes a viernes) a:
+
+```sql
+EXEC ops.sp_diario_486;   -- corre la actualización cuando llegan sus archivos y después la asignación si llegó; no repite lo que ya corrió
+```
+
+La asignación no corre si la actualización del día no terminó OK (`ASIG_REQUIERE_ACT`). Los avisos de pagos a T-1 usan el día hábil anterior (el lunes revisa el viernes). También se pueden correr a mano:
+
 ```sql
 -- Asignación y actualización toman los archivos de Q:\CYBER\C_486\<año>\<mes>\<día>\ (cfg.ARCHIVO.RUTA con {AAAA}\{MES}\{DD})
 DECLARE @id INT;
@@ -163,4 +171,4 @@ Los CSV que guarda Excel vienen en Windows-1252: en el servidor Windows `cfg.ARC
 
 ## Pruebas
 
-`.github/workflows/pruebas-sql.yml` levanta SQL Server 2022 en GitHub Actions, ejecuta estos scripts y `tests/pruebas.sql` con datos ficticios (`tests/generar_datos_prueba.py`). También prueba la migración DBF (`tests/prueba_migracion.py`) y la escritura de los archivos planos (`tests/prueba_exportar.py`). El resultado queda en la rama `ci-resultados` (última corrida: 93 de 93 pruebas SQL, 12 de 12 de migración y 15 de 15 de exportación).
+`.github/workflows/pruebas-sql.yml` levanta SQL Server 2022 en GitHub Actions, ejecuta estos scripts y `tests/pruebas.sql` con datos ficticios (`tests/generar_datos_prueba.py`). También prueba la migración DBF (`tests/prueba_migracion.py`) y la escritura de los archivos planos (`tests/prueba_exportar.py`). El resultado queda en la rama `ci-resultados` (última corrida: 99 de 99 pruebas SQL, 12 de 12 de migración y 15 de 15 de exportación).

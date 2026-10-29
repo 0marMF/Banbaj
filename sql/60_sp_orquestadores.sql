@@ -49,6 +49,13 @@ AS
 BEGIN
     SET NOCOUNT ON;
     DECLARE @recibidos INT, @msg NVARCHAR(4000), @json NVARCHAR(MAX);
+    SET @fecha = ISNULL(@fecha, CAST(GETDATE() AS DATE));
+
+    /* La asignación siempre llega después de la actualización del día */
+    IF ISNULL(cfg.fn_param('486', 'ASIG_REQUIERE_ACT'), '1') = '1'
+       AND NOT EXISTS (SELECT 1 FROM ops.CORRIDA WHERE CLIENTE = '486' AND PROCESO = 'ACT' AND FECHA_PROCESO = @fecha AND ESTATUS = 'OK')
+        THROW 50110, 'Primero debe terminar OK la actualización del mismo día (parámetro ASIG_REQUIERE_ACT).', 1;
+
     EXEC ops.sp_corrida_iniciar '486', 'ASIG', @fecha, @hora_llegada, @id_corrida OUTPUT;
 
     BEGIN TRY
@@ -126,6 +133,122 @@ BEGIN
         SET @json = (SELECT @id_corrida AS CORRIDA, N'Actualización 486' AS PROCESO, @msg AS ERROR FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
         EXEC mail.sp_enviar @plantilla = 'ERROR_PROCESO_486', @id_corrida = @id_corrida, @valores = @json;
         THROW;
+    END CATCH;
+END;
+GO
+
+/* =====================================================================
+   Flujo diario (lunes a viernes)
+   ---------------------------------------------------------------------
+   Todos los días hábiles llega la actualización de saldos y pagos; la
+   asignación puede o no llegar, y siempre llega después.
+
+   ops.sp_archivos_presentes  cuántos archivos de un proceso ya están en la
+                              carpeta del día (Q:\CYBER\C_486\<año>\<mes>\<día>\)
+   ops.sp_diario_486          lo llama un job de SQL Agent cada 30 minutos,
+                              lunes a viernes:
+                              1. si llegaron los archivos de actualización y no
+                                 ha corrido hoy -> ops.sp_actualizacion_486
+                              2. si la actualización de hoy terminó OK, llegó la
+                                 base maestra y no ha corrido -> ops.sp_asignacion_486
+                              No repite lo que ya corrió (OK, ERROR o CANCELADA):
+                              un error se corrige y se vuelve a correr a mano, o
+                              se revierte y el job lo toma de nuevo.
+   ===================================================================== */
+CREATE OR ALTER PROCEDURE ops.sp_archivos_presentes
+    @cliente VARCHAR(10),
+    @proceso VARCHAR(10),
+    @fecha   DATE,
+    @n       INT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET @n = 0;
+    DECLARE @ruta NVARCHAR(400), @patron NVARCHAR(200), @ruta_ant NVARCHAR(400) = N'';
+    DECLARE @dir TABLE (subdirectory NVARCHAR(512), depth INT, [file] INT);
+    DECLARE cur CURSOR LOCAL FAST_FORWARD FOR
+        SELECT cfg.fn_ruta(RUTA, @fecha),
+               REPLACE(REPLACE(REPLACE(PATRON_NOMBRE,
+                   N'{AAAAMMDD}',   CONVERT(CHAR(8), @fecha, 112)),
+                   N'{DD-MM-AAAA}', REPLACE(CONVERT(CHAR(10), @fecha, 105), '.', '-')),
+                   N'{AAAA-MM-DD}', CONVERT(CHAR(10), @fecha, 23))
+        FROM cfg.ARCHIVO WHERE CLIENTE = @cliente AND PROCESO = @proceso AND ACTIVO = 1
+        ORDER BY 1;
+    OPEN cur;
+    FETCH NEXT FROM cur INTO @ruta, @patron;
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        IF @ruta <> @ruta_ant
+        BEGIN
+            DELETE FROM @dir;
+            INSERT INTO @dir EXEC master.sys.xp_dirtree @ruta, 1, 1;
+            SET @ruta_ant = @ruta;
+        END;
+        IF EXISTS (SELECT 1 FROM @dir WHERE [file] = 1 AND subdirectory LIKE @patron COLLATE Latin1_General_CI_AI)
+            SET @n += 1;
+        FETCH NEXT FROM cur INTO @ruta, @patron;
+    END;
+    CLOSE cur; DEALLOCATE cur;
+END;
+GO
+
+CREATE OR ALTER PROCEDURE ops.sp_diario_486
+    @fecha  DATE = NULL,
+    @forzar BIT  = 0          -- 1 = corre aunque sea fin de semana
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET @fecha = ISNULL(@fecha, CAST(GETDATE() AS DATE));
+    DECLARE @n INT, @id INT, @hora TIME(0) = CAST(GETDATE() AS TIME(0));
+
+    IF cfg.fn_es_fin_de_semana(@fecha) = 1 AND @forzar = 0
+    BEGIN
+        SELECT 'FIN DE SEMANA' AS RESULTADO;
+        RETURN;
+    END;
+
+    /* 1. Actualización */
+    IF NOT EXISTS (SELECT 1 FROM ops.CORRIDA WHERE CLIENTE = '486' AND PROCESO = 'ACT' AND FECHA_PROCESO = @fecha AND ESTATUS <> 'REVERTIDA')
+    BEGIN
+        EXEC ops.sp_archivos_presentes '486', 'ACT', @fecha, @n OUTPUT;
+        IF @n = 0
+        BEGIN
+            SELECT 'ESPERANDO ACTUALIZACION' AS RESULTADO;
+            RETURN;
+        END;
+        BEGIN TRY
+            EXEC ops.sp_actualizacion_486 @fecha = @fecha, @hora_llegada = @hora, @id_corrida = @id OUTPUT;
+        END TRY
+        BEGIN CATCH
+            SELECT 'ACTUALIZACION CON ERROR' AS RESULTADO, ERROR_MESSAGE() AS DETALLE;   -- ya se avisó por correo
+            RETURN;
+        END CATCH;
+    END;
+
+    IF NOT EXISTS (SELECT 1 FROM ops.CORRIDA WHERE CLIENTE = '486' AND PROCESO = 'ACT' AND FECHA_PROCESO = @fecha AND ESTATUS = 'OK')
+    BEGIN
+        SELECT 'ACTUALIZACION DEL DIA SIN TERMINAR OK' AS RESULTADO;
+        RETURN;
+    END;
+
+    /* 2. Asignación (puede no llegar) */
+    IF EXISTS (SELECT 1 FROM ops.CORRIDA WHERE CLIENTE = '486' AND PROCESO = 'ASIG' AND FECHA_PROCESO = @fecha AND ESTATUS <> 'REVERTIDA')
+    BEGIN
+        SELECT 'DIA COMPLETO' AS RESULTADO;
+        RETURN;
+    END;
+    EXEC ops.sp_archivos_presentes '486', 'ASIG', @fecha, @n OUTPUT;
+    IF @n = 0
+    BEGIN
+        SELECT 'ACTUALIZACION OK · SIN ASIGNACION (POR AHORA)' AS RESULTADO;
+        RETURN;
+    END;
+    BEGIN TRY
+        EXEC ops.sp_asignacion_486 @fecha = @fecha, @hora_llegada = @hora, @id_corrida = @id OUTPUT;
+        SELECT 'ACTUALIZACION Y ASIGNACION OK' AS RESULTADO;
+    END TRY
+    BEGIN CATCH
+        SELECT 'ASIGNACION CON ERROR' AS RESULTADO, ERROR_MESSAGE() AS DETALLE;
     END CATCH;
 END;
 GO

@@ -41,6 +41,8 @@ UPDATE cfg.ARCHIVO SET RUTA = '/datos/asig/', PATRON_NOMBRE = REPLACE(PATRON_NOM
 WHERE CLIENTE = '486' AND PROCESO = 'ASIG';
 UPDATE cfg.ARCHIVO SET RUTA = '/datos/act_ok/', CODEPAGE = '' WHERE CLIENTE = '486' AND PROCESO = 'ACT';
 INSERT INTO dat.FOLIO_CONSECUTIVO (CLIENTE, ULTIMO_FOLIO) VALUES ('486', 100000);
+/* El escenario de prueba corre la asignación antes que la actualización; el candado se prueba aparte */
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'ASIG_REQUIERE_ACT';
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO) VALUES ('486', 'CUENTA', '20000008', 'Prueba de exclusión');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'TELEFONO', '5533333333', '486-104', 'Prueba de queja (TELBAJ)');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'CORREO', 'malo@correo.com', '20000009', 'Prueba de EMAILMALO');
@@ -103,6 +105,30 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o 
 FROM (SELECT N'fn_ruta: carpeta del día con mes en español' AS p, N'Q:\CYBER\C_486\2026\octubre\28\|Q:\CYBER\C_486\2027\enero\05\' AS e,
              CONCAT((SELECT RUTA FROM (SELECT DISTINCT cfg.fn_ruta(N'Q:\CYBER\C_486\{AAAA}\{MES}\{DD}\', '2026-10-28') AS RUTA) r), '|',
                     cfg.fn_ruta(N'Q:\CYBER\C_486\{AAAA}\{MES}\{DD}\', '2027-01-05')) AS o) x;
+GO
+
+/* Flujo diario: día hábil anterior, fin de semana, archivos presentes y candado ACT -> ASIG */
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'fn_dia_habil_anterior (lunes -> viernes) y fin de semana' AS p, N'2026-10-30|2026-11-02|2026-11-06|1|0' AS e,
+             CONCAT(CONVERT(CHAR(10), cfg.fn_dia_habil_anterior('2026-11-02'), 23), '|', CONVERT(CHAR(10), cfg.fn_dia_habil_anterior('2026-11-03'), 23), '|',
+                    CONVERT(CHAR(10), cfg.fn_dia_habil_anterior('2026-11-08'), 23), '|', cfg.fn_es_fin_de_semana('2026-11-07'), '|', cfg.fn_es_fin_de_semana('2026-11-06')) AS o) x;
+DECLARE @na INT, @ns INT;
+EXEC ops.sp_archivos_presentes '486', 'ACT', '2026-11-03', @na OUTPUT;
+EXEC ops.sp_archivos_presentes '486', 'ASIG', '2026-11-02', @ns OUTPUT;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Archivos presentes: 3 de actualización, 2 maestras', CASE WHEN @na = 3 AND @ns = 2 THEN 1 ELSE 0 END, CONCAT(@na, '|', @ns);
+DECLARE @d TABLE (RESULTADO VARCHAR(60));
+INSERT INTO @d EXEC ops.sp_diario_486 '2026-11-07';
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Diario: fin de semana no corre', CASE WHEN (SELECT RESULTADO FROM @d) = 'FIN DE SEMANA' THEN 1 ELSE 0 END, (SELECT RESULTADO FROM @d);
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE = 'ASIG_REQUIERE_ACT';
+BEGIN TRY
+    EXEC ops.sp_asignacion_486 @fecha = '2026-11-09';
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) VALUES (N'Candado: asignación sin actualización del día debe detenerse', 0, N'No se detuvo');
+END TRY
+BEGIN CATCH
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Candado: asignación sin actualización del día se detiene (50110) sin abrir corrida',
+           CASE WHEN ERROR_NUMBER() = 50110 AND NOT EXISTS (SELECT 1 FROM ops.CORRIDA) THEN 1 ELSE 0 END, ERROR_MESSAGE();
+END CATCH;
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'ASIG_REQUIERE_ACT';
 GO
 
 /* ---------------------------------------------------------------------
