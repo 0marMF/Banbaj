@@ -64,13 +64,14 @@ EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486';     -- o ASIG_EXPRESS_486, CONF
 -- Bases maestras completas (todas las columnas)
 SELECT JSON_VALUE(DATOS, '$."ACC_NUM"') FROM dat.BASE_RECIBIDA WHERE ID_CORRIDA = @id AND CODIGO = 'MAESTRA_TDC';
 
--- Etiquetado del DAT que manda Operación (CUENTA + columnas) y mora (folio o crédito)
-EXEC ops.sp_etiquetado_dat @archivo = N'D:\Banbaj\486\etiquetas\etiquetado.csv';                -- vista previa
-EXEC ops.sp_etiquetado_dat @archivo = N'D:\Banbaj\486\etiquetas\etiquetado.csv', @confirmar = 1;
-EXEC cfg.sp_etiqueta_cargar '486', 'ETI486', N'D:\Banbaj\486\etiquetas\mora.csv', 'AGREGAR', 'FOLIO_O_CUENTA';
-EXEC ops.sp_regenerar_scbsdos @motivo = N'Actualización de mora';
+-- Etiquetado de un campo del DAT: CSV con encabezado FOLIO,ETIQUETA ('-' = dejar en blanco).
+-- @campo: nombre del DAT (SALDO1, TRAMO…) o de Operación (MORA, SEG_CICLO, LEYENDA… ver ETIQUETADO_ALIAS)
+EXEC ops.sp_etiquetar_campo @campo = 'MORA', @archivo = N'D:\Banbaj\486\etiquetas\mora.csv';                 -- vista previa
+EXEC ops.sp_etiquetar_campo @campo = 'MORA', @archivo = N'D:\Banbaj\486\etiquetas\mora.csv', @confirmar = 1; -- DAT + SCBSDOS
+-- TOP (ETIQUETA6) no es columna del DAT:
+EXEC cfg.sp_etiqueta_cargar '486', 'TOP', N'D:\Banbaj\486\etiquetas\top.csv', 'AGREGAR';
 
--- Lista negra de teléfonos con requerimiento
+-- Lista negra de teléfonos con requerimiento (solo 10 dígitos; los demás se cuentan y se omiten)
 EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'D:\Banbaj\486\blacklist.csv', @req = 'REQ 2026-…', @solicita = N'…';
 
 -- Retiro por solicitud: folio (con o sin 486-) o riesgo; primero vista previa

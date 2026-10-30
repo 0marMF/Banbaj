@@ -23,7 +23,7 @@
 SET NOCOUNT ON;
 GO
 
-CREATE OR ALTER FUNCTION cfg.fn_llave_etiqueta (@cliente VARCHAR(10), @valor NVARCHAR(100), @tipo_llave VARCHAR(10))
+CREATE OR ALTER FUNCTION cfg.fn_llave_etiqueta (@cliente VARCHAR(10), @valor NVARCHAR(100), @tipo_llave VARCHAR(20))
 RETURNS VARCHAR(30)
 AS
 BEGIN
@@ -115,7 +115,7 @@ CREATE OR ALTER PROCEDURE cfg.sp_etiqueta_alta
     @tipo       VARCHAR(20),
     @llave      NVARCHAR(100),
     @valor      NVARCHAR(100),
-    @tipo_llave VARCHAR(10) = 'FOLIO'
+    @tipo_llave VARCHAR(20) = 'FOLIO'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -133,7 +133,7 @@ CREATE OR ALTER PROCEDURE cfg.sp_etiqueta_baja
     @cliente    VARCHAR(10),
     @tipo       VARCHAR(20),
     @llave      NVARCHAR(100),
-    @tipo_llave VARCHAR(10) = 'FOLIO'
+    @tipo_llave VARCHAR(20) = 'FOLIO'
 AS
 BEGIN
     SET NOCOUNT ON;

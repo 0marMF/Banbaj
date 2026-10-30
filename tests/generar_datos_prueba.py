@@ -116,14 +116,24 @@ def main(destino):
         {"FOLIO": "100002", "ETIQUETA": ""},
         {"FOLIO": "100001", "ETIQUETA": "REE"},
     ])
-    # Etiquetado del DAT que manda Operación (eti486.prg): CUENTA + columnas
-    escribir(destino / "etiquetas" / "ETIQUETADO.csv", ["CUENTA", "SALDO1", "TIPO", "ETIQUETA"], [
-        {"CUENTA": "20000001", "SALDO1": "$1,500.00", "TIPO": "PERS_VIG", "ETIQUETA": ""},
-        {"CUENTA": "99999999", "SALDO1": "10", "TIPO": "X", "ETIQUETA": "Y"},
-        {"CUENTA": "3333XAXX010101000", "SALDO1": "abc", "TIPO": "", "ETIQUETA": "REE"},
+    # Etiquetado de un campo del DAT (ops.sp_etiquetar_campo): FOLIO,ETIQUETA
+    escribir(destino / "etiquetas" / "ETIQUETA_SALDO1.csv", ["FOLIO", "ETIQUETA"], [
+        {"FOLIO": "0102", "ETIQUETA": "$1,500.00"},          # folio con ceros -> 486-102
+        {"FOLIO": "999999", "ETIQUETA": "10"},                # no está en el DAT
+        {"FOLIO": "486-100003", "ETIQUETA": "abc"},           # importe inválido
+        {"FOLIO": "486-100004", "ETIQUETA": ""},              # sin etiqueta
+    ])
+    # Nombre de Operación (MORA -> ETIQUETA1); '-' deja el campo en blanco
+    escribir(destino / "etiquetas" / "ETIQUETA_MORA.csv", ["FOLIO", "ETIQUETA"], [
+        {"FOLIO": "486-100003", "ETIQUETA": "MORA 2"},
+        {"FOLIO": "102", "ETIQUETA": "-"},
+        {"FOLIO": "", "ETIQUETA": "MORA 1"},
+        {"FOLIO": "100004", "ETIQUETA": "MORA 1"},
+        {"FOLIO": "486-100004", "ETIQUETA": "MORA 3"},        # repetido
     ])
     # Lista negra (blacklist_486.prg)
-    escribir(destino / "exclusiones" / "BLACKLIST.csv", ["TEL"], [{"TEL": "55 1234 5678"}, {"TEL": "5512345678"}, {"TEL": ""}])
+    escribir(destino / "exclusiones" / "BLACKLIST.csv", ["TEL"], [{"TEL": "55 1234 5678"}, {"TEL": "5512345678"}, {"TEL": ""},
+        {"TEL": "52 55 1234 5678"}, {"TEL": "12345"}])   # solo 10 dígitos; los otros dos se rechazan
     print("datos de prueba en", destino)
 
 

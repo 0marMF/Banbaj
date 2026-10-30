@@ -1,9 +1,9 @@
 /* =====================================================================
    Banbaj · 70 Procesos manuales del 486
    ---------------------------------------------------------------------
-   ops.sp_etiquetado_dat     eti486.prg: actualiza en el DAT columnas que manda
-                             Operación (CUENTA + SALDO1, TIPO, ETIQUETA…) y
-                             regenera SCBSDOS
+   ops.sp_etiquetar_campo    etiquetado de un campo del DAT con un CSV
+                             FOLIO,ETIQUETA que manda Operación (sustituye a
+                             eti486.prg) y genera SCBSDOS_ETI
    ops.sp_regenerar_scbsdos  SCBSDOS fuera de proceso (después de cargar
                              etiquetas de mora o TOP: moraeti.prg corría asi486)
    ops.sp_blanqueo_status    status.prg: blanqueo de status en CYBER del día 1
@@ -37,88 +37,95 @@ BEGIN
     END CATCH;
 END;
 GO
-
 /* ---------------------------------------------------------------------
-   Etiquetado del DAT (eti486.prg). Archivo CSV con encabezado: CUENTA y
-   cualquiera de las columnas de ETIQUETADO_CAMPOS. Un valor vacío no cambia
-   el DAT (como hoy). @confirmar = 0: vista previa.
+   Etiquetado de un campo del DAT (sustituye a eti486.prg).
+   Operación manda, de vez en cuando, un CSV con encabezado y dos columnas:
+       FOLIO,ETIQUETA
+   @campo dice qué columna del DAT se actualiza. Acepta el nombre del DAT
+   (SALDO1, TRAMO, ETIQUETA1…) o el nombre del DAT de Operación
+   (ETIQUETAS486.xlsx: SEG_CICLO, MORA, LEYENDA…) según ETIQUETADO_ALIAS.
+   Solo se permiten las columnas de ETIQUETADO_CAMPOS.
+     FOLIO     '102', '0102' o '486-102'   (@tipo_llave = 'FOLIO', por omisión)
+     CUENTA    crédito del banco            (@tipo_llave = 'CUENTA')
+     ETIQUETA  '-' = dejar el campo en blanco; vacío = se rechaza
+   @confirmar = 0: vista previa (no cambia nada). Con 1: respaldo, actualiza
+   el DAT, rechazos a ops.RECHAZO y SCBSDOS_ETI para arribar.
+   ETIQUETA6 / TOP no es columna del DAT: va con cfg.sp_etiqueta_cargar 'TOP'.
    --------------------------------------------------------------------- */
-CREATE OR ALTER PROCEDURE ops.sp_etiquetado_dat
+DROP PROCEDURE IF EXISTS ops.sp_etiquetado_dat;
+GO
+
+CREATE OR ALTER PROCEDURE ops.sp_etiquetar_campo
+    @campo      SYSNAME,
     @archivo    NVARCHAR(500),
     @cliente    VARCHAR(10)   = '486',
+    @tipo_llave VARCHAR(10)   = 'FOLIO',
     @confirmar  BIT           = 0,
-    @codepage   VARCHAR(10)   = 'ACP',
+    @codepage   VARCHAR(10)   = 'ACP',      -- '' en SQL Server Linux
     @id_corrida INT           = NULL OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @sql NVARCHAR(MAX), @cp NVARCHAR(100) = CASE WHEN NULLIF(@codepage, '') IS NOT NULL THEN N', CODEPAGE = ' + QUOTENAME(@codepage, '''') ELSE N'' END;
-    DECLARE @hdr NVARCHAR(4000), @n INT, @k INT, @malas NVARCHAR(4000), @msg NVARCHAR(4000), @campo SYSNAME, @pos INT;
+    DECLARE @sql NVARCHAR(MAX), @msg NVARCHAR(4000), @n INT, @tipo SYSNAME, @largo INT;
+    DECLARE @prefijo VARCHAR(10) = ISNULL(cfg.fn_param(@cliente, 'PREFIJO_CUENTA2'), @cliente + '-');
+    DECLARE @pedido SYSNAME = UPPER(LTRIM(RTRIM(@campo)));
 
-    /* Encabezado */
-    CREATE TABLE #h (L NVARCHAR(4000));
-    SET @sql = N'BULK INSERT #h FROM ' + QUOTENAME(@archivo, '''') + N' WITH (FIRSTROW = 1, LASTROW = 1, ROWTERMINATOR = ''0x0a'', FIELDTERMINATOR = ''\t\t\t''' + @cp + N');';
-    EXEC (@sql);
-    SELECT @hdr = REPLACE(REPLACE(REPLACE(L, NCHAR(13), N''), N'"', N''), NCHAR(65279), N'') FROM #h;
-    IF @hdr IS NULL THROW 50600, 'El archivo está vacío.', 1;
+    IF @tipo_llave NOT IN ('FOLIO', 'CUENTA') THROW 50604, '@tipo_llave debe ser FOLIO o CUENTA.', 1;
 
-    SELECT CAST([key] AS INT) + 1 AS POS, UPPER(LTRIM(RTRIM([value]))) AS CAMPO
-    INTO #col
-    FROM OPENJSON(N'["' + REPLACE(STRING_ESCAPE(@hdr, 'json'), N',', N'","') + N'"]');
-    SET @n = (SELECT MAX(POS) FROM #col);
+    /* Nombre de Operación -> columna del DAT */
+    SELECT @campo = UPPER(LTRIM(RTRIM(SUBSTRING(value, CHARINDEX('=', value) + 1, 200))))
+    FROM STRING_SPLIT(ISNULL(cfg.fn_param(@cliente, 'ETIQUETADO_ALIAS'), ''), ',')
+    WHERE CHARINDEX('=', value) > 0 AND UPPER(LTRIM(RTRIM(LEFT(value, CHARINDEX('=', value) - 1)))) = @pedido;
+    IF @@ROWCOUNT = 0 SET @campo = @pedido;
 
-    IF (SELECT COUNT(*) FROM #col WHERE CAMPO = 'CUENTA') <> 1
-        THROW 50601, 'El encabezado debe traer una columna CUENTA (crédito del banco).', 1;
-    SELECT @malas = STRING_AGG(c.CAMPO, ', ')
-    FROM #col c
-    WHERE c.CAMPO <> 'CUENTA'
-      AND (c.CAMPO NOT IN (SELECT UPPER(LTRIM(RTRIM(value))) FROM STRING_SPLIT(ISNULL(cfg.fn_param(@cliente, 'ETIQUETADO_CAMPOS'), ''), ','))
-           OR COL_LENGTH('dat.DAT_486', c.CAMPO) IS NULL);
-    IF @malas IS NOT NULL
+    IF @campo IN ('TOP', 'ETIQUETA6')
+        THROW 50605, 'TOP (ETIQUETA6) no es columna del DAT: cárgalo con cfg.sp_etiqueta_cargar @tipo = ''TOP''.', 1;
+    IF COL_LENGTH('dat.DAT_486', @campo) IS NULL
+       OR @campo NOT IN (SELECT UPPER(LTRIM(RTRIM(value))) FROM STRING_SPLIT(ISNULL(cfg.fn_param(@cliente, 'ETIQUETADO_CAMPOS'), ''), ','))
     BEGIN
-        SET @msg = CONCAT(N'Columnas que no se pueden etiquetar (ver parámetro ETIQUETADO_CAMPOS): ', @malas);
+        SET @msg = CONCAT(N'El campo ', @pedido, N' no se puede etiquetar. Permitidos: ', cfg.fn_param(@cliente, 'ETIQUETADO_CAMPOS'),
+                          N' (o sus nombres de Operación en ETIQUETADO_ALIAS).');
         THROW 50602, @msg, 1;
     END;
+    SELECT @tipo = TYPE_NAME(c.system_type_id), @largo = CASE WHEN TYPE_NAME(c.system_type_id) LIKE 'n%char' THEN c.max_length / 2 ELSE c.max_length END
+    FROM sys.columns c WHERE c.object_id = OBJECT_ID('dat.DAT_486') AND c.name = @campo;
 
-    /* Datos: tabla con tantas columnas como el encabezado */
-    CREATE TABLE #d (c1 NVARCHAR(4000));
-    SET @k = 2;
-    WHILE @k <= @n
-    BEGIN
-        SET @sql = N'ALTER TABLE #d ADD c' + CAST(@k AS NVARCHAR(5)) + N' NVARCHAR(4000);';
-        EXEC (@sql);
-        SET @k += 1;
-    END;
-    SET @sql = N'BULK INSERT #d FROM ' + QUOTENAME(@archivo, '''') + N' WITH (FORMAT = ''CSV'', FIELDQUOTE = ''"'', FIRSTROW = 2, FIELDTERMINATOR = '','', ROWTERMINATOR = ''0x0a''' + @cp + N');';
+    /* Archivo FOLIO,ETIQUETA */
+    CREATE TABLE #e (LLAVE NVARCHAR(100), ETIQUETA NVARCHAR(400));
+    SET @sql = N'BULK INSERT #e FROM ' + QUOTENAME(@archivo, '''')
+             + N' WITH (FORMAT = ''CSV'', FIELDQUOTE = ''"'', FIRSTROW = 2, FIELDTERMINATOR = '','', ROWTERMINATOR = ''0x0a'''
+             + CASE WHEN NULLIF(@codepage, '') IS NOT NULL THEN N', CODEPAGE = ' + QUOTENAME(@codepage, '''') ELSE N'' END + N');';
     EXEC (@sql);
+    IF NOT EXISTS (SELECT 1 FROM #e) THROW 50600, 'El archivo está vacío.', 1;
 
-    DECLARE @pc INT = (SELECT POS FROM #col WHERE CAMPO = 'CUENTA');
-    CREATE TABLE #v (CUENTA VARCHAR(20), CAMPO SYSNAME, VALOR NVARCHAR(4000), RESULTADO VARCHAR(30) NULL);
-    DECLARE cc CURSOR LOCAL FAST_FORWARD FOR SELECT CAMPO, POS FROM #col WHERE CAMPO <> 'CUENTA';
-    OPEN cc; FETCH NEXT FROM cc INTO @campo, @pos;
-    WHILE @@FETCH_STATUS = 0
-    BEGIN
-        SET @sql = N'INSERT INTO #v (CUENTA, CAMPO, VALOR) SELECT LEFT(LTRIM(RTRIM(REPLACE(c' + CAST(@pc AS NVARCHAR(5)) + N', NCHAR(13), N''''))), 20), @campo, '
-                 + N'LTRIM(RTRIM(REPLACE(c' + CAST(@pos AS NVARCHAR(5)) + N', NCHAR(13), N''''))) FROM #d '
-                 + N'WHERE NULLIF(LTRIM(RTRIM(REPLACE(c' + CAST(@pos AS NVARCHAR(5)) + N', NCHAR(13), N''''))), N'''') IS NOT NULL;';
-        EXEC sp_executesql @sql, N'@campo SYSNAME', @campo = @campo;
-        FETCH NEXT FROM cc INTO @campo, @pos;
-    END;
-    CLOSE cc; DEALLOCATE cc;
+    CREATE TABLE #v (LLAVE NVARCHAR(100), CUENTA VARCHAR(20) NULL, VALOR NVARCHAR(400) NULL, RESULTADO VARCHAR(30) NULL);
+    INSERT INTO #v (LLAVE, VALOR)
+    SELECT NULLIF(LTRIM(RTRIM(REPLACE(REPLACE(LLAVE, NCHAR(13), N''), NCHAR(65279), N''))), N''),
+           NULLIF(LTRIM(RTRIM(REPLACE(ETIQUETA, NCHAR(13), N''))), N'')
+    FROM #e;
 
-    /* Validación */
-    UPDATE v SET RESULTADO = 'NO ESTA EN EL DAT'
-    FROM #v v WHERE NOT EXISTS (SELECT 1 FROM dat.DAT_486 d WHERE d.CLIENTE = @cliente AND d.CUENTA = v.CUENTA);
-    ;WITH r AS (SELECT RESULTADO, COUNT(*) OVER (PARTITION BY CUENTA, CAMPO) AS N FROM #v WHERE RESULTADO IS NULL)
-    UPDATE r SET RESULTADO = 'CUENTA REPETIDA' WHERE N > 1;
-    UPDATE v SET RESULTADO = 'IMPORTE INVALIDO'
-    FROM #v v JOIN sys.columns c ON c.object_id = OBJECT_ID('dat.DAT_486') AND c.name = v.CAMPO
-    WHERE v.RESULTADO IS NULL AND TYPE_NAME(c.system_type_id) IN ('decimal', 'numeric', 'int', 'money') AND cfg.fn_importe(v.VALOR) IS NULL;
+    IF @tipo_llave = 'FOLIO'
+        UPDATE v SET CUENTA = d.CUENTA
+        FROM #v v JOIN dat.DAT_486 d ON d.CLIENTE = @cliente AND d.CUENTA2 = cfg.fn_llave_etiqueta(@cliente, v.LLAVE, 'FOLIO');
+    ELSE
+        UPDATE v SET CUENTA = d.CUENTA
+        FROM #v v JOIN dat.DAT_486 d ON d.CLIENTE = @cliente AND d.CUENTA = LEFT(v.LLAVE, 20);
+
+    UPDATE #v SET RESULTADO = 'SIN FOLIO' WHERE LLAVE IS NULL;
+    UPDATE #v SET RESULTADO = 'SIN ETIQUETA' WHERE RESULTADO IS NULL AND VALOR IS NULL;
+    UPDATE #v SET RESULTADO = 'NO ESTA EN EL DAT' WHERE RESULTADO IS NULL AND CUENTA IS NULL;
+    ;WITH r AS (SELECT RESULTADO, COUNT(*) OVER (PARTITION BY CUENTA) AS N FROM #v WHERE RESULTADO IS NULL)
+    UPDATE r SET RESULTADO = 'FOLIO REPETIDO' WHERE N > 1;
+    UPDATE #v SET VALOR = N'' WHERE RESULTADO IS NULL AND VALOR = N'-';
+    IF @tipo IN ('decimal', 'numeric', 'int', 'money')
+        UPDATE #v SET RESULTADO = 'IMPORTE INVALIDO' WHERE RESULTADO IS NULL AND cfg.fn_importe(VALOR) IS NULL;
+    ELSE IF @tipo = 'date'
+        UPDATE #v SET RESULTADO = 'FECHA INVALIDA' WHERE RESULTADO IS NULL AND COALESCE(TRY_CONVERT(DATE, VALOR, 103), TRY_CONVERT(DATE, VALOR, 23)) IS NULL;
     UPDATE #v SET RESULTADO = 'A ACTUALIZAR' WHERE RESULTADO IS NULL;
 
     IF @confirmar = 0
     BEGIN
-        SELECT CAMPO, RESULTADO, COUNT(*) AS REGISTROS FROM #v GROUP BY CAMPO, RESULTADO ORDER BY CAMPO, RESULTADO;
+        SELECT @campo AS CAMPO, RESULTADO, COUNT(*) AS REGISTROS FROM #v GROUP BY RESULTADO ORDER BY RESULTADO;
         PRINT 'Vista previa: no se cambió nada. Ejecuta con @confirmar = 1 para actualizar el DAT y generar SCBSDOS.';
         RETURN;
     END;
@@ -129,35 +136,25 @@ BEGIN
     BEGIN TRY
         EXEC ops.sp_respaldo @id_corrida;
         BEGIN TRANSACTION;
-        DECLARE cu CURSOR LOCAL FAST_FORWARD FOR
-            SELECT DISTINCT v.CAMPO, TYPE_NAME(c.system_type_id), c.max_length
-            FROM #v v JOIN sys.columns c ON c.object_id = OBJECT_ID('dat.DAT_486') AND c.name = v.CAMPO
-            WHERE v.RESULTADO = 'A ACTUALIZAR';
-        DECLARE @tipo SYSNAME, @largo INT;
-        OPEN cu; FETCH NEXT FROM cu INTO @campo, @tipo, @largo;
-        WHILE @@FETCH_STATUS = 0
-        BEGIN
-            SET @sql = N'UPDATE d SET ' + QUOTENAME(@campo) + N' = '
-                     + CASE WHEN @tipo IN ('decimal', 'numeric', 'int', 'money') THEN N'cfg.fn_importe(v.VALOR)'
-                            ELSE N'LEFT(v.VALOR, ' + CAST(CASE WHEN @tipo LIKE 'n%' THEN @largo / 2 ELSE @largo END AS NVARCHAR(10)) + N')' END
-                     + N', ID_CORRIDA_ULT = @id_corrida, FE_ULT_ACT = SYSDATETIME() '
-                     + N'FROM dat.DAT_486 d JOIN #v v ON v.CUENTA = d.CUENTA AND v.CAMPO = @campo AND v.RESULTADO = ''A ACTUALIZAR'' '
-                     + N'WHERE d.CLIENTE = @cliente;';
-            EXEC sp_executesql @sql, N'@id_corrida INT, @campo SYSNAME, @cliente VARCHAR(10)', @id_corrida = @id_corrida, @campo = @campo, @cliente = @cliente;
-            FETCH NEXT FROM cu INTO @campo, @tipo, @largo;
-        END;
-        CLOSE cu; DEALLOCATE cu;
+        SET @sql = N'UPDATE d SET ' + QUOTENAME(@campo) + N' = '
+                 + CASE WHEN @tipo IN ('decimal', 'numeric', 'int', 'money') THEN N'cfg.fn_importe(v.VALOR)'
+                        WHEN @tipo = 'date' THEN N'COALESCE(TRY_CONVERT(DATE, v.VALOR, 103), TRY_CONVERT(DATE, v.VALOR, 23))'
+                        ELSE N'LEFT(v.VALOR, ' + CAST(@largo AS NVARCHAR(10)) + N')' END
+                 + N', ID_CORRIDA_ULT = @id_corrida, FE_ULT_ACT = SYSDATETIME() '
+                 + N'FROM dat.DAT_486 d JOIN #v v ON v.CUENTA = d.CUENTA AND v.RESULTADO = ''A ACTUALIZAR'' WHERE d.CLIENTE = @cliente;';
+        EXEC sp_executesql @sql, N'@id_corrida INT, @cliente VARCHAR(10)', @id_corrida = @id_corrida, @cliente = @cliente;
+        SET @n = @@ROWCOUNT;
 
         INSERT INTO ops.RECHAZO (ID_CORRIDA, ORIGEN, MOTIVO, DATOS)
-        SELECT @id_corrida, 'ETIQUETADO_DAT', CONCAT(N'Etiquetado: ', RESULTADO), (SELECT v.CUENTA, v.CAMPO, v.VALOR FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+        SELECT @id_corrida, 'ETIQUETADO_DAT', CONCAT(N'Etiquetado ', @campo, N': ', RESULTADO),
+               (SELECT v.LLAVE AS FOLIO, v.VALOR AS ETIQUETA FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
         FROM #v v WHERE RESULTADO <> 'A ACTUALIZAR';
         COMMIT TRANSACTION;
 
-        SET @msg = (SELECT STRING_AGG(CONCAT(CAMPO, N': ', N), N' · ') FROM (SELECT CAMPO, COUNT(*) AS N FROM #v WHERE RESULTADO = 'A ACTUALIZAR' GROUP BY CAMPO) x);
-        SET @n = (SELECT COUNT(DISTINCT CUENTA) FROM #v WHERE RESULTADO = 'A ACTUALIZAR');
+        SET @msg = CONCAT(@campo, N' (', @pedido, N'): ', @n, N' cuentas · archivo: ', @archivo);
         EXEC ops.sp_log @id_corrida, 'ETIQUETADO DAT', 'OK', @n, @msg;
         EXEC ops.sp_generar_salidas @id_corrida, 'ETI';
-        SET @msg = CONCAT(N'Cuentas etiquetadas: ', @n, N' · rechazados: ', (SELECT COUNT(*) FROM #v WHERE RESULTADO <> 'A ACTUALIZAR'));
+        SET @msg = CONCAT(N'Etiquetado de ', @campo, N': ', @n, N' cuentas · rechazados: ', (SELECT COUNT(*) FROM #v WHERE RESULTADO <> 'A ACTUALIZAR'));
         EXEC ops.sp_corrida_finalizar @id_corrida, 'OK', @msg;
     END TRY
     BEGIN CATCH
@@ -167,7 +164,7 @@ BEGIN
         THROW;
     END CATCH;
 
-    SELECT CAMPO, RESULTADO, COUNT(*) AS REGISTROS FROM #v GROUP BY CAMPO, RESULTADO ORDER BY CAMPO, RESULTADO;
+    SELECT @campo AS CAMPO, RESULTADO, COUNT(*) AS REGISTROS FROM #v GROUP BY RESULTADO ORDER BY RESULTADO;
 END;
 GO
 
@@ -266,12 +263,15 @@ BEGIN
         + CASE WHEN NULLIF(@codepage, '') IS NOT NULL THEN N', CODEPAGE = ' + QUOTENAME(@codepage, '''') ELSE N'' END + N');';
     EXEC (@sql);
 
-    SELECT DISTINCT v.VALOR INTO #x
+    /* Teléfonos (lista negra): solo 10 dígitos exactos; espacios y guiones se quitan, lo demás se rechaza */
+    SELECT v.VALOR, CASE WHEN @tipo = 'TELEFONO' AND LEN(v.VALOR) <> 10 THEN 0 ELSE 1 END AS VALIDO
+    INTO #c
     FROM #e
     CROSS APPLY (SELECT LTRIM(RTRIM(REPLACE(REPLACE(LEFT(L, CHARINDEX(N',', L + N',') - 1), NCHAR(13), N''), N'"', N''))) AS V0) a
-    CROSS APPLY (SELECT CASE WHEN @tipo = 'TELEFONO' THEN RIGHT(cfg.fn_solo_digitos(a.V0), 10)
+    CROSS APPLY (SELECT CASE WHEN @tipo = 'TELEFONO' THEN cfg.fn_solo_digitos(a.V0)
                              WHEN @tipo = 'CORREO' THEN LOWER(a.V0) ELSE a.V0 END AS VALOR) v
     WHERE NULLIF(v.VALOR, N'') IS NOT NULL;
+    SELECT DISTINCT VALOR INTO #x FROM #c WHERE VALIDO = 1;
 
     DECLARE @leidos INT = (SELECT COUNT(*) FROM #e), @nuevos INT;
     INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO, REQ)
@@ -279,7 +279,8 @@ BEGIN
     FROM #x x
     WHERE NOT EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = @cliente AND e.TIPO = @tipo AND e.VALOR = x.VALOR AND e.VALOR2 IS NULL AND e.ACTIVO = 1);
     SET @nuevos = @@ROWCOUNT;
-    SELECT @tipo AS TIPO, @leidos AS LEIDOS, (SELECT COUNT(*) FROM #x) AS VALIDOS, @nuevos AS NUEVOS, (SELECT COUNT(*) FROM #x) - @nuevos AS YA_EXISTIAN;
+    SELECT @tipo AS TIPO, @leidos AS LEIDOS, (SELECT COUNT(*) FROM #x) AS VALIDOS, @nuevos AS NUEVOS, (SELECT COUNT(*) FROM #x) - @nuevos AS YA_EXISTIAN,
+           (SELECT COUNT(*) FROM #c WHERE VALIDO = 0) AS NO_SON_10_DIGITOS;
 END;
 GO
 
@@ -313,6 +314,7 @@ GO
      ASIG_EXPRESS_486         correo_486.prg
      CONFIRMACION_ACT_486     correo.prg
      NOTIFICACION_RETIRO_486  correo_486noti.prg
+     AVISO_DEVOLUCION_486     devfianey.prg (archivo de devolución actualizado, a AEM)
    --------------------------------------------------------------------- */
 CREATE OR ALTER PROCEDURE ops.sp_avisar
     @id_corrida INT,

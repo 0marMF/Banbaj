@@ -46,14 +46,14 @@ def main(conexion):
     ])
     tabla(d / "TOP.DBF", "CUENTA2 C(28); ETIQUETA C(15)", [("486-100", "REE"), ("486-999", "REE")])
     tabla(d / "EXC486.DBF", "CUENTA C(20)", [("20000008",)])
-    tabla(d / "BLACKLIST.DBF", "TEL C(15)", [("5500000000",)])
+    tabla(d / "BLACKLIST.DBF", "TEL C(15)", [("55 0000 0000",), ("551234",)])   # el de 6 dígitos se omite
     tabla(d / "TELBAJ.DBF", "CUENTA C(28); TEL C(15)", [("486-100", "5511111111"), ("307-55", "5522222222")])
     tabla(d / "LADA.DBF", "CP C(5); LADA C(5)", [("06600", "55"), ("37236", "477")])
     tabla(d / "PNC.DBF", "LADA C(3); SERIE C(5); N_INI N(5,0); N_FIN N(5,0); TIPORED C(12)",
           [("55", "1234", 0, 9999, "MOVIL"), ("477", "714", 0, 4999, "FIJO")])
 
     cfg = {"cliente": "486", "fuentes": {k: str(d / f"{k}.DBF") for k in
-           ["DAT", "PURGA", "TAB7", "HISTORIA", "PAGTOT", "TOP", "EXC486", "BLACKLIST", "TELBAJ", "LADA", "PNC"]}}
+           ["DAT", "TAB7", "HISTORIA", "PAGTOT", "TOP", "EXC486", "BLACKLIST", "TELBAJ", "LADA", "PNC"]}}
     (d / "cfg.json").write_text(json.dumps(cfg), encoding="utf-8")
     cmd = [sys.executable, str(RAIZ / "tools" / "migrar_dbf.py"), "--config", str(d / "cfg.json")]
 
@@ -82,18 +82,18 @@ def main(conexion):
     ok("DAT: 2 cuentas, folio sin espacios, vacío -> NULL",
        q("SELECT CONCAT(COUNT(*), '|', MAX(FOLIO), '|', SUM(CASE WHEN ETIQUETA1 IS NULL THEN 1 ELSE 0 END)) FROM dat.DAT_486") == "2|101|1")
     ok("DAT: importe y fecha", q("SELECT CONCAT(SDO_ACT, '|', FE_ASIG) FROM dat.DAT_486 WHERE CUENTA = '20000001'") == "1500.50|2026-10-01")
-    ok("HISTORIA: 2 activas + 1 baja de PURGA (sin repetidos)",
+    ok("HISTORIA: solo las activas del DAT (PURGA y DEVOL no se migran)",
        q("SELECT STRING_AGG(CONCAT(CUENTA, ':', ESTATUS), ',') WITHIN GROUP (ORDER BY CUENTA) FROM dat.HISTORIA_FOLIO")
-       == "20000001:A,20000002:A,20000009:B")
-    ok("CONSECUTIVO: máximo de TAB7 / DAT / PURGA / HISTORIA", q("SELECT ULTIMO_FOLIO FROM dat.FOLIO_CONSECUTIVO WHERE CLIENTE = '486'") == 160)
+       == "20000001:A,20000002:A")
+    ok("CONSECUTIVO: máximo de TAB7 / DAT / HISTORIA", q("SELECT ULTIMO_FOLIO FROM dat.FOLIO_CONSECUTIVO WHERE CLIENTE = '486'") == 160)
     ok("PAGOS: PAGTOT con solo cuenta, fecha e importe (renglón corrido omitido, iguales se conservan)",
        q("SELECT CONCAT(COUNT(*), '|', MIN(CUENTA), '|', MIN(FE_PAG), '|', MIN(IMPORTE), '|', MIN(ORIGEN), '|', MIN(FE_REG)) FROM dat.PAGO_ARRIBADO")
        == "2|20000001|2026-10-02|1000.00|PAGTOT|2026-10-03")
     ok("ETIQUETAS: TOP", q("SELECT STRING_AGG(CONCAT(TIPO, ':', LLAVE, ':', VALOR), ',') WITHIN GROUP (ORDER BY TIPO, LLAVE) "
                            "FROM cfg.ETIQUETA") == "TOP:486-100:REE,TOP:486-999:REE")
-    ok("EXCLUSIONES: 3 del banco (semilla) + exc486 + blacklist + TELBAJ solo del 486",
+    ok("EXCLUSIONES: 3 del banco (semilla) + exc486 + blacklist (10 dígitos) + TELBAJ solo del 486",
        q("SELECT CONCAT(COUNT(*), '|', SUM(CASE WHEN VALOR2 = '486-100' THEN 1 ELSE 0 END), '|', "
-         "SUM(CASE WHEN VALOR = '5522222222' THEN 1 ELSE 0 END)) FROM cfg.EXCLUSION") == "6|1|0")
+         "SUM(CASE WHEN VALOR = '5522222222' THEN 1 ELSE 0 END), '|', SUM(CASE WHEN VALOR = '5500000000' THEN 1 ELSE 0 END)) FROM cfg.EXCLUSION") == "6|1|0|1")
     ok("LADA y PNC", q("SELECT CONCAT((SELECT COUNT(*) FROM cfg.LADA), '|', (SELECT COUNT(*) FROM cfg.PLAN_NUMERACION))") == "2|2")
 
     print(f"MIGRACION: {sum(resultados)} de {len(resultados)} OK")

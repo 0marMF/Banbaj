@@ -466,27 +466,63 @@ GO
    status y avisos. DAT: 486-102 (20000001), 486-100003, 486-100004, 486-500.
    --------------------------------------------------------------------- */
 DECLARE @t TABLE (ID INT IDENTITY(1,1), CAMPO SYSNAME, RESULTADO VARCHAR(30), REGISTROS INT);
-INSERT INTO @t (CAMPO, RESULTADO, REGISTROS) EXEC ops.sp_etiquetado_dat @archivo = N'/datos/etiquetas/ETIQUETADO.csv', @codepage = '';
+INSERT INTO @t (CAMPO, RESULTADO, REGISTROS) EXEC ops.sp_etiquetar_campo @campo = 'saldo1', @archivo = N'/datos/etiquetas/ETIQUETA_SALDO1.csv', @codepage = '';
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'ETI: vista previa del etiquetado (eti486.prg)' AS p,
-             N'ETIQUETA:A ACTUALIZAR:1|ETIQUETA:NO ESTA EN EL DAT:1|SALDO1:A ACTUALIZAR:1|SALDO1:IMPORTE INVALIDO:1|SALDO1:NO ESTA EN EL DAT:1|TIPO:A ACTUALIZAR:1|TIPO:NO ESTA EN EL DAT:1' AS e,
+FROM (SELECT N'ETI: vista previa del etiquetado de un campo (FOLIO,ETIQUETA)' AS p,
+             N'SALDO1:A ACTUALIZAR:1|SALDO1:IMPORTE INVALIDO:1|SALDO1:NO ESTA EN EL DAT:1|SALDO1:SIN ETIQUETA:1' AS e,
              (SELECT STRING_AGG(CONCAT(CAMPO, ':', RESULTADO, ':', REGISTROS), '|') WITHIN GROUP (ORDER BY ID) FROM @t) AS o) x;
-DECLARE @id INT;
+DECLARE @id INT, @err NVARCHAR(4000);
 BEGIN TRY
-    EXEC ops.sp_etiquetado_dat @archivo = N'/datos/etiquetas/ETIQUETADO.csv', @codepage = '', @confirmar = 1, @id_corrida = @id OUTPUT;
+    EXEC ops.sp_etiquetar_campo @campo = 'SALDO1', @archivo = N'/datos/etiquetas/ETIQUETA_SALDO1.csv', @codepage = '', @confirmar = 1, @id_corrida = @id OUTPUT;
 END TRY
 BEGIN CATCH
     INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'ETI: etiquetado termina OK', 0, ERROR_MESSAGE();
 END CATCH;
 SET @id = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ETI');
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'ETI: DAT etiquetado (vacío no cambia) y SCBSDOS' AS p, N'OK|1500.00|PERS_VIG|REE|4|4' AS e,
+FROM (SELECT N'ETI: SALDO1 etiquetado por folio, rechazos y SCBSDOS' AS p, N'OK|1500.00|3|1' AS e,
              CONCAT((SELECT ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = @id), '|',
                     (SELECT SALDO1 FROM dat.DAT_486 WHERE CUENTA = '20000001'), '|',
-                    (SELECT TIPO FROM dat.DAT_486 WHERE CUENTA = '20000001'), '|',
-                    (SELECT ETIQUETA FROM dat.DAT_486 WHERE CUENTA = '3333XAXX010101000'), '|',
-                    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS_ETI'), '|',
-                    (SELECT COUNT(*) FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'ETIQUETADO_DAT')) AS o) x;
+                    (SELECT COUNT(*) FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'ETIQUETADO_DAT'), '|',
+                    CASE WHEN (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS_ETI') > 0 THEN 1 ELSE 0 END) AS o) x;
+
+/* Nombre de Operación: MORA -> ETIQUETA1; '-' deja en blanco; folio repetido se rechaza */
+SET @id = NULL;
+DELETE FROM @t;
+BEGIN TRY
+    INSERT INTO @t (CAMPO, RESULTADO, REGISTROS)
+    EXEC ops.sp_etiquetar_campo @campo = 'MORA', @archivo = N'/datos/etiquetas/ETIQUETA_MORA.csv', @codepage = '', @confirmar = 1, @id_corrida = @id OUTPUT;
+END TRY
+BEGIN CATCH
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'ETI: etiquetado por alias termina OK', 0, ERROR_MESSAGE();
+END CATCH;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ETI: alias MORA -> ETIQUETA1, blanco con ''-'', repetidos y sin folio' AS p,
+             N'ETIQUETA1:A ACTUALIZAR:2|ETIQUETA1:FOLIO REPETIDO:2|ETIQUETA1:SIN FOLIO:1|MORA 2|[]' AS e,
+             CONCAT((SELECT STRING_AGG(CONCAT(CAMPO, ':', RESULTADO, ':', REGISTROS), '|') WITHIN GROUP (ORDER BY ID) FROM @t), '|',
+                    (SELECT ETIQUETA1 FROM dat.DAT_486 WHERE CUENTA = '3333XAXX010101000'), '|',
+                    (SELECT CONCAT('[', ETIQUETA1, ']') FROM dat.DAT_486 WHERE CUENTA = '20000001')) AS o) x;
+
+/* Campos no permitidos y TOP */
+BEGIN TRY
+    EXEC ops.sp_etiquetar_campo @campo = 'FOLIO', @archivo = N'/datos/etiquetas/ETIQUETA_MORA.csv', @codepage = '';
+    SET @err = N'no falló';
+END TRY
+BEGIN CATCH SET @err = CAST(ERROR_NUMBER() AS NVARCHAR(10)); END CATCH;
+BEGIN TRY
+    EXEC ops.sp_etiquetar_campo @campo = 'ETIQUETA6', @archivo = N'/datos/etiquetas/ETIQUETA_MORA.csv', @codepage = '';
+    SET @err = @err + N'|no falló';
+END TRY
+BEGIN CATCH SET @err = @err + N'|' + CAST(ERROR_NUMBER() AS NVARCHAR(10)); END CATCH;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'ETI: rechaza campos fuera de ETIQUETADO_CAMPOS y TOP', CASE WHEN @err = N'50602|50605' THEN 1 ELSE 0 END, @err;
+
+/* Candado de Excel: cuentas en notación científica */
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE)
+SELECT N'ASIG: detecta notación científica de Excel', CASE WHEN x.o = N'1|0|0|3' THEN 1 ELSE 0 END, x.o
+FROM (SELECT CONCAT(CASE WHEN '1.23457E+15' LIKE '%[0-9][Ee][+-][0-9]%' THEN 1 ELSE 0 END, '|',
+                    CASE WHEN '5512345678901234' LIKE '%[0-9][Ee][+-][0-9]%' THEN 1 ELSE 0 END, '|',
+                    CASE WHEN 'XAXX010101E00' LIKE '%[0-9][Ee][+-][0-9]%' THEN 1 ELSE 0 END, '|',
+                    (SELECT COUNT(*) FROM cfg.REGLA WHERE CLIENTE = '486' AND CODIGO LIKE '%NOTACION_CIENTIFICA' AND ACCION = 'CANCELAR')) AS o) x;
 GO
 
 /* eti486 ya no se usa: aunque exista una etiqueta ETI486, DMPHONE sale de la ETIQUETA1 que llegó */
@@ -501,12 +537,12 @@ DELETE FROM cfg.ETIQUETA WHERE TIPO = 'ETI486';
 GO
 
 /* Lista negra (blacklist_486.prg) */
-DECLARE @r TABLE (TIPO VARCHAR(20), LEIDOS INT, VALIDOS INT, NUEVOS INT, YA_EXISTIAN INT);
+DECLARE @r TABLE (TIPO VARCHAR(20), LEIDOS INT, VALIDOS INT, NUEVOS INT, YA_EXISTIAN INT, NO_10 INT);
 INSERT INTO @r EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'/datos/exclusiones/BLACKLIST.csv', @req = 'REQ PRUEBA', @solicita = N'Operación', @codepage = '';
 INSERT INTO @r EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'/datos/exclusiones/BLACKLIST.csv', @req = 'REQ PRUEBA', @solicita = N'Operación', @codepage = '';
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'EXCLUSION: carga de lista negra con REQ (sin duplicar)' AS p, N'1:1,1:0|REQ PRUEBA' AS e,
-             CONCAT((SELECT STRING_AGG(CONCAT(VALIDOS, ':', NUEVOS), ',') WITHIN GROUP (ORDER BY NUEVOS DESC) FROM @r), '|',
+FROM (SELECT N'EXCLUSION: lista negra solo 10 dígitos, con REQ y sin duplicar' AS p, N'1:1:2,1:0:2|REQ PRUEBA' AS e,
+             CONCAT((SELECT STRING_AGG(CONCAT(VALIDOS, ':', NUEVOS, ':', NO_10), ',') WITHIN GROUP (ORDER BY NUEVOS DESC) FROM @r), '|',
                     (SELECT REQ FROM cfg.EXCLUSION WHERE TIPO = 'TELEFONO' AND VALOR = '5512345678')) AS o) x;
 GO
 

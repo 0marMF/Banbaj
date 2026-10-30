@@ -48,9 +48,11 @@ En el repo hay varios scripts con el mismo nombre porque cada programa los busca
 | `email.PRG` + `act_mail.prg` | Correos del DAT a CYBER | `ops.sp_correos` → `sub_mail.TXT` + scripts |
 | `ges486.prg` | Gescar "CUENTA SIN NUMERO TELEFONICO" para nuevas sin teléfono en CYBER | `tools/bajar_cyber.py telefonos` → `ops.sp_gescar_sin_telefono` |
 | `status.prg` | Blanqueo de status del día 1 al 10 | `ops.sp_blanqueo_status` |
-| `eti486.prg` | Etiquetado del DAT desde archivo de Operación | `ops.sp_etiquetado_dat` |
+| `eti486.prg` | Etiquetado del DAT desde archivo de Operación | `ops.sp_etiquetar_campo` (un campo por archivo FOLIO,ETIQUETA) |
+| `devfianey.prg` | Aviso de devolución a AEM | `AVISO_DEVOLUCION_486` con `ops.sp_avisar` |
+| `ASIG_486.xlsm` | Macro que pasaba las maestras a CSV | **Se elimina**: la maestra se guarda directo como CSV |
 | `moraeti.prg` | Mora (tabla eti486) | **Ya no se usa**: DMPHONE es la ETIQUETA1 recibida |
-| `blacklist_486.prg` | Lista negra de teléfonos con requerimiento | `cfg.sp_exclusion_cargar` |
+| `blacklist_486.prg` | Lista negra de teléfonos con requerimiento | `cfg.sp_exclusion_cargar` (solo 10 dígitos) |
 | `respaldo2.prg` | Copia del DAT antes de cada proceso | `ops.sp_respaldo` (por corrida) |
 | `resdat.PRG` | Copia el DAT a `Q:\MIS` y `B:\asignaciones\dats` con CUENTA = 486-folio | `DAT486_<fecha>.csv` (vista `ops.v_DAT_486_MIS`) |
 | `mail.prg`, `correo_486.prg`, `correo.prg`, `correo_486noti.prg` | Avisos a Operación (manuales, al final) | `ops.sp_avisar` con las plantillas y listas de cada uno |

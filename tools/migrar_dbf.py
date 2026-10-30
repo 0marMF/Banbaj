@@ -12,8 +12,9 @@
 
 Destinos (se cargan en una sola transacción; si algo falla no queda nada a medias):
     DAT          DAT.DBF                                  -> dat.DAT_486
-    HISTORIA     DAT.DBF (activas) + PURGA.DBF (bajas; si no hay PURGA, DEVOL.DBF) -> dat.HISTORIA_FOLIO
-    CONSECUTIVO  máximo folio de TAB7, DAT, PURGA, DEVOL e HISTORIA.DBF -> dat.FOLIO_CONSECUTIVO
+    HISTORIA     DAT.DBF (activas)                        -> dat.HISTORIA_FOLIO
+                 (PURGA y DEVOL se quedan fuera: las bajas se registran a partir de la migración)
+    CONSECUTIVO  máximo folio de TAB7, DAT e HISTORIA.DBF -> dat.FOLIO_CONSECUTIVO
     PAGOS        PAGTOT.DBF (CUENTA + FE_PAG + MONT, lo único que usa la validación) -> dat.PAGO_ARRIBADO
     ETIQUETAS    ETI, DM1, TOP, STATUS                    -> cfg.ETIQUETA   (eti486 ya no se usa)
     EXCLUSIONES  EXC486, DIRMAL, EMAILMALO, BLACKLIST, TELBAJ   -> cfg.EXCLUSION
@@ -36,9 +37,6 @@ MIGRACION = "MIGRACION DBF"
 
 # Fuentes grandes: solo se leen los campos que se usan (historia tiene 1.8 M de registros)
 CAMPOS_FUENTE = {
-    "PURGA": ["CUENTA", "FOLIO", "CUENTA2", "SEGMENTO2", "SEGMENTO", "RIESGO", "SUB_CTE", "FE_ASIG", "FE_BAJA", "FECHA_BAJA",
-              "FE_PURGA", "FE_DEV", "FECHA"],
-    "DEVOL": ["CUENTA", "FOLIO", "CUENTA2", "SEGMENTO2", "SEGMENTO", "RIESGO", "SUB_CTE", "FE_ASIG", "FE_DEV", "FE_CAPT"],
     "HISTORIA": ["FOLIO"],
     "PAGTOT": ["CUENTA", "FE_PAG", "MONT", "FE_REG"],
 }
@@ -141,36 +139,6 @@ def destino_historia(cfg, fuentes, avisos):
         sub = f.get("SUB_CTE") if f.get("SUB_CTE") in ("NVA", "REA") else "NVA"
         filas.append((cli, f["CUENTA"], fol, f.get("CUENTA2") or f"{cli}-{fol}", f.get("SEGMENTO2"), (f.get("RIESGO") or None), sub, "A",
                       f.get("FE_ASIG") or dt.date(1900, 1, 1), None, None))
-    fuente = "PURGA" if "PURGA" in fuentes else ("DEVOL" if "DEVOL" in fuentes else None)
-    if fuente:
-        if fuente == "DEVOL":
-            avisos.append("HISTORIA: no hay PURGA; las bajas se toman de DEVOL (prog15 agrega lo mismo a las dos)")
-        campos, purga = fuentes[fuente]
-        exigir(fuente, campos, ["CUENTA", "FOLIO"])
-        bajas, sin_dato = {}, 0
-        for f in purga:
-            fol = folio_int(f.get("FOLIO"))
-            if f.get("CUENTA") is None or fol is None:
-                sin_dato += 1
-                continue
-            k = (f["CUENTA"], fol)
-            if k in activas:
-                continue
-            fe_baja = primero(f, "FE_BAJA", "FECHA_BAJA", "FE_PURGA", "FE_DEV", "FE_CAPT", "FECHA")
-            if not isinstance(fe_baja, dt.date):
-                fe_baja = None
-            previo = bajas.get(k)
-            if previo and (previo[9] or dt.date(1900, 1, 1)) >= (fe_baja or dt.date(1900, 1, 1)):
-                continue                                   # se queda la baja más reciente
-            sub = f.get("SUB_CTE") if f.get("SUB_CTE") in ("NVA", "REA") else "NVA"
-            seg = f.get("SEGMENTO2") or None
-            bajas[k] = (cli, f["CUENTA"], fol, (f.get("CUENTA2") if str(f.get("CUENTA2") or "").startswith(f"{cli}-") else None)
-                        or f"{cli}-{fol}", seg, (f.get("RIESGO") or None), sub, "B", f.get("FE_ASIG") or dt.date(1900, 1, 1), fe_baja, f"MIGRACION {fuente}")
-        if sin_dato:
-            avisos.append(f"{fuente}: {sin_dato} registros sin CUENTA o FOLIO numérico omitidos")
-        filas += list(bajas.values())
-    else:
-        avisos.append("HISTORIA: sin PURGA ni DEVOL, las cuentas que regresen no se reconocerán como REA")
     return ["CLIENTE", "CUENTA", "FOLIO", "CUENTA2", "SEGMENTO2", "RIESGO", "SUB_CTE", "ESTATUS", "FE_ALTA", "FE_BAJA", "MOTIVO_BAJA"], filas
 
 
@@ -180,7 +148,7 @@ def destino_consecutivo(cfg, fuentes, avisos):
         campos, tab7 = fuentes["TAB7"]
         exigir("TAB7", campos, ["FOLIO"])
         maximos["TAB7"] = max((folio_int(f.get("FOLIO")) or 0 for f in tab7), default=0)
-    for k in ("DAT", "PURGA", "DEVOL", "HISTORIA"):
+    for k in ("DAT", "HISTORIA"):
         if k in fuentes:
             maximos[k] = max((folio_int(f.get("FOLIO")) or 0 for f in fuentes[k][1]), default=0)
     if not maximos:
@@ -228,11 +196,16 @@ def destino_exclusiones(cfg, fuentes, avisos, cuentas_486):
         campos, datos = fuentes[fuente]
         exigir(fuente, campos, [c for c in (cv, cv2) if c])
         antes = len(filas)
-        vistas = set()
+        vistas, no_10 = set(), 0
         for f in datos:
             v, v2 = f.get(cv), (f.get(cv2) if cv2 else None)
             if not v:
                 continue
+            if fuente == "BLACKLIST":                      # la lista negra solo lleva teléfonos de 10 dígitos
+                v = "".join(ch for ch in str(v) if ch.isdigit())
+                if len(v) != 10:
+                    no_10 += 1
+                    continue
             if filtro == "VALOR" and not del_486(v):
                 continue
             if filtro == "VALOR2" and not del_486(v2):
@@ -243,6 +216,8 @@ def destino_exclusiones(cfg, fuentes, avisos, cuentas_486):
             vistas.add(k)
             filas.append((cli, tipo, str(k[1])[:200], (str(v2)[:200] if v2 else None), motivo, MIGRACION))
         avisos.append(f"{fuente}: {len(filas) - antes} de {len(datos)} registros aplican al {cli}")
+        if no_10:
+            avisos.append(f"{fuente}: {no_10} teléfonos omitidos por no tener 10 dígitos")
     return ["CLIENTE", "TIPO", "VALOR", "VALOR2", "MOTIVO", "REQ"], filas
 
 
@@ -358,7 +333,7 @@ def main():
 
     plan("DAT", lambda: destino_dat(cfg, fuentes, avisos), ["DAT"])
     plan("HISTORIA", lambda: destino_historia(cfg, fuentes, avisos), ["DAT"])
-    plan("CONSECUTIVO", lambda: destino_consecutivo(cfg, fuentes, avisos), ["TAB7", "DAT", "HISTORIA", "DEVOL"])
+    plan("CONSECUTIVO", lambda: destino_consecutivo(cfg, fuentes, avisos), ["TAB7", "DAT", "HISTORIA"])
     plan("PAGOS", lambda: destino_pagos(cfg, fuentes, avisos), ["PAGTOT"])
     plan("ETIQUETAS", lambda: destino_etiquetas(cfg, fuentes, avisos), list(ETIQUETAS))
     plan("EXCLUSIONES", lambda: destino_exclusiones(cfg, fuentes, avisos, cuentas_486),

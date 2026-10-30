@@ -150,10 +150,10 @@ def tel_dom(extra_tels):
 COLUMNAS = {
     "MAESTRA_TDC": [
         ("PRIME4DIG", "PRIME+4DIG", C(30), 1, False, "Base para armar la CUENTA"),
-        ("CUENTA", None, ("VARCHAR(20)", "{v}"), 0, False, "Derivado: últimos 4 dígitos de PRIME+4DIG + RFC (regla del mapeo, la aplicaba la macro)"),
+        ("CUENTA", None, ("VARCHAR(20)", "{v}"), 0, False, "Derivado: últimos 4 dígitos de PRIME+4DIG + RFC (regla del mapeo; antes la aplicaba la macro, que ya no se usa)"),
         ("RIESGO", "ACC_NUM", C(35), 1, False, None),
         ("NOMBRE1", "NAME2", C(50), 0, False, None),
-        ("NAME1", "NAME1", C(50), 0, False, "Respaldo: si NAME2 viene vacío o '-' se usa NAME1 (macro ASIG_486)"),
+        ("NAME1", "NAME1", C(50), 0, False, "Respaldo: si NAME2 viene vacío o '-' se usa NAME1 (regla que hacía la macro)"),
         ("ESTRA3", "Tipo de TDC", C(15), 0, False, None),
         ("GARAN", "GARANTIZADA", C(15), 0, False, "1 / 0 -> GARANTIZADA / vacío (homologación)"),
         ("PVS", "Dias Vencidos VEN4/CCAS 00/00/0000", PVS, 0, True, None),
@@ -275,7 +275,7 @@ HOMOLOGACION = (
         ("CUENTA", "LEFT(RIGHT(LTRIM(RTRIM(t.PRIME4DIG)), 4) + LTRIM(RTRIM(ISNULL(t.RFC, ''))), 20)", None,
          "Cuenta TDC = últimos 4 dígitos de PRIME+4DIG + RFC (regla del mapeo)", None),
         ("NOMBRE1", "t.NAME1", "t.NOMBRE1 IS NULL OR LTRIM(RTRIM(t.NOMBRE1)) IN ('', '-')",
-         "Si NAME2 viene vacío o '-' se usa NAME1 (macro ASIG_486)", None),
+         "Si NAME2 viene vacío o '-' se usa NAME1 (regla que hacía la macro)", None),
         ("DES_PROD", "t.CUENTA", None, "DES_PROD = CUENTA (paso.prg)", None),
         ("GARAN", "'GARANTIZADA'", "t.GARAN = '1'", "Garantizada", "REQ 2021-024042"),
         ("GARAN", "''", "t.GARAN = '0'", "No garantizada", "REQ 2021-024042"),
@@ -379,7 +379,14 @@ ESTRUCTURA_REE = [
 HOMOLOGACION = HOMOLOGACION + [("dat.DAT_486",) + x for x in ESTRUCTURA_REE]
 
 # (PROCESO, PASO, CODIGO, TABLA, CONDICION, EVALUA, ACCION, MENSAJE, PLANTILLA, ORDEN, REQ)
+CIENTIFICA = lambda *cols: " OR ".join(f"t.{c} LIKE '%[0-9][Ee][+-][0-9]%'" for c in cols)
 REGLAS = [
+    ("ASIG", "POST_CARGA", "TDC_NOTACION_CIENTIFICA", "stg.ENT_MAESTRA_TDC", CIENTIFICA("PRIME4DIG", "RIESGO"), "FILAS", "CANCELAR",
+     "La base maestra TDC trae cuentas en notación científica (Excel cortó el número al guardar el CSV)", "MAESTRA_NUMEROS_EXCEL_486", 1, None),
+    ("ASIG", "POST_CARGA", "CONSUMO_NOTACION_CIENTIFICA", "stg.ENT_MAESTRA_CONSUMO", CIENTIFICA("CUENTA"), "FILAS", "CANCELAR",
+     "La base maestra Consumo trae créditos en notación científica (Excel cortó el número al guardar el CSV)", "MAESTRA_NUMEROS_EXCEL_486", 2, None),
+    ("ASIG", "POST_CARGA", "HIPO_NOTACION_CIENTIFICA", "stg.ENT_MAESTRA_HIPO", CIENTIFICA("CUENTA", "RIESGO"), "FILAS", "CANCELAR",
+     "La base maestra Hipotecario trae créditos en notación científica (Excel cortó el número al guardar el CSV)", "MAESTRA_NUMEROS_EXCEL_486", 3, None),
     ("ASIG", "POST_CARGA", "SDO_ACT_CONSUMO_CERO", "stg.ENT_MAESTRA_CONSUMO", "t.SDO_ACT <= 0", "FILAS", "ALERTAR",
      "Cuentas de Consumo con saldo actual <= 0 en la base maestra: reportarlo al banco", "ALERTA_SDO_ACT_CONS_486", 10, None),
     ("ASIG", "PRE_ALTA", "EXCLUSION_CUENTAS", "stg.LAYOUT_486",
@@ -419,8 +426,11 @@ PARAMETROS = [
     ("CYBER_PROC_CORREOS", "RCVRY.JSP_CORREOS_486", "Procedimiento de CYBER que purga y agrega los correos (INSERTA_MAIL.sql)"),
     ("STATUS_NO_BLANQUEAR", "GS,PP,LQ,NP,PR,CD,CC,FA", "status.prg: status que no se blanquean (REQ 2021-051124)"),
     ("DIAS_BLANQUEO_STATUS", "1-10", "status.prg: días del mes en que se blanquea status"),
-    ("ETIQUETADO_CAMPOS", "SALDO1,SALDO2,SALDO3,RIESGO,PVS,TIPO,CAPITAL,SEGMENTO,PAG_MIN,ETIQUETA,TRAMO,SEG,SDO_VDO,NOMBRE2",
-     "eti486.prg: columnas del DAT que Operación puede etiquetar"),
+    ("ETIQUETADO_CAMPOS", "SALDO1,SALDO2,SALDO3,RIESGO,PVS,TIPO,CAPITAL,SEGMENTO,PAG_MIN,ETIQUETA,TRAMO,SEG,SDO_VDO,NOMBRE2,ESTRA3,DES_PROD,ETIQUETA1,ETIQUETA5",
+     "ops.sp_etiquetar_campo: columnas del DAT que Operación puede etiquetar"),
+    ("ETIQUETADO_ALIAS", "SEG_CICLO=TRAMO,CLASIFICA=ESTRA3,ETIQUETA2=DES_PROD,ETIQUETA3=SEG,ETIQUETA4=RIESGO,LEYENDA=NOMBRE2,"
+     "SALDO_VEN=SDO_VDO,ETIQUETA10=ETIQUETA,MORA=ETIQUETA1",
+     "ETIQUETAS486.xlsx: nombre en el DAT de Operación = columna de nuestro DAT (ETIQUETA6/TOP va con cfg.sp_etiqueta_cargar)"),
     ("CYBER_PROC_TELEFONOS", "RCVRY.JSP_TELEFONOS_REMESA_486", "Procedimiento de CYBER que purga y agrega los teléfonos (ACTUALIZA_PHONE.SQL)"),
     ("CAMPOS_ACTUALIZA_EXISTENTES",
      "TEL1,TEL2,TEL3,TEL4,TEL5,TEL6,TEL7,TEL8,TEL9,TEL10,TEL11,TEL12,TEL13,CORREO1,CORREO2,"
@@ -608,6 +618,11 @@ LISTAS = {
         + [("asig.cdmx@sertec.com.mx", "BCC")]),
     "OPERACION_PAGOS_486": ("PENDIENTE: destinatarios de Operación para el aviso de pagos negativos", [(BUZON, "TO")]
         + [(e, "BCC") for e in INTERNOS_BCC]),
+    "DEVOLUCION_AEM_486": ("Aviso de archivo de devolución actualizado a AEM (devfianey.prg)",
+        [(e, "TO") for e in ["aem.control1@sertec.com.mx", "supervisor.aem.cdmx2@sertec.com.mx", "supervisor.aem.cdmx3@sertec.com.mx",
+                             "supervisor.aem.cdmx@sertec.com.mx", "aem.operativa1@sertec.com.mx", "aem.operativa2@sertec.com.mx",
+                             "supervisor.aem.cdmx4@sertec.com.mx", "aem.entregables1@sertec.com.mx"]]
+        + [(e, "CC") for e in ["asignaciones3@sertec.com.mx", "asignaciones.cdmx1@sertec.com.mx", "asig.cdmx@sertec.com.mx"]]),
     "ASIGNACIONES_486": ("Equipo de asignaciones: alertas y errores del proceso", [(BUZON, "TO")] + [(e, "BCC") for e in INTERNOS_BCC]),
 }
 PLANTILLAS = [
@@ -635,6 +650,11 @@ PLANTILLAS = [
     ("PAGOS_NEGATIVOS_486", "OPERACION_PAGOS_486", "Banco Bajío: llegaron pagos negativos {{FECHA}}",
      "En el archivo de pagos de Banco Bajío llegaron pagos negativos. No se arribaron a CYBER.",
      "<p>Pagos negativos: {{REGISTROS}}</p><pre>{{DETALLE}}</pre>", "High"),
+    ("AVISO_DEVOLUCION_486", "DEVOLUCION_AEM_486", "Devolucion del cliente BANCO BAJIO {{FECHA}}",
+     "ARCHIVO DE DEVOLUCION ACTUALIZADO, FAVOR DE VERIFICAR.", "", "Normal"),
+    ("MAESTRA_NUMEROS_EXCEL_486", "ASIGNACIONES_486", "Asignación 486 detenida: base maestra con números cortados por Excel {{FECHA}}",
+     "La base maestra se guardó como CSV con cuentas en notación científica (ej. 1.23457E+15). Formatea esas columnas como Texto en Excel, vuelve a guardar el CSV y corre de nuevo.",
+     "<p>Registros: {{REGISTROS}}</p>", "High"),
     ("ERROR_PROCESO_486", "ASIGNACIONES_486", "Error en {{PROCESO}} (corrida {{ID_CORRIDA}})",
      "El proceso terminó con error.", "<p>{{ERROR}}{{MENSAJE}}</p>", "High"),
 ]

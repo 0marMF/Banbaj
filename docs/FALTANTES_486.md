@@ -21,7 +21,7 @@ Formato preferido para compartir:
 
 - [x] **`ges_nuevas_rea.prg`** — recibido. SCBACTH de 119 posiciones, RS/R1, origen 'aaxrh', "CUENTA NUEVA ASIGNADA." / "CUENTA REASIGNADA.".
 - [x] **`ges_retiro.prg`** — recibido. Mismo layout, "RETIRO DE CUENTA.", sale de `cybdev`.
-- [ ] **`devfianey.prg`** (`O:\ASIGNA\`) — se llama en el retiro con `DEVOL`; es compartido con otros clientes.
+- [x] **`devfianey.prg`** — recibido. Solo manda el aviso "Devolucion del cliente BANCO BAJIO" a AEM: `AVISO_DEVOLUCION_486` (ver `docs/CORREOS_486.md`).
 - [x] **`RESPALDO2.prg`** y **`resdat.prg`** — recibidos. Respaldo por corrida; la copia a MIS queda como vista `ops.v_DAT_486_MIS`.
 - [x] **`ACT_MAIL.prg`** + `email.PRG` — recibidos. Correos a CYBER: `ops.sp_correos` → `sub_mail.TXT`.
 
@@ -33,10 +33,12 @@ Formato preferido para compartir:
 - [x] **`correo_486noti.prg`** — `NOTIFICACION_RETIRO_486`.
 - [x] **`mail_sdo_act_cons.prg`** — `ALERTA_SDO_ACT_CONS_486`.
 - [x] **`aem_alerta.prg`** — `ALERTA_NUEVAS_486`.
+- [x] **`devfianey.prg`** — `AVISO_DEVOLUCION_486`.
+- [ ] **Elegir cuáles correos se quedan:** `docs/CORREOS_486.md`.
 
 ### Macro
 
-- [ ] **`ASIG_486.xlsm`** (`O:\PRG\GPO1\486\bases\`) — genera los CSV del día. Ya sé lo que hace (limpia caracteres, pasa moneda a número con 2 decimales, arma la cuenta TDC). Sirve para confirmar el nombre y el orden de los CSV que deja.
+- [x] **`ASIG_486.xlsm` se elimina.** La base maestra se guarda directo como CSV (todas las columnas) desde Excel con "CSV (delimitado por comas)", que guarda en Windows-1252 (no "CSV UTF-8"). Lo que hacía la macro ya está en la homologación: cuenta TDC, NAME2→NAME1 y montos con `$` y comas. Si Excel deja cuentas en notación científica (1.23457E+15), la asignación se detiene (`*_NOTACION_CIENTIFICA`). La corrección fija D162 = C162 no se migró (era de un archivo).
 
 ## 2. Tablas de referencia que pasan a SQL Server
 
@@ -44,13 +46,13 @@ Se cargan con `tools/migrar_dbf.py`. Para cada una necesito la **estructura** pa
 
 | Tabla DBF | Ruta en los .prg | Destino | Campos que supuse | Confirmar |
 | --- | --- | --- | --- | --- |
-| PURGA | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` (bajas) | Falta. `prog15` le agrega lo mismo que a DEVOL (486BAJ). ¿Es igual a DEVOL? | [ ] |
+| PURGA | `O:\HISTORIA\GPO1\486\` | — | **No se migra** (decisión): las bajas se registran desde la migración | — |
 | historia | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` | Recibida: 1.8 M filas (una por cada asignación desde 2016), folio máx. 179,688 | Lista |
-| DEVOL | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` (bajas) | Recibida: 580 mil retiros con FE_DEV | Lista |
+| DEVOL | `O:\HISTORIA\GPO1\486\` | — | **No se migra** (decisión) | — |
 | PAGTOT | `O:\PRG\GPO1\486\PAGOS\` | `dat.PAGO_ARRIBADO` (tabla fija) | Recibida: 543 mil pagos. Solo se guardan CUENTA + FE_PAG + importe (lo que usa la validación); 12,865 renglones viejos con FE_PAG incompleta no pueden coincidir y se omiten | Lista |
 | TELSAN | `O:\PRG\MEXGPO1\ASI486\` | `ops.TELEFONO` (se arma en cada asignación) | Recibida: la regla nueva reproduce sus 15,353 teléfonos; no se migra | Lista |
 | TAB7 | `O:\DAT\GPO1\486\` | `dat.FOLIO_CONSECUTIVO` | FOLIO, CLIENTE, FE_CAPT, TIME | [ ] |
-| eti486 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (ETI486) | CUENTA2, MORA | [ ] |
+| eti486 | `O:\PRG\MEXGPO1\ASI486\` | — | Ya no se usa | — |
 | eti | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (ETI) | CUENTA, ETIQUETA | [ ] |
 | dm1 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (DM1) | CUENTA, ETIQUETA | [ ] |
 | top | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (TOP) | CUENTA2, ETIQUETA | [ ] |
@@ -58,7 +60,7 @@ Se cargan con `tools/migrar_dbf.py`. Para cada una necesito la **estructura** pa
 | exc486 | `O:\PRG\GPO1\486\` | `cfg.EXCLUSION` (CUENTA) | CUENTA | [ ] |
 | dirmal | `O:\ASIGNA\` | `cfg.EXCLUSION` (DIRECCION) | CUENTA, DIRECC1 | [ ] |
 | EMAILMALO | `O:\ASIGNA\` | `cfg.EXCLUSION` (CORREO) | CUENTA, EMAIL | [ ] |
-| blacklist_486 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.EXCLUSION` (TELEFONO) | TEL | [ ] |
+| blacklist_486 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.EXCLUSION` (TELEFONO) | TEL, solo 10 dígitos (los demás se omiten) | Lista |
 | TELBAJ_G1 | `\\192.168.50.108\T\CYBER_SISTEMAS\CYBER\TELEFONOS\` | `cfg.EXCLUSION` (TELEFONO por cuenta) | CUENTA, TEL | [ ] |
 | LADA | `O:\PRG\MEXGPO1\ASI486\` | `cfg.LADA` | CP, LADA | [ ] |
 | PNC | `\\192.168.50.108\T\CYBER_SISTEMAS\CYBER\PNM\` | `cfg.PLAN_NUMERACION` | Ya revisada (repo): LADA, SERIE, N_INI, N_FIN, TIPORED | Lista |
@@ -79,8 +81,8 @@ Las bitácoras que se subían a Oracle y a server (`RCVRY.JSP_VALIDADOR_TELEFONO
 - [x] `sub_mst.TXT` de `ACT_PHONE`: CUENTA2|AREA|TELEFONO|TIPOTEL (confirmado con TELSAN).
 - [x] `C:\STATUSBAJ.txt`: CLIENTE|FOLIO|CUENTA|STATUS|ACCION|FECHA|PESO|DMSSNUM.
 - [x] `BAJPAG.TXT`: cuenta|monto|fecha.
-- [ ] `SERTEC_Saldos_Hip` (archivo de saldos de Hipotecario; no hay ejemplo).
-- [ ] Base maestra de Hipotecario (no hay ejemplo; columnas tomadas de la hoja RAW).
+- [ ] `SERTEC_Saldos_Hip`: todavía no se recibe del banco; la carga queda apagada hasta tener un ejemplo.
+- [x] Base maestra de Hipotecario recibida.
 
 ## 5. No hacen falta
 
@@ -88,21 +90,20 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 ## 6. Preguntas abiertas
 
-- [ ] **Bases maestras en Excel (.xlsx):** la macro abre el .xlsx del banco y deja CSV con solo algunas columnas. Para guardar la base completa sin macro, SQL Server tiene que leer el .xlsx: (a) paso de Python en el job (recomendado), (b) proveedor ACE OLEDB en el servidor, o (c) seguir con la macro (solo columnas recortadas).
-- [ ] **ETIQUETAS486.xlsx:** ¿el archivo de etiquetado que manda Operación trae los encabezados de "DAT OPERACIÓN" (CUENTA2, SEG_CICLO, CLASIFICA, ETIQUETA2…)? ¿MORA (ETIQUETA1) y ETIQUETA6 (TOP) también se etiquetan así? ¿CAPITAL va a `dmamtdlq` en CYBER (igual que SDO_VDO)?
 
 - [ ] **Importes negativos** (ej. saldo TDC -87.13): SCBSDOS hoy manda `000000000087.13` (positivo) y el script de saldos `000000000-87.13`. Opciones: como hoy, `000000000000.00` (cero) o `-00000000087.13` (signo). Parámetro `NEGATIVO_MODO`.
 - [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.
 - [ ] **Acceso a CYBER desde la máquina que corra `tools/bajar_cyber.py`:** usuario de Oracle de solo lectura, host/servicio y versión.
 - [ ] **Ruta de red de `Q:`** para la cuenta de servicio de SQL Server.
 - [ ] **Días festivos:** el T-1 de pagos y el job solo distinguen fin de semana. ¿Se agrega un calendario de días inhábiles (ej. después de un festivo, T-1 sería el último día hábil)?
-- [ ] **¿Se sigue usando `eti486.prg`** (etiquetado de columnas del DAT con archivo de Operación)? Está como `ops.sp_etiquetado_dat`.
+- [ ] **Estructura de las tablas de CYBER:** sin acceso; se mantienen los campos como se ven en los .prg.
 
 ## Ya resuelto
 
-- PURGA recibida (582,620 bajas; no trae fecha de baja) y TAB7 (último folio 179,688): la migración las toma.
+- TAB7 (último folio 179,688) entra a la migración. PURGA y DEVOL se quedan fuera: el objetivo es dejar las bases viejas y generar los archivos planos (saldos, teléfonos, gescar) y reparar datos, en automático o a mano.
 - Base maestra de Hipotecario recibida: 118 columnas; las 40 del mapeo se encuentran.
-- Macro `ASIG_486.xlsm` revisada: regla nueva NAME2 vacío o '-' → NAME1 (TDC), ya aplicada.
+- Macro `ASIG_486.xlsm`: su regla NAME2 vacío o '-' → NAME1 ya está aplicada y la macro se elimina.
+- Etiquetado: `ops.sp_etiquetar_campo @campo, @archivo` (CSV FOLIO,ETIQUETA) actualiza un campo del DAT. Acepta nuestro nombre o el de Operación (ETIQUETAS486 → `ETIQUETADO_ALIAS`) y sustituye a eti486.prg.
 
 - Flujo diario: de lunes a viernes llega la actualización; la asignación puede o no llegar y siempre después. `ops.sp_diario_486` (job cada 30 min) corre la actualización y luego la asignación si llegó; la asignación no corre sin la actualización OK del día; T-1 de pagos = día hábil anterior.
 - Controles `O:\ASIGNA\NUEVAS` y `O:\ASIGNA\asignaciones` se descartan (queda `ops.CORRIDA` + `ops.BITACORA`).
