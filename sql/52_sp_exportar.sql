@@ -157,6 +157,22 @@ BEGIN
     ORDER BY l.ARCHIVO;
     UPDATE #plan SET LINEAS = LINEAS + 1 WHERE ENCABEZADO = 1;
 
+    /* Dos salidas con el mismo nombre en una corrida (ej. DAT_MIS_RET y DAT_MIS_ASIG = DAT486_<fecha>.csv):
+       se escribe la que se generó al final (la de la bitácora más reciente), que tiene el DAT final */
+    ;WITH g AS (
+        SELECT p.ORDEN, ROW_NUMBER() OVER (PARTITION BY p.NOMBRE ORDER BY
+                 (SELECT MAX(b.ID) FROM ops.BITACORA b WHERE b.ID_CORRIDA = @id_corrida AND b.PASO = 'SALIDA'
+                    AND (b.MENSAJE LIKE p.ARCHIVO + N' %' OR b.MENSAJE LIKE p.ARCHIVO + N':%')) DESC, p.ORDEN DESC) AS RN,
+               p.ARCHIVO, p.NOMBRE
+        FROM #plan p)
+    SELECT ARCHIVO, NOMBRE INTO #omitidos FROM g WHERE RN > 1;
+    DELETE p FROM #plan p WHERE p.ARCHIVO IN (SELECT ARCHIVO FROM #omitidos);
+    IF EXISTS (SELECT 1 FROM #omitidos)
+    BEGIN
+        SET @msg = (SELECT STRING_AGG(CONCAT(ARCHIVO, N' (', NOMBRE, N')'), N', ') FROM #omitidos);
+        PRINT CONCAT('Se omiten por tener el mismo nombre que una salida posterior: ', @msg);
+    END;
+
     IF @sin_scripts = 0
         INSERT INTO #plan (TIPO, ARCHIVO, NOMBRE, CHARSET, EOL, ENCABEZADO, SEP, LINEAS)
         SELECT 'SCRIPT', SCRIPT, N'cyber\' + SCRIPT + N'.sql', 'windows-1252', 'CRLF', 0, NULL, COUNT(*)
