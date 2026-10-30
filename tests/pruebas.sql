@@ -607,12 +607,15 @@ INSERT INTO @m EXEC ops.sp_avisar 2, 'ASIG_EXPRESS_486', 1;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'AVISO: correo express con sus destinatarios', CASE WHEN (SELECT CC FROM @m) LIKE N'%carlos.landa@sertec.com.mx%'
        AND (SELECT ASUNTO FROM @m) LIKE N'Se realiza Asignacion Express Banco Bajio,%' THEN 1 ELSE 0 END, (SELECT ASUNTO FROM @m);
 
-/* Se revierten las dos corridas de etiquetado para seguir con el retroceso */
-DECLARE @e1 INT = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ETI');
-DECLARE @e0 INT = (SELECT MIN(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ETI');
+/* Se revierten las corridas de etiquetado (de la más reciente a la más vieja) para seguir con el retroceso */
+DECLARE @e0 INT = (SELECT MIN(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ETI'), @ex INT;
 BEGIN TRY
-    EXEC ops.sp_revertir_corrida @e1, 1;
-    EXEC ops.sp_revertir_corrida @e0, 1;
+    WHILE 1 = 1
+    BEGIN
+        SET @ex = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ETI' AND ESTATUS = 'OK');
+        IF @ex IS NULL BREAK;
+        EXEC ops.sp_revertir_corrida @ex, 1;
+    END;
 END TRY
 BEGIN CATCH
     INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'ETI: retroceso', 0, ERROR_MESSAGE();
