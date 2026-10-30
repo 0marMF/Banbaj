@@ -78,7 +78,8 @@ BEGIN
     FROM #no n;
 
     SET @msg = CONCAT(N'Arribados: ', @arribados, N' · en CYBER hoy: ', @en_cyber, N' · no subieron: ', @no_subieron);
-    EXEC ops.sp_log @id_corrida, 'CUADRE PAGOS', CASE WHEN @no_subieron = 0 THEN 'OK' ELSE 'AVISO' END, @no_subieron, @msg;
+    DECLARE @est VARCHAR(15) = CASE WHEN @no_subieron = 0 THEN 'OK' ELSE 'AVISO' END;
+    EXEC ops.sp_log @id_corrida, 'CUADRE PAGOS', @est, @no_subieron, @msg;
 
     IF @no_subieron > 0
     BEGIN
