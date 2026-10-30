@@ -114,6 +114,7 @@ BEGIN
         EXEC ops.sp_act_preparar       @id_corrida;
         EXEC ops.sp_validar            @id_corrida, 'RETIRO';         -- criterios de retiro -> ops.DEVOLUCION
         EXEC ops.sp_act_aplicar        @id_corrida;
+        EXEC ops.sp_validar            @id_corrida, 'POST_ACT';       -- SALDOSMAL: saldos recibidos que no quedaron en el DAT (alerta)
         EXEC ops.sp_act_pagos          @id_corrida;
         EXEC ops.sp_homologar          @id_corrida, 'dat.DAT_486';     -- estructura.prg: REE por segmento, tramo y tipo
         IF @aplicar_retiro = 1

@@ -262,6 +262,10 @@ GO
 IF OBJECT_ID('stg.CYBER_TELEFONO') IS NULL
 CREATE TABLE stg.CYBER_TELEFONO (CUENTA NVARCHAR(28) NULL, LADA NVARCHAR(10) NULL, TEL NVARCHAR(20) NULL);
 GO
+/* Pagos que CYBER registró en el día (BAJ.sql: RCVRY.pmtfil), para cuadrar contra lo arribado */
+IF OBJECT_ID('stg.CYBER_PAGO') IS NULL
+CREATE TABLE stg.CYBER_PAGO (CUENTA NVARCHAR(28) NULL, MONTO NVARCHAR(30) NULL, FECHA NVARCHAR(20) NULL);
+GO
 /* Base maestra completa (todas las columnas, tal como llegó): solo la última de cada
    segmento; cuando llega una nueva, reemplaza a la anterior. La historia por cuenta
    queda en dat.HISTORIA_FOLIO. Los procesos solo toman las columnas de cfg.ARCHIVO_COLUMNA.

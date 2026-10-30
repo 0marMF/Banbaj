@@ -607,6 +607,49 @@ INSERT INTO @m EXEC ops.sp_avisar 2, 'ASIG_EXPRESS_486', 1;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'AVISO: correo express con sus destinatarios', CASE WHEN (SELECT CC FROM @m) LIKE N'%carlos.landa@sertec.com.mx%'
        AND (SELECT ASUNTO FROM @m) LIKE N'Se realiza Asignacion Express Banco Bajio,%' THEN 1 ELSE 0 END, (SELECT ASUNTO FROM @m);
 
+/* Retiros por actualización con el ZIP adjunto (saldos.prg) */
+DELETE FROM @m;
+INSERT INTO @m EXEC ops.sp_avisar 3, 'RETIROS_ACT_486', 1, N'D:\Banbaj\486\salida\RETIROS_486_prueba.zip';
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'AVISO: retiros por actualización con adjunto',
+       CASE WHEN (SELECT ADJUNTOS FROM @m) = N'D:\Banbaj\486\salida\RETIROS_486_prueba.zip' AND (SELECT PARA FROM @m) LIKE N'%soluciones.486@sertec.com.mx%' THEN 1 ELSE 0 END,
+       (SELECT CONCAT(ASUNTO, ' | ', ADJUNTOS) FROM @m);
+
+/* Horas del arribo (bitac/bitact: solicitud, autorización y fin) */
+DECLARE @act INT = (SELECT MIN(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ACT');
+EXEC ops.sp_marcar_arribo @act, 'solicitud', '2026-11-03T10:00:00';
+EXEC ops.sp_marcar_arribo @act, 'AUTORIZACION', '2026-11-03T10:20:00';
+EXEC ops.sp_marcar_arribo @act, 'AUTORIZACION', '2026-11-03T10:25:00';      -- la última marca es la que vale
+EXEC ops.sp_marcar_arribo @act, 'FIN', '2026-11-03T11:00:00';
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ARRIBO: horas de solicitud, autorización y fin' AS p, N'25|35|1' AS e,
+             (SELECT CONCAT(MIN_ESPERA_AUTORIZACION, '|', MIN_ARRIBO, '|', (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @act AND PASO = 'ARRIBO AUTORIZACION'))
+              FROM ops.v_TIEMPOS_CORRIDA WHERE ID_CORRIDA = @act) AS o) x;
+
+/* Cuadre de pagos contra CYBER (BAJ.sql): CYBER trae todos menos uno, más uno ajeno */
+DECLARE @pc INT = (SELECT MIN(ID_CORRIDA) FROM dat.PAGO_ARRIBADO WHERE ORIGEN = 'CORRIDA');
+DECLARE @falta BIGINT = (SELECT MIN(ID) FROM dat.PAGO_ARRIBADO WHERE ID_CORRIDA = @pc AND ORIGEN = 'CORRIDA' AND CUENTA2 IS NOT NULL);
+-- los arribados sin CUENTA2 (crédito que no está en el DAT) tampoco pueden aparecer en CYBER
+DECLARE @sin_c2 INT = (SELECT COUNT(*) FROM dat.PAGO_ARRIBADO WHERE ID_CORRIDA = @pc AND ORIGEN = 'CORRIDA' AND CUENTA2 IS NULL);
+INSERT INTO stg.CYBER_PAGO (CUENTA, MONTO, FECHA)
+SELECT CUENTA2, CONVERT(VARCHAR(30), IMPORTE), '03/11/2026' FROM dat.PAGO_ARRIBADO WHERE ID_CORRIDA = @pc AND ORIGEN = 'CORRIDA' AND ID <> @falta
+UNION ALL SELECT '486-999999', '10.00', '03/11/2026';
+EXEC ops.sp_cuadrar_pagos @pc;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'PAGOS: cuadre contra CYBER detecta el que no subió' AS p,
+             CONCAT(1 + @sin_c2, '|AVISO|1|0') AS e,
+             CONCAT((SELECT COUNT(*) FROM ops.RECHAZO WHERE ID_CORRIDA = @pc AND ORIGEN = 'CUADRE_PAGOS'), '|',
+                    (SELECT TOP (1) ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @pc AND PASO = 'CUADRE PAGOS' ORDER BY ID DESC), '|',
+                    (SELECT COUNT(*) FROM ops.RECHAZO r JOIN dat.PAGO_ARRIBADO p ON p.ID = @falta
+                     WHERE r.ID_CORRIDA = @pc AND r.ORIGEN = 'CUADRE_PAGOS' AND JSON_VALUE(r.DATOS, '$.CUENTA2') = p.CUENTA2
+                       AND CAST(JSON_VALUE(r.DATOS, '$.IMPORTE') AS DECIMAL(15,2)) = p.IMPORTE), '|',
+                    (SELECT COUNT(*) FROM stg.CYBER_PAGO)) AS o) x;
+
+/* Reglas nuevas en el catálogo */
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE)
+SELECT N'REGLAS: saldos no actualizados (POST_ACT) y saldos iguales al DAT', CASE WHEN x.o = N'1|3' THEN 1 ELSE 0 END, x.o
+FROM (SELECT CONCAT((SELECT COUNT(*) FROM cfg.REGLA WHERE CODIGO = 'SALDOS_NO_ACTUALIZADOS' AND PASO = 'POST_ACT'), '|',
+                    (SELECT COUNT(*) FROM cfg.REGLA WHERE CODIGO LIKE '%[_]SALDOS_IGUALES_DAT')) AS o) x;
+
 /* Se revierten las corridas de etiquetado (de la más reciente a la más vieja) para seguir con el retroceso */
 DECLARE @e0 INT = (SELECT MIN(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ETI'), @ex INT;
 BEGIN TRY

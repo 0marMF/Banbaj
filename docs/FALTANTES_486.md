@@ -100,6 +100,11 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 ## Ya resuelto
 
+- Revisión de los flujos actuales (29/10), pasos que **ya no** van: covid.dbf, garantizada.dbf, O:\ASIGNA\NUEVAS, C:\dev486_completa, captura de "a quién se pide el DAT", verifica.xls.
+- Pasos que **se quedan**: horas de solicitud, autorización y fin del arribo (`ops.sp_marcar_arribo`, `ops.v_TIEMPOS_CORRIDA`); cuadre de pagos contra CYBER (`bajar_cyber.py pagos` → `ops.sp_cuadrar_pagos`); saldos que no se actualizaron (regla `SALDOS_NO_ACTUALIZADOS`, paso POST_ACT); retiros por actualización con ZIP y correo; correos 1, 2, 9 y 10.
+- Regla de la pestaña REGLAS "Validar que los saldos sean diferentes al último DAT": `*_SALDOS_IGUALES_DAT` avisa si toda la base maestra de un segmento trae los mismos SALDO1-3 que el DAT.
+- Corrección D162 = C162 de la macro: en la hoja BASE original C es NAME1 y D es NAME2, así que es la regla "si NAME2 viene vacío se toma NAME1" grabada para una sola fila. Como la macro ya borró columnas antes de esa línea, hoy pega NAME2 en Tipo de TDC (ESTRA3) en la fila 162. No se migra: la regla general ya está en la homologación.
+
 - TAB7 (último folio 179,688) entra a la migración. PURGA y DEVOL se quedan fuera: el objetivo es dejar las bases viejas y generar los archivos planos (saldos, teléfonos, gescar) y reparar datos, en automático o a mano.
 - Base maestra de Hipotecario recibida: 118 columnas; las 40 del mapeo se encuentran.
 - Macro `ASIG_486.xlsm`: su regla NAME2 vacío o '-' → NAME1 ya está aplicada y la macro se elimina.

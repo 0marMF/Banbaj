@@ -2,6 +2,7 @@
 
 Uso: python tests/prueba_exportar.py "<cadena ODBC>"
 """
+import os
 import subprocess
 import sys
 import tempfile
@@ -47,6 +48,23 @@ def main(conexion):
     devol = list(asig.glob("MX_G1MCT_DVBJIG_20261102_*"))
     ok("Devolución para CYBER con fecha y hora en el nombre", len(devol) == 1 and lineas(devol[0])[1][0].rstrip() == b"486-101")
     ok("Lista de retiros para operación", (asig / "RETIROS_486_20261102.csv").exists())
+
+    # ZIP con contraseña de los retiros (saldos.prg: RETIROS_PAG_486_*.zip)
+    tmpz = Path(tempfile.mkdtemp())
+    env = dict(os.environ, BANBAJ_ZIP_CLAVE="Prueba{MM}{AAAA}")
+    r = subprocess.run([sys.executable, str(RAIZ / "tools" / "exportar_salidas.py"), "--conexion", conexion, "--corrida", "2",
+                        "--carpeta", str(tmpz), "--solo", "RETIROS", "--zip", "RETIROS"], capture_output=True, text=True, env=env)
+    zips = list((tmpz / "20261102_corrida2").glob("RETIROS_486_*.zip"))
+    contenido = b""
+    if zips:
+        import pyzipper, datetime as dt
+        clave = dt.date.today().strftime("Prueba%m%Y").encode()
+        with pyzipper.AESZipFile(zips[0]) as z:
+            z.setpassword(clave)
+            contenido = z.read("RETIROS_486_20261102.csv")
+    original = (asig / "RETIROS_486_20261102.csv").read_bytes() if (asig / "RETIROS_486_20261102.csv").exists() else None
+    ok("ZIP de retiros con contraseña (mismo contenido que el CSV)", r.returncode == 0 and len(zips) == 1 and contenido and contenido == original,
+       (r.stdout + r.stderr)[-300:])
     ok("Scripts de CYBER (retiro y teléfonos)", (asig / "cyber" / "RETIRO.sql").exists() and (asig / "cyber" / "TEL_ACTUALIZA.sql").exists())
 
     mis = asig / "DAT486_20261102.csv"

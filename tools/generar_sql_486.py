@@ -379,6 +379,14 @@ ESTRUCTURA_REE = [
 HOMOLOGACION = HOMOLOGACION + [("dat.DAT_486",) + x for x in ESTRUCTURA_REE]
 
 # (PROCESO, PASO, CODIGO, TABLA, CONDICION, EVALUA, ACCION, MENSAJE, PLANTILLA, ORDEN, REQ)
+def SALDOS_IGUALES(tabla, cols):
+    """Se dispara solo si la base llegó y TODAS sus cuentas existen en el DAT con los mismos saldos."""
+    def igual(a):
+        cond = " AND ".join(f"ISNULL(d.{c}, -1) = ISNULL({a}.{c}, -1)" for c in cols)
+        return f"EXISTS (SELECT 1 FROM dat.DAT_486 d WHERE d.CLIENTE = '{{CLIENTE}}' AND d.CUENTA = {a}.CUENTA AND {cond})"
+    return f"{igual('t')} AND NOT EXISTS (SELECT 1 FROM {tabla} o WHERE o.ID_CORRIDA = t.ID_CORRIDA AND NOT {igual('o')})"
+
+
 CIENTIFICA = lambda *cols: " OR ".join(f"t.{c} LIKE '%[0-9][Ee][+-][0-9]%'" for c in cols)
 REGLAS = [
     ("ASIG", "POST_CARGA", "TDC_NOTACION_CIENTIFICA", "stg.ENT_MAESTRA_TDC", CIENTIFICA("PRIME4DIG", "RIESGO"), "FILAS", "CANCELAR",
@@ -387,11 +395,20 @@ REGLAS = [
      "La base maestra Consumo trae créditos en notación científica (Excel cortó el número al guardar el CSV)", "MAESTRA_NUMEROS_EXCEL_486", 2, None),
     ("ASIG", "POST_CARGA", "HIPO_NOTACION_CIENTIFICA", "stg.ENT_MAESTRA_HIPO", CIENTIFICA("CUENTA", "RIESGO"), "FILAS", "CANCELAR",
      "La base maestra Hipotecario trae créditos en notación científica (Excel cortó el número al guardar el CSV)", "MAESTRA_NUMEROS_EXCEL_486", 3, None),
+    ("ASIG", "POST_CARGA", "TDC_SALDOS_IGUALES_DAT", "stg.ENT_MAESTRA_TDC", SALDOS_IGUALES("stg.ENT_MAESTRA_TDC", ["SALDO1", "SALDO2", "SALDO3"]), "FILAS", "ALERTAR",
+     "Todas las cuentas de la base maestra TDC traen SALDO1-3 iguales al último DAT", "SALDOS_IGUALES_DAT_486", 5, None),
+    ("ASIG", "POST_CARGA", "CONSUMO_SALDOS_IGUALES_DAT", "stg.ENT_MAESTRA_CONSUMO", SALDOS_IGUALES("stg.ENT_MAESTRA_CONSUMO", ["SALDO1", "SALDO2", "SALDO3"]), "FILAS", "ALERTAR",
+     "Todas las cuentas de la base maestra Consumo traen SALDO1-3 iguales al último DAT", "SALDOS_IGUALES_DAT_486", 6, None),
+    ("ASIG", "POST_CARGA", "HIPO_SALDOS_IGUALES_DAT", "stg.ENT_MAESTRA_HIPO", SALDOS_IGUALES("stg.ENT_MAESTRA_HIPO", ["SALDO1", "SALDO2"]), "FILAS", "ALERTAR",
+     "Todas las cuentas de la base maestra Hipotecario traen SALDO1-2 iguales al último DAT", "SALDOS_IGUALES_DAT_486", 7, None),
     ("ASIG", "POST_CARGA", "SDO_ACT_CONSUMO_CERO", "stg.ENT_MAESTRA_CONSUMO", "t.SDO_ACT <= 0", "FILAS", "ALERTAR",
      "Cuentas de Consumo con saldo actual <= 0 en la base maestra: reportarlo al banco", "ALERTA_SDO_ACT_CONS_486", 10, None),
     ("ASIG", "PRE_ALTA", "EXCLUSION_CUENTAS", "stg.LAYOUT_486",
      "t.ES_EXISTENTE = 0 AND EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'CUENTA' AND e.ACTIVO = 1 AND e.VALOR = t.CUENTA)",
      "FILAS", "EXCLUIR", "Cuenta en la lista de exclusión (exc486)", None, 10, "Yolanda Osornio 02/09/2020"),
+    ("ACT", "POST_ACT", "SALDOS_NO_ACTUALIZADOS", "stg.SALDOS_486",
+     "t.CUENTA IS NOT NULL AND t.SDO_ACT IS NOT NULL AND EXISTS (SELECT 1 FROM dat.DAT_486 d WHERE d.CLIENTE = '{CLIENTE}' AND d.CUENTA = t.CUENTA AND ISNULL(d.SDO_ACT, -999999) <> t.SDO_ACT)",
+     "FILAS", "ALERTAR", "Hay saldos recibidos que no quedaron en el DAT (SALDOSMAL)", "SALDOS_NO_ACTUALIZADOS_486", 10, None),
     ("ACT", "POST_CARGA", "PAGOS_NEGATIVOS", "stg.ENT_PAGOS", "t.IMPORTE < 0", "FILAS", "EXCLUIR",
      "Llegaron pagos negativos: no se arriban (no salen en SCBPAG) y se avisa a Operación", "PAGOS_NEGATIVOS_486", 10, None),
     ("ACT", "POST_CARGA", "PAGOS_T1", "stg.ENT_PAGOS", "t.FECHA = cfg.fn_dia_habil_anterior(CAST('{FECHA}' AS DATE))", "SIN_FILAS", "ALERTAR",
@@ -655,6 +672,15 @@ PLANTILLAS = [
     ("MAESTRA_NUMEROS_EXCEL_486", "ASIGNACIONES_486", "Asignación 486 detenida: base maestra con números cortados por Excel {{FECHA}}",
      "La base maestra se guardó como CSV con cuentas en notación científica (ej. 1.23457E+15). Formatea esas columnas como Texto en Excel, vuelve a guardar el CSV y corre de nuevo.",
      "<p>Registros: {{REGISTROS}}</p>", "High"),
+    ("SALDOS_NO_ACTUALIZADOS_486", "ASIGNACIONES_486", "Banco Bajío: saldos que no se actualizaron {{FECHA}}",
+     "Hay saldos del archivo del banco que no quedaron en el DAT. Revisa antes de arribar el SCBSDOS.",
+     "<p>Registros: {{REGISTROS}}</p>", "High"),
+    ("SALDOS_IGUALES_DAT_486", "ASIGNACIONES_486", "Banco Bajío: los saldos de la base maestra no cambiaron {{FECHA}}",
+     "La base maestra trae los mismos SALDO1, SALDO2 y SALDO3 que el último DAT en todas sus cuentas. Puede ser una base repetida: confírmalo con el banco.",
+     "<p>{{MENSAJE}}</p>", "High"),
+    ("PAGOS_NO_SUBIERON_486", "ASIGNACIONES_486", "Banco Bajío: pagos arribados que no aparecen en CYBER {{FECHA}}",
+     "Al cuadrar contra CYBER hay pagos del SCBPAG que no se registraron. Revisa antes de cerrar la actualización.",
+     "<p>Arribados: {{ARRIBADOS}} · en CYBER: {{EN_CYBER}} · no subieron: {{REGISTROS}}</p><pre>{{DETALLE}}</pre>", "High"),
     ("ERROR_PROCESO_486", "ASIGNACIONES_486", "Error en {{PROCESO}} (corrida {{ID_CORRIDA}})",
      "El proceso terminó con error.", "<p>{{ERROR}}{{MENSAJE}}</p>", "High"),
 ]

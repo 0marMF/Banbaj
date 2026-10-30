@@ -319,14 +319,15 @@ GO
 CREATE OR ALTER PROCEDURE ops.sp_avisar
     @id_corrida INT,
     @plantilla  VARCHAR(60),
-    @solo_prueba BIT = 0
+    @solo_prueba BIT = 0,
+    @adjuntos   NVARCHAR(MAX) = NULL    -- rutas visibles para el servicio de SQL Server, separadas por ';' (ej. el ZIP de retiros)
 AS
 BEGIN
     SET NOCOUNT ON;
     DECLARE @json NVARCHAR(MAX) = (SELECT ID_CORRIDA AS CORRIDA, PROCESO, ISNULL(MENSAJE, N'') AS RESUMEN
                                    FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
     IF @json IS NULL THROW 50630, 'La corrida no existe.', 1;
-    EXEC mail.sp_enviar @plantilla = @plantilla, @id_corrida = @id_corrida, @valores = @json, @solo_prueba = @solo_prueba;
+    EXEC mail.sp_enviar @plantilla = @plantilla, @id_corrida = @id_corrida, @valores = @json, @adjuntos = @adjuntos, @solo_prueba = @solo_prueba;
 END;
 GO
 

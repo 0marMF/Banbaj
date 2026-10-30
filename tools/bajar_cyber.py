@@ -3,15 +3,18 @@
     python tools/bajar_cyber.py status    --corrida 125 --oracle rcvry@192.168.90.10:1521/sertecp --conexion "<ODBC SQL Server>"
     python tools/bajar_cyber.py correos   --corrida 125 --oracle … --conexion …
     python tools/bajar_cyber.py telefonos --corrida 125 --oracle … --conexion …
+    python tools/bajar_cyber.py pagos     --corrida 130 --oracle … --conexion …   (después de arribar SCBPAG)
 
     status     STATUS.SQL (status.prg)          -> stg.CYBER_STATUS   -> ops.sp_blanqueo_status
     correos    cyadd.sql  (email.PRG)           -> stg.CYBER_CORREO   -> ops.sp_correos_nuevos
     telefonos  TELs_486.sql (ges486.prg)        -> stg.CYBER_TELEFONO -> ops.sp_gescar_sin_telefono
+    pagos      BAJ.sql (saldos.prg)             -> stg.CYBER_PAGO     -> ops.sp_cuadrar_pagos
 
 La contraseña de Oracle se toma de la variable de entorno CYBER_ORACLE_PWD o se pide al
 correr; nunca se guarda. --solo-bajar carga la tabla de paso sin ejecutar el procedimiento.
 --forzar (solo status) blanquea aunque no sea día 1 a 10. --thick usa Oracle Instant Client
-(para versiones de Oracle anteriores a 12.1).
+(para versiones de Oracle anteriores a 12.1). --fecha (solo pagos, AAAA-MM-DD) cuadra
+los pagos registrados ese día; por omisión, hoy (como BAJ.sql).
 
 Requiere: pip install oracledb pyodbc
 """
@@ -47,6 +50,15 @@ CONSULTAS = {
         "columnas": ["CUENTA", "LADA", "TEL"],
         "proc": "EXEC ops.sp_gescar_sin_telefono @id_corrida = ?",
     },
+    "pagos": {
+        "sql": """select PMACCT, TO_CHAR(PMAMOUNT, 'FM999999999990.00'), TO_CHAR(PMEDATE, 'DD/MM/YYYY')
+                  from RCVRY.pmtfil
+                  where PMACCTG = '1' and PMACCT in (select DMACCT from RCVRY.delqmst where DMCOMPANY = :cliente)
+                    and TRUNC(PMEDATE) = TO_DATE(:fecha, 'YYYY-MM-DD')""",
+        "tabla": "stg.CYBER_PAGO",
+        "columnas": ["CUENTA", "MONTO", "FECHA"],
+        "proc": "EXEC ops.sp_cuadrar_pagos @id_corrida = ?",
+    },
 }
 
 
@@ -67,6 +79,7 @@ def main():
     ap.add_argument("--solo-bajar", action="store_true")
     ap.add_argument("--forzar", action="store_true")
     ap.add_argument("--thick", action="store_true")
+    ap.add_argument("--fecha", default=None, help="solo pagos: día a cuadrar AAAA-MM-DD (por omisión hoy)")
     a = ap.parse_args()
     if not a.solo_bajar and a.corrida is None:
         ap.error("--corrida es obligatoria (o usa --solo-bajar)")
@@ -84,7 +97,11 @@ def main():
     with oracledb.connect(user=usuario, password=clave, dsn=dsn) as ora:
         cur = ora.cursor()
         cur.arraysize = 5000
-        cur.execute(c["sql"], cliente=a.cliente)
+        binds = {"cliente": a.cliente}
+        if a.que == "pagos":
+            import datetime as dt
+            binds["fecha"] = a.fecha or dt.date.today().isoformat()
+        cur.execute(c["sql"], **binds)
         filas = [[texto(v) for v in r] for r in cur.fetchall()]
     print(f"   {len(filas)} registros bajados")
 

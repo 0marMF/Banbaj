@@ -71,6 +71,19 @@ EXEC ops.sp_etiquetar_campo @campo = 'MORA', @archivo = N'D:\Banbaj\486\etiqueta
 -- TOP (ETIQUETA6) no es columna del DAT:
 EXEC cfg.sp_etiqueta_cargar '486', 'TOP', N'D:\Banbaj\486\etiquetas\top.csv', 'AGREGAR';
 
+-- Horas del arribo a CYBER (antes bitac/bitact): solicitud, autorización y fin
+EXEC ops.sp_marcar_arribo @id_corrida = 130, @evento = 'SOLICITUD';
+EXEC ops.sp_marcar_arribo @id_corrida = 130, @evento = 'AUTORIZACION';
+EXEC ops.sp_marcar_arribo @id_corrida = 130, @evento = 'FIN';
+SELECT * FROM ops.v_TIEMPOS_CORRIDA ORDER BY ID_CORRIDA DESC;
+
+-- Cuadre de pagos después de arribar SCBPAG (antes BAJ.sql + C:\NO_SUBIERON486)
+--   python tools/bajar_cyber.py pagos --corrida 130 --oracle … --conexion …
+
+-- Retiros por actualización: ZIP con contraseña y correo con el adjunto
+--   python tools/exportar_salidas.py --conexion … --corrida 130 --carpeta \\servidor\banbaj\salida --zip RETIROS
+EXEC ops.sp_avisar 130, 'RETIROS_ACT_486', @adjuntos = N'\\servidor\banbaj\salida\…\RETIROS_486_….zip';
+
 -- Lista negra de teléfonos con requerimiento (solo 10 dígitos; los demás se cuentan y se omiten)
 EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'D:\Banbaj\486\blacklist.csv', @req = 'REQ 2026-…', @solicita = N'…';
 

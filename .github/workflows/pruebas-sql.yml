@@ -75,6 +75,7 @@ jobs:
         run: |
           set -o pipefail
           echo "== tests/prueba_exportar.py" | tee -a resultado.txt
+          pip install -q pyzipper
           python3 tests/prueba_exportar.py "DRIVER={ODBC Driver 18 for SQL Server};SERVER=localhost,1433;DATABASE=Banbaj;UID=sa;PWD=$SA;TrustServerCertificate=yes" 2>&1 | tee -a resultado.txt
 
       - name: Publicar resultado en la rama ci-resultados

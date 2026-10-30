@@ -20,7 +20,7 @@ Hoy todos salen por CDO (SMTP 192.168.50.7) y casi todos esperan un "¿Deseas en
 | **CCO** | asignaciones.cdmx1, asignaciones3, asig.cdmx |
 | **En Banbaj** | `CONFIRMACION_ASIG_486`, lista `OPERACION_ASIG_486`. Se manda a mano con `ops.sp_avisar` después de arribar a CYBER |
 
-- [ ] Mantener  - [ ] Eliminar  · **Cambios:**
+- [x] Mantener  - [ ] Eliminar  · **Decidido (29/10)**  · **Cambios:**
 
 ### 2. Asignación Express
 | | |
@@ -34,7 +34,7 @@ Hoy todos salen por CDO (SMTP 192.168.50.7) y casi todos esperan un "¿Deseas en
 | **CCO** | asignaciones.cdmx1, asignaciones3, asig.cdmx |
 | **En Banbaj** | `ASIG_EXPRESS_486`, lista `ASIG_EXPRESS_486`. A mano con `ops.sp_avisar` |
 
-- [ ] Mantener  - [ ] Eliminar  · **Cambios:**
+- [x] Mantener  - [ ] Eliminar  · **Decidido (29/10)**  · **Cambios:**
 
 ### 3. Alerta de asignación grande (más de 100 nuevas)
 | | |
@@ -102,9 +102,9 @@ Hoy todos salen por CDO (SMTP 192.168.50.7) y casi todos esperan un "¿Deseas en
 | **Adjunto** | `RETIROS_PAG_486_<fecha><hora>.zip` |
 | **Para** | soluciones.486, supervisor.mc, supervisor.mc3, supervisorbackoffice.mc, soluciones_banbajio |
 | **CCO** | asignaciones3, asig.cdmx, asignaciones.cdmx1 |
-| **En Banbaj** | `RETIROS_ACT_486`. **Pendiente:** el correo de SQL Server puede adjuntar el archivo, pero falta decidir si va el .zip o el .txt directo |
+| **En Banbaj** | `RETIROS_ACT_486`. Se queda con ZIP con contraseña: `tools/exportar_salidas.py --zip RETIROS` lo arma y `ops.sp_avisar <corrida>, 'RETIROS_ACT_486', @adjuntos = N'<ruta del ZIP>'` lo manda |
 
-- [ ] Mantener  - [ ] Eliminar  · **Cambios:**
+- [x] Mantener  - [ ] Eliminar  · **Decidido (29/10)**  · **Cambios:**
 
 ### 8. Devolución del cliente (en la actualización)
 Es el mismo correo que el **5** (`devfianey.prg` por medio de `prog15.prg`), pero llamado desde `saldos.prg` cuando contestas "Sí" a *"Devolución: revisa que tengas el archivo en C:\DEVOLUCION"*.
@@ -123,7 +123,7 @@ Es el mismo correo que el **5** (`devfianey.prg` por medio de `prog15.prg`), per
 | **CCO** | asignaciones.cdmx1, asignaciones3, asig.cdmx |
 | **En Banbaj** | `NOTIFICACION_RETIRO_486`, lista `RETIROS_OPERACION_486` (ya con administrativo.mc6 bien escrito). A mano con `ops.sp_avisar` |
 
-- [ ] Mantener  - [ ] Eliminar  · **Cambios:**
+- [x] Mantener  - [ ] Eliminar  · **Decidido (29/10)**  · **Cambios:**
 
 ### 10. Actualización terminada
 | | |
@@ -137,7 +137,7 @@ Es el mismo correo que el **5** (`devfianey.prg` por medio de `prog15.prg`), per
 | **CCO** | asignaciones.cdmx1, asignaciones3, asig.cdmx |
 | **En Banbaj** | `CONFIRMACION_ACT_486`, lista `ACTUALIZACION_486`. A mano con `ops.sp_avisar` |
 
-- [ ] Mantener  - [ ] Eliminar  · **Cambios:**
+- [x] Mantener  - [ ] Eliminar  · **Decidido (29/10)**  · **Cambios:**
 
 > Los correos **9** y **10** salen el mismo día y a casi la misma gente. Si los juntas en uno, se ahorra un correo diario.
 
@@ -152,6 +152,9 @@ Todos van a la lista `ASIGNACIONES_486` (buzón asig.486.cdmx con CCO al equipo)
 | 11 | `PAGOS_NEGATIVOS_486` | Llegan pagos negativos: no se arriban y se avisa a Operación con la lista | Aparece un mensaje en pantalla y se cancela el proceso; al cliente se le avisa a mano. **Falta definir los destinatarios** (hoy va al buzón) | [ ] Mantener [ ] Eliminar |
 | 12 | `ERROR_PROCESO_486` | Cualquier proceso termina con error | Mensaje en pantalla | [ ] Mantener [ ] Eliminar |
 | 13 | `DEVOLUCION_MASIVA_486` | La base maestra dejaría fuera más del % de `TOPE_DEVOLUCION_PCT` (hoy sin tope: no se dispara) | No existe | [ ] Mantener [ ] Eliminar |
+| 15 | `SALDOS_NO_ACTUALIZADOS_486` | Saldos del archivo que no quedaron en el DAT (antes C:\SALDOSMAL, pantalla) | Aviso en pantalla y BROWSE | [ ] Mantener [ ] Eliminar |
+| 16 | `PAGOS_NO_SUBIERON_486` | Al cuadrar contra CYBER hay pagos arribados que no se registraron (antes C:\NO_SUBIERON486) | Aviso en pantalla | [ ] Mantener [ ] Eliminar |
+| 17 | `SALDOS_IGUALES_DAT_486` | La base maestra trae los mismos SALDO1-3 que el último DAT en todas sus cuentas (pestaña REGLAS del mapeo) | No existe | [ ] Mantener [ ] Eliminar |
 | 14 | `MAESTRA_NUMEROS_EXCEL_486` | La base maestra se guardó como CSV con cuentas en notación científica (1.23457E+15) y se detiene la asignación | No existe (la macro lo evitaba) | [ ] Mantener [ ] Eliminar |
 
 **Cambios / comentarios:**

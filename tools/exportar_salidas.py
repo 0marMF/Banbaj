@@ -6,16 +6,25 @@
     --corrida      sin ella, la última corrida OK del cliente
     --solo         archivos separados por coma (ej. SCBPAG,SCBTEL)
     --sin-scripts  no escribe los .sql de CYBER
+    --zip RETIROS  además mete esos archivos en un ZIP con contraseña (saldos.prg: RETIROS_PAG_486_*.zip).
+                   La contraseña sale de BANBAJ_ZIP_CLAVE o se pide; acepta {MM} y {AAAA}.
+                   Con 7-Zip instalado usa ZipCrypto (abre en el Explorador de Windows, como hoy);
+                   si no, AES con pyzipper (abre con 7-Zip o WinRAR).
+                   Para mandarlo: EXEC ops.sp_avisar <corrida>, 'RETIROS_ACT_486', @adjuntos = N'<ruta del ZIP>'
 
 Cada archivo usa el nombre, la codificación y el fin de línea de cfg.SALIDA_ARCHIVO
 (por defecto Windows-1252 y CRLF, como COPY TO … SDF de FoxPro). Se crea una
 subcarpeta <AAAAMMDD>_corrida<ID>; los scripts de CYBER van en cyber/ con commit y exit.
 Un archivo sin líneas no se escribe (se avisa).
 
-Requiere: pip install pyodbc
+Requiere: pip install pyodbc  (y pyzipper si se usa --zip sin 7-Zip)
 """
 import argparse
 import datetime as dt
+import getpass
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -27,6 +36,22 @@ def nombre_archivo(patron, fecha, ahora, corrida):
                   .replace("{CORRIDA}", str(corrida)))
 
 
+def comprimir(zip_ruta, archivos, clave):
+    """ZipCrypto con 7-Zip si está instalado (compatible con el Explorador de Windows); si no, AES con pyzipper."""
+    siete = shutil.which("7z") or shutil.which("7za") or next(
+        (p for p in (r"C:\Program Files\7-Zip\7z.exe", r"C:\Program Files (x86)\7-Zip\7z.exe") if os.path.exists(p)), None)
+    if siete:
+        subprocess.run([siete, "a", "-tzip", "-mem=ZipCrypto", f"-p{clave}", "-y", str(zip_ruta)] + [str(x) for x in archivos],
+                       check=True, stdout=subprocess.DEVNULL)
+        return "ZipCrypto"
+    import pyzipper
+    with pyzipper.AESZipFile(zip_ruta, "w", compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES) as z:
+        z.setpassword(clave.encode("utf-8"))
+        for x in archivos:
+            z.write(x, arcname=Path(x).name)
+    return "AES"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--conexion", required=True)
@@ -35,6 +60,7 @@ def main():
     ap.add_argument("--carpeta", default=".")
     ap.add_argument("--solo")
     ap.add_argument("--sin-scripts", action="store_true")
+    ap.add_argument("--zip", help="archivos separados por coma que van en un ZIP con contraseña (ej. RETIROS)")
     a = ap.parse_args()
 
     import pyodbc
@@ -71,6 +97,7 @@ def main():
         GROUP BY l.ARCHIVO ORDER BY l.ARCHIVO""", cliente, a.corrida)
     archivos = cur.fetchall()
     escritos = 0
+    rutas = {}
     for archivo, n, patron, fin, cod, encabezado, sep in archivos:
         if solo and archivo.upper() not in solo:
             continue
@@ -86,6 +113,7 @@ def main():
             for linea in lineas:
                 f.write(linea + eol)
         escritos += 1
+        rutas[archivo.upper()] = ruta
         print(f"  {nombre:<40} {len(lineas):>8} líneas  ({archivo})")
 
     # Archivos que se generaron sin líneas (ej. gescar REA cuando no hubo reasignadas)
@@ -105,6 +133,20 @@ def main():
             with open(ruta, "w", encoding="cp1252", errors="replace", newline="") as f:
                 f.write("\r\n".join(sentencias) + "\r\n")
             print(f"  cyber/{script + '.sql':<34} {len(sentencias):>8} sentencias")
+
+    if a.zip:
+        pedidos = [x.strip().upper() for x in a.zip.split(",") if x.strip()]
+        incluir = [rutas[x] for x in pedidos if x in rutas]
+        for x in pedidos:
+            if x not in rutas:
+                print(f"  zip: {x} no tiene archivo en esta corrida")
+        if incluir:
+            clave = os.environ.get("BANBAJ_ZIP_CLAVE") or getpass.getpass("Contraseña del ZIP ({MM} y {AAAA} se reemplazan): ")
+            clave = clave.replace("{MM}", ahora.strftime("%m")).replace("{AAAA}", ahora.strftime("%Y"))
+            zip_ruta = destino / f"{'_'.join(pedidos)}_{cliente}_{ahora:%d%m%Y%H%M%S}.zip"
+            metodo = comprimir(zip_ruta, incluir, clave)
+            print(f"  {zip_ruta.name:<40} ZIP con contraseña ({metodo})")
+            print(f"  Para enviarlo: EXEC ops.sp_avisar {a.corrida}, 'RETIROS_ACT_486', @adjuntos = N'{zip_ruta}'")
 
     print(f"Listo: {escritos} archivos.")
     return 0
