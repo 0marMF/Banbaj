@@ -6,7 +6,8 @@
     --corrida      sin ella, la última corrida OK del cliente
     --solo         archivos separados por coma (ej. SCBPAG,SCBTEL)
     --sin-scripts  no escribe los .sql de CYBER
-    --zip RETIROS  además mete esos archivos en un ZIP con contraseña (saldos.prg: RETIROS_PAG_486_*.zip).
+    --zip RETIROS  además mete esos archivos en un ZIP con contraseña, en C:\\ como hoy
+                   (saldos.prg: C:\\RETIROS_PAG_486_<ddmmaaaahhmmss>.zip). --carpeta-zip cambia la carpeta.
                    La contraseña sale de BANBAJ_ZIP_CLAVE o se pide; acepta {MM} y {AAAA}.
                    Con 7-Zip instalado usa ZipCrypto (abre en el Explorador de Windows, como hoy);
                    si no, AES con pyzipper (abre con 7-Zip o WinRAR).
@@ -61,6 +62,7 @@ def main():
     ap.add_argument("--solo")
     ap.add_argument("--sin-scripts", action="store_true")
     ap.add_argument("--zip", help="archivos separados por coma que van en un ZIP con contraseña (ej. RETIROS)")
+    ap.add_argument("--carpeta-zip", default="C:\\", help="carpeta del ZIP (por omisión C:\\, como saldos.prg)")
     a = ap.parse_args()
 
     import pyodbc
@@ -143,7 +145,10 @@ def main():
         if incluir:
             clave = os.environ.get("BANBAJ_ZIP_CLAVE") or getpass.getpass("Contraseña del ZIP ({MM} y {AAAA} se reemplazan): ")
             clave = clave.replace("{MM}", ahora.strftime("%m")).replace("{AAAA}", ahora.strftime("%Y"))
-            zip_ruta = destino / f"{'_'.join(pedidos)}_{cliente}_{ahora:%d%m%Y%H%M%S}.zip"
+            nombre_zip = (f"RETIROS_PAG_{cliente}_{ahora:%m%d%Y%H%M%S}.zip" if pedidos == ["RETIROS"]
+                          else f"{'_'.join(pedidos)}_{cliente}_{ahora:%m%d%Y%H%M%S}.zip")
+            Path(a.carpeta_zip).mkdir(parents=True, exist_ok=True)
+            zip_ruta = Path(a.carpeta_zip) / nombre_zip
             metodo = comprimir(zip_ruta, incluir, clave)
             print(f"  {zip_ruta.name:<40} ZIP con contraseña ({metodo})")
             print(f"  Para enviarlo: EXEC ops.sp_avisar {a.corrida}, 'RETIROS_ACT_486', @adjuntos = N'{zip_ruta}'")

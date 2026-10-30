@@ -1,6 +1,6 @@
 """Baja de CYBER (Oracle) lo que se necesita para cruzar y lo carga directo a SQL Server, sin archivos en la máquina.
 
-    python tools/bajar_cyber.py status    --corrida 125 --oracle rcvry@192.168.90.10:1521/sertecp --conexion "<ODBC SQL Server>"
+    python tools/bajar_cyber.py status    --corrida 125 --oracle 192.168.90.10:1521/sertecp --conexion "<ODBC SQL Server>"
     python tools/bajar_cyber.py correos   --corrida 125 --oracle … --conexion …
     python tools/bajar_cyber.py telefonos --corrida 125 --oracle … --conexion …
     python tools/bajar_cyber.py pagos     --corrida 130 --oracle … --conexion …   (después de arribar SCBPAG)
@@ -10,8 +10,9 @@
     telefonos  TELs_486.sql (ges486.prg)        -> stg.CYBER_TELEFONO -> ops.sp_gescar_sin_telefono
     pagos      BAJ.sql (saldos.prg)             -> stg.CYBER_PAGO     -> ops.sp_cuadrar_pagos
 
-La contraseña de Oracle se toma de la variable de entorno CYBER_ORACLE_PWD o se pide al
-correr; nunca se guarda. --solo-bajar carga la tabla de paso sin ejecutar el procedimiento.
+El usuario y la contraseña de Oracle se escriben a mano al correr (la contraseña no se ve
+en pantalla) y nunca se guardan. --oracle es solo host:puerto/servicio; si se pasa como
+usuario@host:puerto/servicio, solo se pide la contraseña. --solo-bajar carga la tabla de paso sin ejecutar el procedimiento.
 --forzar (solo status) blanquea aunque no sea día 1 a 10. --thick usa Oracle Instant Client
 (para versiones de Oracle anteriores a 12.1). --fecha (solo pagos, AAAA-MM-DD) cuadra
 los pagos registrados ese día; por omisión, hoy (como BAJ.sql).
@@ -73,7 +74,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("que", choices=list(CONSULTAS))
     ap.add_argument("--corrida", type=int, help="corrida de asignación (obligatoria salvo con --solo-bajar)")
-    ap.add_argument("--oracle", required=True, help="usuario@host:puerto/servicio")
+    ap.add_argument("--oracle", required=True, help="host:puerto/servicio (el usuario y la contraseña se piden al correr)")
     ap.add_argument("--conexion", required=True, help="cadena ODBC de SQL Server")
     ap.add_argument("--cliente", default="486")
     ap.add_argument("--solo-bajar", action="store_true")
@@ -88,8 +89,11 @@ def main():
     import pyodbc
 
     c = CONSULTAS[a.que]
-    usuario, _, dsn = a.oracle.partition("@")
-    clave = os.environ.get("CYBER_ORACLE_PWD") or getpass.getpass(f"Contraseña de Oracle para {usuario}: ")
+    if "@" in a.oracle:
+        usuario, _, dsn = a.oracle.partition("@")
+    else:
+        usuario, dsn = input("Usuario de Oracle: ").strip(), a.oracle
+    clave = getpass.getpass(f"Contraseña de Oracle para {usuario}: ")
     if a.thick:
         oracledb.init_oracle_client()
 

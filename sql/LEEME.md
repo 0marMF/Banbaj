@@ -57,7 +57,7 @@ EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486';     -- o ASIG_EXPRESS_486, CONF
 -- Cruces con CYBER sin archivos: tools/bajar_cyber.py consulta Oracle, llena stg.CYBER_* y ejecuta el procedimiento
 --   python tools/bajar_cyber.py status    --corrida <ID> --oracle usuario@host:1521/servicio --conexion "<ODBC>"   (blanqueo, día 1 al 10)
 --   python tools/bajar_cyber.py correos   --corrida <ID> …   (INSERT de correos nuevos)
---   python tools/bajar_cyber.py telefonos --corrida <ID> …   (gescar de cuentas sin teléfono)
+--   python tools/bajar_cyber.py telefonos --corrida <ID> …   (pide usuario y contraseña de Oracle)   (gescar de cuentas sin teléfono)
 -- Con linked server a CYBER también se puede llenar stg.CYBER_* con OPENQUERY y ejecutar
 -- ops.sp_blanqueo_status / ops.sp_correos_nuevos / ops.sp_gescar_sin_telefono.
 
@@ -81,8 +81,9 @@ SELECT * FROM ops.v_TIEMPOS_CORRIDA ORDER BY ID_CORRIDA DESC;
 --   python tools/bajar_cyber.py pagos --corrida 130 --oracle … --conexion …
 
 -- Retiros por actualización: ZIP con contraseña y correo con el adjunto
---   python tools/exportar_salidas.py --conexion … --corrida 130 --carpeta \\servidor\banbaj\salida --zip RETIROS
-EXEC ops.sp_avisar 130, 'RETIROS_ACT_486', @adjuntos = N'\\servidor\banbaj\salida\…\RETIROS_486_….zip';
+--   python tools/exportar_salidas.py --conexion … --corrida 130 --carpeta D:\Banbaj\486\salida --zip RETIROS
+--   (el ZIP queda en C:\RETIROS_PAG_486_<mmddaaaahhmmss>.zip, como hoy; SQL Server debe correr en esa misma máquina para adjuntarlo)
+EXEC ops.sp_avisar 130, 'RETIROS_ACT_486', @adjuntos = N'C:\RETIROS_PAG_486_….zip';
 
 -- Lista negra de teléfonos con requerimiento (solo 10 dígitos; los demás se cuentan y se omiten)
 EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'D:\Banbaj\486\blacklist.csv', @req = 'REQ 2026-…', @solicita = N'…';

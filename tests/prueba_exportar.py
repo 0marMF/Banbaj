@@ -53,8 +53,8 @@ def main(conexion):
     tmpz = Path(tempfile.mkdtemp())
     env = dict(os.environ, BANBAJ_ZIP_CLAVE="Prueba{MM}{AAAA}")
     r = subprocess.run([sys.executable, str(RAIZ / "tools" / "exportar_salidas.py"), "--conexion", conexion, "--corrida", "2",
-                        "--carpeta", str(tmpz), "--solo", "RETIROS", "--zip", "RETIROS"], capture_output=True, text=True, env=env)
-    zips = list((tmpz / "20261102_corrida2").glob("RETIROS_486_*.zip"))
+                        "--carpeta", str(tmpz), "--solo", "RETIROS", "--zip", "RETIROS", "--carpeta-zip", str(tmpz)], capture_output=True, text=True, env=env)
+    zips = list(tmpz.glob("RETIROS_PAG_486_*.zip"))
     contenido = b""
     if zips:
         import pyzipper, datetime as dt

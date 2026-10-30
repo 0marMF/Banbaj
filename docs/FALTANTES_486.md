@@ -93,12 +93,15 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 - [ ] **Importes negativos** (ej. saldo TDC -87.13): SCBSDOS hoy manda `000000000087.13` (positivo) y el script de saldos `000000000-87.13`. Opciones: como hoy, `000000000000.00` (cero) o `-00000000087.13` (signo). Parámetro `NEGATIVO_MODO`.
 - [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.
-- [ ] **Acceso a CYBER desde la máquina que corra `tools/bajar_cyber.py`:** usuario de Oracle de solo lectura, host/servicio y versión.
+- [x] **Acceso a CYBER:** el usuario y la contraseña de Oracle se escriben a mano cada vez que corre `tools/bajar_cyber.py` (no se guardan). Falta solo confirmar host/servicio.
 - [ ] **Ruta de red de `Q:`** para la cuenta de servicio de SQL Server.
-- [ ] **Días festivos:** el T-1 de pagos y el job solo distinguen fin de semana. ¿Se agrega un calendario de días inhábiles (ej. después de un festivo, T-1 sería el último día hábil)?
+- [x] **Días festivos:** no se agrega calendario (decisión 29/10). Antes: el T-1 de pagos y el job solo distinguen fin de semana. ¿Se agrega un calendario de días inhábiles (ej. después de un festivo, T-1 sería el último día hábil)?
 - [ ] **Estructura de las tablas de CYBER:** sin acceso; se mantienen los campos como se ven en los .prg.
 
 ## Ya resuelto
+
+- Carpeta de retiros: el ZIP de retiros queda en `C:\` (`C:\RETIROS_PAG_486_<fecha><hora>.zip`), como hoy.
+- Macro `ASIG_486.xlsm` corregida en `mapeos/ASIG_486.xlsm`: se quitó la línea D162 = C162 (pegaba NAME2 en Tipo de TDC en la fila 162). Solo cambió esa línea; el código precompilado se invalida para que Excel recompile al abrir.
 
 - Revisión de los flujos actuales (29/10), pasos que **ya no** van: ZIP con contraseña de los originales en C:\ORIGINALES, covid.dbf, garantizada.dbf, O:\ASIGNA\NUEVAS, C:\dev486_completa, captura de "a quién se pide el DAT", verifica.xls.
 - Pasos que **se quedan**: horas de solicitud, autorización y fin del arribo (`ops.sp_marcar_arribo`, `ops.v_TIEMPOS_CORRIDA`); cuadre de pagos contra CYBER (`bajar_cyber.py pagos` → `ops.sp_cuadrar_pagos`); saldos que no se actualizaron (regla `SALDOS_NO_ACTUALIZADOS`, paso POST_ACT); retiros por actualización con ZIP y correo; correos 1, 2, 9 y 10.
