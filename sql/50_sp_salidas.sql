@@ -7,7 +7,7 @@
    ops.sp_generar_salidas  genera todos los archivos activos de un grupo
                            (ASIG, ACT, RETIRO)
 
-   Los archivos se escriben en disco con tools/exportar_salidas.py (o bcp),
+   Los archivos se escriben en disco con ops.sp_exportar_salidas (automatización OLE),
    en una sola codificación (H-05), y se arriban a mano a CYBER.
    ===================================================================== */
 SET NOCOUNT ON;

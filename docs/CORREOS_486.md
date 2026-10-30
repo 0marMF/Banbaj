@@ -102,7 +102,7 @@ Hoy todos salen por CDO (SMTP 192.168.50.7) y casi todos esperan un "¿Deseas en
 | **Adjunto** | `RETIROS_PAG_486_<fecha><hora>.zip` |
 | **Para** | soluciones.486, supervisor.mc, supervisor.mc3, supervisorbackoffice.mc, soluciones_banbajio |
 | **CCO** | asignaciones3, asig.cdmx, asignaciones.cdmx1 |
-| **En Banbaj** | `RETIROS_ACT_486`. Se queda con ZIP con contraseña: `tools/exportar_salidas.py --zip RETIROS` lo arma y `ops.sp_avisar <corrida>, 'RETIROS_ACT_486', @adjuntos = N'<ruta del ZIP>'` lo manda |
+| **En Banbaj** | `RETIROS_ACT_486`. Se queda con ZIP con contraseña: `EXEC ops.sp_exportar_salidas @id_corrida = <corrida>, @zip = 'RETIROS', @enviar_zip = 1` arma el ZIP en C:\ (7-Zip) y lo manda |
 
 - [x] Mantener  - [ ] Eliminar  · **Decidido (29/10)**  · **Cambios:**
 
@@ -152,10 +152,9 @@ Todos van a la lista `ASIGNACIONES_486` (buzón asig.486.cdmx con CCO al equipo)
 | 11 | `PAGOS_NEGATIVOS_486` | Llegan pagos negativos: no se arriban y se avisa a Operación con la lista | Aparece un mensaje en pantalla y se cancela el proceso; al cliente se le avisa a mano. **Falta definir los destinatarios** (hoy va al buzón) | [ ] Mantener [ ] Eliminar |
 | 12 | `ERROR_PROCESO_486` | Cualquier proceso termina con error | Mensaje en pantalla | [ ] Mantener [ ] Eliminar |
 | 13 | `DEVOLUCION_MASIVA_486` | La base maestra dejaría fuera más del % de `TOPE_DEVOLUCION_PCT` (hoy sin tope: no se dispara) | No existe | [ ] Mantener [ ] Eliminar |
-| 15 | `SALDOS_NO_ACTUALIZADOS_486` | Saldos del archivo que no quedaron en el DAT (antes C:\SALDOSMAL, pantalla) | Aviso en pantalla y BROWSE | [ ] Mantener [ ] Eliminar |
-| 16 | `PAGOS_NO_SUBIERON_486` | Al cuadrar contra CYBER hay pagos arribados que no se registraron (antes C:\NO_SUBIERON486) | Aviso en pantalla | [ ] Mantener [ ] Eliminar |
-| 17 | `SALDOS_IGUALES_DAT_486` | La base maestra trae los mismos SALDO1-3 que el último DAT en todas sus cuentas (pestaña REGLAS del mapeo) | No existe | [ ] Mantener [ ] Eliminar |
 | 14 | `MAESTRA_NUMEROS_EXCEL_486` | La base maestra se guardó como CSV con cuentas en notación científica (1.23457E+15) y se detiene la asignación | No existe (la macro lo evitaba) | [ ] Mantener [ ] Eliminar |
+
+**Retirados (29/10):** los avisos de saldos no actualizados, pagos que no subieron y saldos iguales al último DAT. Los saldos siempre se actualizan y los pagos siempre suben; el cuadre de pagos queda como revisión a mano (`ops.sp_bajar_cyber 'PAGOS'`), sin correo.
 
 **Cambios / comentarios:**
 

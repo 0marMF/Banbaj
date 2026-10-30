@@ -73,7 +73,7 @@ Las bitácoras que se subían a Oracle y a server (`RCVRY.JSP_VALIDADOR_TELEFONO
 - [x] **`O:\asigna\asignaciones`** y **`O:\ASIGNA\NUEVAS`** — se descartan.
 - [ ] **`Q:\MIS\SERTEC98\CLIENTES\486\DAT`** — `prog15.prg` copia ahí el DAT después de cada retiro. ¿Quién lo usa? Si sigue haciendo falta, se reemplaza por una vista o una exportación.
 - [x] **Devolución para CYBER** (`MX_G1MCT_DVBJIG_<fecha>_<hora>`) — se genera como archivo plano para arribo manual.
-- [x] **`cyber.reg_serv`** — ya no hace falta: el arribo es manual con los archivos y scripts que deja `tools/exportar_salidas.py`.
+- [x] **`cyber.reg_serv`** — ya no hace falta: el arribo es manual con los archivos y scripts que deja `ops.sp_exportar_salidas`.
 
 ## 4. Formatos de archivos (ejemplo con datos ficticios)
 
@@ -104,8 +104,8 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 - Macro `ASIG_486.xlsm` corregida en `mapeos/ASIG_486.xlsm`: se quitó la línea D162 = C162 (pegaba NAME2 en Tipo de TDC en la fila 162). Solo cambió esa línea; el código precompilado se invalida para que Excel recompile al abrir.
 
 - Revisión de los flujos actuales (29/10), pasos que **ya no** van: ZIP con contraseña de los originales en C:\ORIGINALES, covid.dbf, garantizada.dbf, O:\ASIGNA\NUEVAS, C:\dev486_completa, captura de "a quién se pide el DAT", verifica.xls.
-- Pasos que **se quedan**: horas de solicitud, autorización y fin del arribo (`ops.sp_marcar_arribo`, `ops.v_TIEMPOS_CORRIDA`); cuadre de pagos contra CYBER (`ops.sp_bajar_cyber 'PAGOS'` → `ops.sp_cuadrar_pagos`); saldos que no se actualizaron (regla `SALDOS_NO_ACTUALIZADOS`, paso POST_ACT); retiros por actualización con ZIP y correo; correos 1, 2, 9 y 10.
-- Regla de la pestaña REGLAS "Validar que los saldos sean diferentes al último DAT": `*_SALDOS_IGUALES_DAT` avisa si toda la base maestra de un segmento trae los mismos SALDO1-3 que el DAT.
+- Pasos que **se quedan**: horas de solicitud, autorización y fin del arribo (`ops.sp_marcar_arribo`, `ops.v_TIEMPOS_CORRIDA`); cuadre de pagos contra CYBER como revisión a mano, sin correo (`ops.sp_bajar_cyber 'PAGOS'` → `ops.sp_cuadrar_pagos`); retiros por actualización con ZIP y correo; correos 1, 2, 9 y 10.
+- Avisos retirados (29/10): saldos no actualizados (SALDOSMAL), pagos que no subieron y saldos iguales al último DAT (pestaña REGLAS). Los saldos siempre se actualizan y los pagos siempre suben.
 - Corrección D162 = C162 de la macro: en la hoja BASE original C es NAME1 y D es NAME2, así que es la regla "si NAME2 viene vacío se toma NAME1" grabada para una sola fila. Como la macro ya borró columnas antes de esa línea, hoy pega NAME2 en Tipo de TDC (ESTRA3) en la fila 162. No se migra: la regla general ya está en la homologación.
 
 - TAB7 (último folio 179,688) entra a la migración. PURGA y DEVOL se quedan fuera: el objetivo es dejar las bases viejas y generar los archivos planos (saldos, teléfonos, gescar) y reparar datos, en automático o a mano.
@@ -133,7 +133,7 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 - Las bases maestras se guardan completas (`dat.BASE_RECIBIDA`); los procesos solo toman las columnas mapeadas.
 - `administrativo.mc6@` corregido.
 
-- Los archivos planos se siguen arribando a mano: `tools/exportar_salidas.py` los escribe con su nombre, Windows-1252 y CRLF (ver `cyber/486/ARRIBO_MANUAL.md`).
+- Los archivos planos se siguen arribando a mano: `ops.sp_exportar_salidas` los escribe con su nombre, Windows-1252 y CRLF (ver `cyber/486/ARRIBO_MANUAL.md`).
 - Teléfonos: solo en la asignación, completos, para que CYBER purgue y agregue.
 - Pagos negativos: no salen en SCBPAG, quedan en rechazos y se avisa a Operación (ya no cancelan la actualización).
 - PAGTOT pasa a tabla fija con solo los campos de la validación.

@@ -644,11 +644,11 @@ FROM (SELECT N'PAGOS: cuadre contra CYBER detecta el que no subió' AS p,
                        AND CAST(JSON_VALUE(r.DATOS, '$.IMPORTE') AS DECIMAL(15,2)) = p.IMPORTE), '|',
                     (SELECT COUNT(*) FROM stg.CYBER_PAGO)) AS o) x;
 
-/* Reglas nuevas en el catálogo */
+/* Avisos retirados (29/10): no deben quedar reglas ni plantillas */
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE)
-SELECT N'REGLAS: saldos no actualizados (POST_ACT) y saldos iguales al DAT', CASE WHEN x.o = N'1|3' THEN 1 ELSE 0 END, x.o
-FROM (SELECT CONCAT((SELECT COUNT(*) FROM cfg.REGLA WHERE CODIGO = 'SALDOS_NO_ACTUALIZADOS' AND PASO = 'POST_ACT'), '|',
-                    (SELECT COUNT(*) FROM cfg.REGLA WHERE CODIGO LIKE '%[_]SALDOS_IGUALES_DAT')) AS o) x;
+SELECT N'REGLAS: sin avisos de saldos no actualizados, saldos iguales ni pagos sin subir', CASE WHEN x.o = N'0|0' THEN 1 ELSE 0 END, x.o
+FROM (SELECT CONCAT((SELECT COUNT(*) FROM cfg.REGLA WHERE CODIGO IN ('SALDOS_NO_ACTUALIZADOS') OR CODIGO LIKE '%[_]SALDOS_IGUALES_DAT'), '|',
+                    (SELECT COUNT(*) FROM mail.PLANTILLA WHERE CODIGO IN ('SALDOS_NO_ACTUALIZADOS_486', 'SALDOS_IGUALES_DAT_486', 'PAGOS_NO_SUBIERON_486'))) AS o) x;
 
 /* Se revierten las corridas de etiquetado (de la más reciente a la más vieja) para seguir con el retroceso */
 DECLARE @e0 INT = (SELECT MIN(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ETI'), @ex INT;
@@ -711,6 +711,39 @@ FROM (SELECT N'Retroceso ASIG: DAT, consecutivo e histórico como al inicio' AS 
                     (SELECT STRING_AGG(ESTATUS, ',') FROM dat.HISTORIA_FOLIO WHERE CUENTA = '20000009'), '|',
                     (SELECT COUNT(*) FROM dat.HISTORIA_FOLIO WHERE CUENTA = '20000009'), '|',
                     (SELECT ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = 2)) AS o) x;
+GO
+
+/* ---------------------------------------------------------------------
+   EXPORTAR archivos (vista previa: en Linux no hay automatización OLE ni xp_cmdshell)
+   --------------------------------------------------------------------- */
+DECLARE @p TABLE (ORDEN INT, TIPO VARCHAR(10), ARCHIVO VARCHAR(50), RUTA NVARCHAR(400), CHARSET VARCHAR(30), EOL VARCHAR(4), ENCABEZADO BIT, LINEAS INT, COMANDO NVARCHAR(4000));
+INSERT INTO @p EXEC ops.sp_exportar_salidas @id_corrida = 2, @zip = 'RETIROS', @solo_mostrar = 1;
+DECLARE @dir NVARCHAR(100) = N'C:\BANBAJ\486\SALIDA\20261102_corrida2\';
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'EXPORTAR: archivos de la asignación con nombre, carpeta y líneas' AS p,
+             N'8|7|4|1|2|7|1|1|9|1|1|windows-1252:CRLF' AS e,
+             CONCAT((SELECT LINEAS FROM @p WHERE RUTA = @dir + N'SCBSDOS.TXT'), '|',
+                    (SELECT LINEAS FROM @p WHERE RUTA = @dir + N'SCBTEL.TXT'), '|',
+                    (SELECT LINEAS FROM @p WHERE RUTA = @dir + N'SCBACTH_486NU.TXT'), '|',
+                    (SELECT LINEAS FROM @p WHERE RUTA = @dir + N'SCBACTH_486REA.TXT'), '|',
+                    (SELECT LINEAS FROM @p WHERE RUTA = @dir + N'SCBACTH_486.TXT'), '|',
+                    (SELECT LINEAS FROM @p WHERE RUTA = @dir + N'sub_mst.TXT'), '|',
+                    (SELECT COUNT(*) FROM @p WHERE RUTA LIKE @dir + N'MX[_]G1MCT[_]DVBJIG[_]20261102[_]%'), '|',
+                    (SELECT COUNT(*) FROM @p WHERE RUTA = @dir + N'RETIROS_486_20261102.csv'), '|',
+                    (SELECT LINEAS FROM @p WHERE RUTA = @dir + N'DAT486_20261102.csv' AND ENCABEZADO = 1), '|',
+                    (SELECT COUNT(*) FROM @p WHERE RUTA = @dir + N'cyber\RETIRO.sql'), '|',
+                    (SELECT COUNT(*) FROM @p WHERE RUTA = @dir + N'cyber\TEL_ACTUALIZA.sql'), '|',
+                    (SELECT STRING_AGG(CS, ',') FROM (SELECT DISTINCT CONCAT(CHARSET, ':', EOL) AS CS FROM @p WHERE TIPO <> 'ZIP') d)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'EXPORTAR: ZIP de retiros en C:\ con 7-Zip y la contraseña oculta',
+       CASE WHEN RUTA LIKE N'C:\RETIROS[_]PAG[_]486[_]%.zip' AND COMANDO LIKE N'""C:\Program Files\7-Zip\7z.exe" a -tzip -mem=ZipCrypto -p"********" -y "C:\RETIROS[_]PAG[_]486[_]%.zip" "'
+                 + @dir + N'RETIROS_486_20261102.csv""' THEN 1 ELSE 0 END, CONCAT(RUTA, ' | ', COMANDO)
+FROM @p WHERE TIPO = 'ZIP';
+DELETE FROM @p;
+INSERT INTO @p EXEC ops.sp_exportar_salidas @id_corrida = 3, @solo_mostrar = 1;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'EXPORTAR: SCBPAG y scripts de saldos de la actualización' AS p, N'4|3' AS e,
+             CONCAT((SELECT LINEAS FROM @p WHERE RUTA LIKE N'%\SCBPAG.TXT'), '|',
+                    (SELECT COUNT(*) FROM @p WHERE TIPO = 'SCRIPT' AND ARCHIVO IN ('ACT_SALDOS', 'ACT_VENCIDO', 'ACT_PAGMIN'))) AS o) x;
 GO
 
 /* ---------------------------------------------------------------------

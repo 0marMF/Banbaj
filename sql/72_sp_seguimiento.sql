@@ -46,7 +46,8 @@ GO
    SCBPAG de la corrida (dat.PAGO_ARRIBADO) contra lo que CYBER registró hoy
    (stg.CYBER_PAGO, lo llena ops.sp_bajar_cyber 'PAGOS'). Se empareja por
    CUENTA2 + importe; lo que no aparece en CYBER es lo que "no subió".
-   Si hay pagos sin subir: rechazos CUADRE_PAGOS + correo PAGOS_NO_SUBIERON_486.
+   Revisión a mano (fuera del flujo diario, sin correo): los pagos que no subieron
+   quedan en ops.RECHAZO (CUADRE_PAGOS) y en el resultado.
    --------------------------------------------------------------------- */
 CREATE OR ALTER PROCEDURE ops.sp_cuadrar_pagos
     @id_corrida INT
@@ -81,13 +82,6 @@ BEGIN
     DECLARE @est VARCHAR(15) = CASE WHEN @no_subieron = 0 THEN 'OK' ELSE 'AVISO' END;
     EXEC ops.sp_log @id_corrida, 'CUADRE PAGOS', @est, @no_subieron, @msg;
 
-    IF @no_subieron > 0
-    BEGIN
-        DECLARE @json NVARCHAR(MAX) = (SELECT @arribados AS ARRIBADOS, @en_cyber AS EN_CYBER, @no_subieron AS REGISTROS,
-                                              (SELECT STRING_AGG(CONCAT(CUENTA2, N' | ', IMPORTE), NCHAR(10)) FROM (SELECT TOP (200) * FROM #no ORDER BY CUENTA2) x) AS DETALLE
-                                       FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
-        EXEC mail.sp_enviar @plantilla = 'PAGOS_NO_SUBIERON_486', @id_corrida = @id_corrida, @valores = @json;
-    END;
 
     SELECT @arribados AS ARRIBADOS, @en_cyber AS EN_CYBER, @no_subieron AS NO_SUBIERON;
     SELECT CUENTA2, IMPORTE FROM #no ORDER BY CUENTA2;

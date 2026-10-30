@@ -83,9 +83,9 @@ SELECT * FROM ops.v_TIEMPOS_CORRIDA ORDER BY ID_CORRIDA DESC;
 EXEC ops.sp_bajar_cyber 'PAGOS', @id_corrida = 130;
 
 -- Retiros por actualización: ZIP con contraseña y correo con el adjunto
---   python tools/exportar_salidas.py --conexion … --corrida 130 --carpeta D:\Banbaj\486\salida --zip RETIROS
---   (el ZIP queda en C:\RETIROS_PAG_486_<mmddaaaahhmmss>.zip, como hoy; SQL Server debe correr en esa misma máquina para adjuntarlo)
-EXEC ops.sp_avisar 130, 'RETIROS_ACT_486', @adjuntos = N'C:\RETIROS_PAG_486_….zip';
+--   La contraseña se deposita una vez (acepta {MM} y {AAAA}):
+--   INSERT INTO cfg.CAPTURA_CREDENCIAL (SISTEMA, USUARIO, CLAVE) VALUES ('ZIP_RETIROS', N'zip', N'<contraseña>');
+EXEC ops.sp_exportar_salidas @id_corrida = 130, @zip = 'RETIROS', @enviar_zip = 1;   -- C:\RETIROS_PAG_486_<mmddaaaahhmmss>.zip
 
 -- Lista negra de teléfonos con requerimiento (solo 10 dígitos; los demás se cuentan y se omiten)
 EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'D:\Banbaj\486\blacklist.csv', @req = 'REQ 2026-…', @solicita = N'…';
@@ -106,9 +106,11 @@ SELECT * FROM ops.RECHAZO  WHERE ID_CORRIDA = @id;
 
 Escribir los archivos planos y los scripts de CYBER para el arribo manual (ver `cyber/486/ARRIBO_MANUAL.md`):
 
+```sql
+EXEC ops.sp_exportar_salidas @id_corrida = 123;                     -- en RUTA_SALIDA\<AAAAMMDD>_corrida123\
+EXEC ops.sp_exportar_salidas @id_corrida = 123, @solo_mostrar = 1;  -- vista previa
 ```
-python tools/exportar_salidas.py --conexion "DRIVER={ODBC Driver 18 for SQL Server};SERVER=<servidor>;DATABASE=Banbaj;Trusted_Connection=yes;TrustServerCertificate=yes" --corrida 123 --carpeta D:\Banbaj\486\salida
-```
+Requiere `Ole Automation Procedures` activado (y `xp_cmdshell` solo para el ZIP de retiros).
 
 | Proceso | Archivos |
 | --- | --- |
