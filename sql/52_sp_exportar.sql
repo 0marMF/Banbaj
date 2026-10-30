@@ -193,7 +193,8 @@ BEGIN
 
     /* Escribir */
     EXEC ops.sp_crear_carpeta @destino;
-    IF EXISTS (SELECT 1 FROM #plan WHERE TIPO = 'SCRIPT') EXEC ops.sp_crear_carpeta @destino + N'cyber\';
+    DECLARE @dir_cyber NVARCHAR(400) = @destino + N'cyber\';
+    IF EXISTS (SELECT 1 FROM #plan WHERE TIPO = 'SCRIPT') EXEC ops.sp_crear_carpeta @dir_cyber;
     CREATE TABLE #archivo_lineas (NUM INT NOT NULL, LINEA NVARCHAR(4000) NOT NULL);
     DECLARE @o INT, @tipo VARCHAR(10), @arch VARCHAR(50), @ruta NVARCHAR(400), @cs VARCHAR(30), @eol VARCHAR(4), @enc BIT, @sep VARCHAR(5), @n INT, @escritos INT = 0;
     DECLARE p CURSOR LOCAL FAST_FORWARD FOR SELECT ORDEN, TIPO, ARCHIVO, RUTA, CHARSET, EOL, ENCABEZADO, SEP, LINEAS FROM #plan ORDER BY ORDEN;
@@ -221,7 +222,8 @@ BEGIN
     /* ZIP con contraseña (7-Zip por xp_cmdshell) */
     IF @zip_ruta IS NOT NULL
     BEGIN
-        DECLARE @u NVARCHAR(128), @clave NVARCHAR(256), @salida TABLE (L NVARCHAR(4000));
+        DECLARE @u NVARCHAR(128), @clave NVARCHAR(256);
+        DECLARE @salida TABLE (L NVARCHAR(4000));
         EXEC cfg.sp_credencial_leer 'ZIP_RETIROS', @u OUTPUT, @clave OUTPUT;
         SET @clave = REPLACE(REPLACE(@clave, N'{MM}', RIGHT('0' + CAST(MONTH(@ahora) AS VARCHAR(2)), 2)), N'{AAAA}', CAST(YEAR(@ahora) AS VARCHAR(4)));
         IF @clave LIKE N'%["%&|<>^]%' THROW 50852, 'La contraseña del ZIP no puede llevar " % & | < > ^ (los interpreta la línea de comandos).', 1;
