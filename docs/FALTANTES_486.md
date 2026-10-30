@@ -88,6 +88,9 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 ## 6. Preguntas abiertas
 
+- [ ] **Bases maestras en Excel (.xlsx):** la macro abre el .xlsx del banco y deja CSV con solo algunas columnas. Para guardar la base completa sin macro, SQL Server tiene que leer el .xlsx: (a) paso de Python en el job (recomendado), (b) proveedor ACE OLEDB en el servidor, o (c) seguir con la macro (solo columnas recortadas).
+- [ ] **ETIQUETAS486.xlsx:** ¿el archivo de etiquetado que manda Operación trae los encabezados de "DAT OPERACIÓN" (CUENTA2, SEG_CICLO, CLASIFICA, ETIQUETA2…)? ¿MORA (ETIQUETA1) y ETIQUETA6 (TOP) también se etiquetan así? ¿CAPITAL va a `dmamtdlq` en CYBER (igual que SDO_VDO)?
+
 - [ ] **Importes negativos** (ej. saldo TDC -87.13): SCBSDOS hoy manda `000000000087.13` (positivo) y el script de saldos `000000000-87.13`. Opciones: como hoy, `000000000000.00` (cero) o `-00000000087.13` (signo). Parámetro `NEGATIVO_MODO`.
 - [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.
 - [ ] **Acceso a CYBER desde la máquina que corra `tools/bajar_cyber.py`:** usuario de Oracle de solo lectura, host/servicio y versión.
@@ -96,6 +99,10 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 - [ ] **¿Se sigue usando `eti486.prg`** (etiquetado de columnas del DAT con archivo de Operación)? Está como `ops.sp_etiquetado_dat`.
 
 ## Ya resuelto
+
+- PURGA recibida (582,620 bajas; no trae fecha de baja) y TAB7 (último folio 179,688): la migración las toma.
+- Base maestra de Hipotecario recibida: 118 columnas; las 40 del mapeo se encuentran.
+- Macro `ASIG_486.xlsm` revisada: regla nueva NAME2 vacío o '-' → NAME1 (TDC), ya aplicada.
 
 - Flujo diario: de lunes a viernes llega la actualización; la asignación puede o no llegar y siempre después. `ops.sp_diario_486` (job cada 30 min) corre la actualización y luego la asignación si llegó; la asignación no corre sin la actualización OK del día; T-1 de pagos = día hábil anterior.
 - Controles `O:\ASIGNA\NUEVAS` y `O:\ASIGNA\asignaciones` se descartan (queda `ops.CORRIDA` + `ops.BITACORA`).
