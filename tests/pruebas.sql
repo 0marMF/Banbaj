@@ -739,7 +739,7 @@ BEGIN CATCH SET @err = CAST(ERROR_NUMBER() AS NVARCHAR(10)); END CATCH;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'CYBER: consultas por servidor vinculado (BAJ.sql, STATUS.SQL) y aviso si no está configurado' AS p, N'1|1|1|50823' AS e,
              CONCAT((SELECT COUNT(*) FROM @m WHERE CONSULTA = 'PAGOS' AND ORACLE LIKE N'%RCVRY.pmtfil%' AND ORACLE LIKE N'%DMCOMPANY = ''486''%'
-                                                AND ORACLE LIKE N'%TO_DATE(''2026-11-03''%' AND SQL_SERVER LIKE N'INSERT INTO stg.CYBER_PAGO (CUENTA, MONTO, FECHA) EXEC (%) AT [CYBER];'), '|',
+                                                AND ORACLE LIKE N'%TO_DATE(''2026-11-03''%' AND SQL_SERVER LIKE N'INSERT INTO stg.CYBER_PAGO (CUENTA, MONTO, FECHA) EXEC (N''select PMACCT%) AT [[]CYBER];'), '|',
                     (SELECT COUNT(*) FROM @m WHERE CONSULTA = 'STATUS' AND ORACLE LIKE N'%DMSTATUS is null%'), '|',
                     (SELECT COUNT(*) FROM @m WHERE CONSULTA = 'PAGOS' AND SQL_SERVER LIKE N'%''''2026-11-03''''%'), '|', @err) AS o) x;
 DELETE FROM cfg.CAPTURA_CREDENCIAL WHERE SISTEMA = 'CYBER_ORACLE';

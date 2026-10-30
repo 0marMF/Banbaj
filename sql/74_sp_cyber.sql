@@ -84,7 +84,7 @@ BEGIN
                   + N'where PMACCTG = ''1'' and PMACCT in (select DMACCT from RCVRY.delqmst where DMCOMPANY = ''' + @cliente + N''') '
                   + N'and TRUNC(PMEDATE) = TO_DATE(''' + CONVERT(CHAR(10), @fecha, 23) + N''', ''YYYY-MM-DD'')';
 
-    SET @sql = N'INSERT INTO ' + @tabla + N' (' + @cols + N') EXEC (' + QUOTENAME(@q, '''') + N') AT ' + QUOTENAME(@srv) + N';';
+    SET @sql = N'INSERT INTO ' + @tabla + N' (' + @cols + N') EXEC (N''' + REPLACE(@q, N'''', N'''''') + N''') AT ' + QUOTENAME(@srv) + N';';   -- QUOTENAME corta a 128 caracteres
     IF @solo_mostrar = 1
     BEGIN
         SELECT @que AS CONSULTA, @srv AS SERVIDOR, @q AS ORACLE, @sql AS SQL_SERVER;
