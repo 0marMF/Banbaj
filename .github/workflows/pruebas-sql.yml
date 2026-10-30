@@ -57,18 +57,13 @@ jobs:
           docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d Banbaj -I -b -f 65001 -W -s " | " \
             -i /tmp/tests/pruebas.sql 2>&1 | tee -a resultado.txt
 
-      - name: Prueba de migración DBF -> SQL Server
+      - name: Prueba de migración (CSV de FoxPro -> SQL Server)
         if: always()
         run: |
           set -o pipefail
-          if ! odbcinst -q -d 2>/dev/null | grep -q "ODBC Driver 18"; then
-            curl -sSL -O https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
-            sudo dpkg -i packages-microsoft-prod.deb && sudo apt-get update -qq
-            sudo ACCEPT_EULA=Y apt-get install -y -qq msodbcsql18 unixodbc-dev
-          fi
-          pip install -q dbf dbfread pyodbc
-          echo "== tests/prueba_migracion.py" | tee -a resultado.txt
-          python3 tests/prueba_migracion.py "DRIVER={ODBC Driver 18 for SQL Server};SERVER=localhost,1433;DATABASE=BanbajMig;UID=sa;PWD=$SA;TrustServerCertificate=yes" 2>&1 | tee -a resultado.txt
+          echo "== tests/prueba_migracion.sql" | tee -a resultado.txt
+          docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d BanbajMig -I -b -f 65001 -W -s " | " \
+            -i /tmp/tests/prueba_migracion.sql 2>&1 | tee -a resultado.txt
 
       - name: Publicar resultado en la rama ci-resultados
         if: always()

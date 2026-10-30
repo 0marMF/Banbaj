@@ -160,29 +160,31 @@ Lista completa de programas, tablas y preguntas en [`docs/FALTANTES_486.md`](../
 - `NEGATIVO_MODO` (hoy igual que el legado: el negativo sale positivo, H-01). `TOPE_DEVOLUCION_PCT` va vacío: la base maestra se trabaja como llega; poner un número solo si se quiere el freno.
 - Columnas marcadas POR CONFIRMAR en `cfg.ARCHIVO_COLUMNA` (ENFOQUE, ETIQUETA, REE) y el archivo de Hipotecario.
 - Destinatarios de `OPERACION_ASIG_486` (MAIL.prg / correo_486 no están versionados) y de `OPERACION_PAGOS_486` (aviso de pagos negativos).
-- Carga inicial desde los DBF: `tools/migrar_dbf.py` (ver abajo).
+- Carga inicial desde los DBF: CSV exportados con FoxPro + `ops.sp_migrar_486` (ver abajo).
 
-## Migración de los DBF
+## Migración de los DBF (una sola vez)
 
-Los DBF dejan de usarse. `tools/migrar_dbf.py` pasa todo a tablas en una sola transacción:
+Los DBF dejan de usarse. Todo se carga desde SQL Server, en una sola transacción:
 
-| DBF | Tabla |
+1. En FoxPro, correr `cyber/486/EXPORTAR_MIGRACION.prg`: deja `C:\MIGRA486\<FUENTE>.csv` (COPY TO … TYPE CSV). La carpeta debe ser visible para el servicio de SQL Server.
+2. Revisar y cargar:
+
+```sql
+EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\';                    -- revisa: filas leídas, filas por destino y avisos
+EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;    -- carga (si ya hay datos: @reemplazar = 1)
+```
+
+3. Borrar `C:\MIGRA486` (trae datos de clientes). Las tablas de paso `stg.MIG_*` se borran solas.
+
+| CSV | Tabla |
 | --- | --- |
 | DAT | `dat.DAT_486` |
-| DAT (activas) + PURGA (bajas; si no hay PURGA, DEVOL) | `dat.HISTORIA_FOLIO` |
-| TAB7 (máximo folio, comparado con DAT, PURGA, DEVOL e HISTORIA) | `dat.FOLIO_CONSECUTIVO` |
+| DAT (activas) | `dat.HISTORIA_FOLIO` (PURGA y DEVOL no se migran) |
+| TAB7 (máximo folio, comparado con DAT e HISTORIA) | `dat.FOLIO_CONSECUTIVO` |
 | PAGTOT (solo CUENTA + FE_PAG + MONT) | `dat.PAGO_ARRIBADO` |
-| ETI486, ETI, DM1, TOP, STATUS | `cfg.ETIQUETA` |
-| EXC486, DIRMAL, EMAILMALO, BLACKLIST_486, TELBAJ_G1 | `cfg.EXCLUSION` (solo lo que aplica al 486; los 3 teléfonos del banco van en la semilla) |
+| ETI, DM1, TOP, STATUS | `cfg.ETIQUETA` |
+| EXC486, DIRMAL, EMAILMALO, BLACKLIST (10 dígitos), TELBAJ | `cfg.EXCLUSION` (solo lo que aplica al 486; los 3 teléfonos del banco van en la semilla) |
 | LADA, PNC | `cfg.LADA`, `cfg.PLAN_NUMERACION` |
-
-```
-pip install dbfread pyodbc
-python tools/migrar_dbf.py --config tools/migracion_486.json            # revisa, no escribe
-python tools/migrar_dbf.py --config tools/migracion_486.json --conexion "DRIVER={ODBC Driver 18 for SQL Server};SERVER=<srv>;DATABASE=Banbaj;Trusted_Connection=yes;TrustServerCertificate=yes"
-```
-
-Las rutas de `tools/migracion_486.json` son las que usan hoy los .prg. Si una tabla destino ya tiene datos, pide `--reemplazar`.
 
 ## Codificación de los archivos
 
@@ -190,4 +192,5 @@ Los CSV que guarda Excel vienen en Windows-1252: en el servidor Windows `cfg.ARC
 
 ## Pruebas
 
-`.github/workflows/pruebas-sql.yml` levanta SQL Server 2022 en GitHub Actions, ejecuta estos scripts y `tests/pruebas.sql` con datos ficticios (`tests/generar_datos_prueba.py`). También prueba la migración DBF (`tests/prueba_migracion.py`) y la escritura de los archivos planos (`tests/prueba_exportar.py`). El resultado queda en la rama `ci-resultados` (última corrida: 99 de 99 pruebas SQL, 12 de 12 de migración y 15 de 15 de exportación).
+En producción todo corre en SQL Server. Python solo se usa aquí, para desarrollo: `tools/generar_sql_486.py` arma la semilla desde el mapeo y `tests/generar_datos_prueba.py` crea datos ficticios.
+`.github/workflows/pruebas-sql.yml` levanta SQL Server 2022 en GitHub Actions y ejecuta estos scripts, `tests/pruebas.sql` y `tests/prueba_migracion.sql`. El resultado queda en la rama `ci-resultados`. La escritura real de archivos (automatización OLE), el ZIP (xp_cmdshell) y el servidor vinculado a Oracle no existen en SQL Server para Linux: las pruebas revisan lo que se escribiría (`@solo_mostrar = 1`).

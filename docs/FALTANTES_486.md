@@ -42,7 +42,7 @@ Formato preferido para compartir:
 
 ## 2. Tablas de referencia que pasan a SQL Server
 
-Se cargan con `tools/migrar_dbf.py`. Para cada una necesito la **estructura** para confirmar que los campos se llamen como supuse.
+Se cargan con `ops.sp_migrar_486` desde CSV exportados con FoxPro (`cyber/486/EXPORTAR_MIGRACION.prg`). Para cada una necesito la **estructura** para confirmar que los campos se llamen como supuse.
 
 | Tabla DBF | Ruta en los .prg | Destino | Campos que supuse | Confirmar |
 | --- | --- | --- | --- | --- |

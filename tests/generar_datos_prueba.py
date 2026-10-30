@@ -8,6 +8,7 @@ Estructura:
   act_neg/   pagos con un importe negativo (la actualización debe cancelarse)
 """
 import csv
+import datetime as dt
 import json
 import sys
 from pathlib import Path
@@ -134,7 +135,44 @@ def main(destino):
     # Lista negra (blacklist_486.prg)
     escribir(destino / "exclusiones" / "BLACKLIST.csv", ["TEL"], [{"TEL": "55 1234 5678"}, {"TEL": "5512345678"}, {"TEL": ""},
         {"TEL": "52 55 1234 5678"}, {"TEL": "12345"}])   # solo 10 dígitos; los otros dos se rechazan
+    # Migración: CSV como los deja COPY TO … TYPE CSV de FoxPro (EXPORTAR_MIGRACION.prg):
+    # encabezado en minúsculas, texto entre comillas sin espacios al final, fechas AAAAMMDD.
+    mig = destino / "migracion"
+    vfp(mig / "DAT.csv", ["folio", "cliente", "sub_cte", "nombre1", "cuenta", "cuenta2", "segmento2", "fe_asig", "sdo_act", "etiqueta1"], [
+        ["       100", "486", "NVA", "CLIENTE UNO", "20000001", "486-100", "CONSUMO", dt.date(2026, 10, 1), 1500.50, "MORA 1"],
+        ["       101", "486", "REA", "CLIENTE DOS", "20000002", "486-101", "TDC", dt.date(2026, 10, 2), 0, ""],
+        ["       102", "486", "NVA", "REPETIDA", "20000002", "486-102", "TDC", dt.date(2026, 10, 3), 0, ""],   # cuenta repetida: se omite
+    ])
+    vfp(mig / "TAB7.csv", ["folio"], [["        95"], ["       150"]])
+    vfp(mig / "HISTORIA.csv", ["folio", "cuenta"], [["       160", "20000007"], ["        90", "20000009"]])
+    vfp(mig / "PAGTOT.csv", ["ide", "grupo", "cuenta", "fe_pag", "mont", "segmento", "agen", "fe_reg", "tran"], [
+        ["500", "1", "20000001", "10022026", "000000001000.00", "pbank", "SERTEC", "10032026", "PAGO"],
+        ["500", "1", "20000001", "10022026", "000000001000.00", "pbank", "SERTEC", "10032026", "PAGO"],
+        ["500", "1", "2000000", "1C  0603", "2abc", "SERTE", "C  06032", "", ""],          # renglón corrido
+    ])
+    vfp(mig / "TOP.csv", ["cuenta2", "etiqueta"], [["486-100", "REE"], ["486-999", "REE"]])
+    vfp(mig / "EXC486.csv", ["cuenta"], [["20000008"]])
+    vfp(mig / "BLACKLIST.csv", ["tel"], [["55 0000 0000"], ["551234"]])                  # el de 6 dígitos se omite
+    vfp(mig / "TELBAJ.csv", ["cuenta", "tel"], [["486-100", "5511111111"], ["307-55", "5522222222"]])
+    vfp(mig / "LADA.csv", ["cp", "lada"], [["06600", "55"], ["37236", "477"]])
+    vfp(mig / "PNC.csv", ["lada", "serie", "n_ini", "n_fin", "tipored"], [["55", "1234", 0, 9999, "MOVIL"], ["477", "714", 0, 4999, "FIJO"]])
     print("datos de prueba en", destino)
+
+
+def vfp(ruta, campos, filas):
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    def v(x):
+        if x is None or x == "":
+            return ""
+        if isinstance(x, dt.date):
+            return x.strftime("%Y%m%d")
+        if isinstance(x, (int, float)):
+            return f"{x:.2f}" if isinstance(x, float) else str(x)
+        return '"' + str(x).rstrip() + '"'
+    with open(ruta, "w", encoding="cp437", newline="") as f:
+        f.write(",".join(campos) + "\r\n")
+        for fila in filas:
+            f.write(",".join(v(x) for x in fila) + "\r\n")
 
 
 if __name__ == "__main__":
