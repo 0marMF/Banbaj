@@ -54,12 +54,14 @@ EXEC ops.sp_actualizacion_486 @id_corrida = @id OUTPUT;
 -- Después de arribar a CYBER: avisos a Operación (antes MAIL, correo_486, correo, correo_486noti)
 EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486';     -- o ASIG_EXPRESS_486, CONFIRMACION_ACT_486, NOTIFICACION_RETIRO_486
 
--- Cruces con CYBER sin archivos: tools/bajar_cyber.py consulta Oracle, llena stg.CYBER_* y ejecuta el procedimiento
---   python tools/bajar_cyber.py status    --corrida <ID> --oracle usuario@host:1521/servicio --conexion "<ODBC>"   (blanqueo, día 1 al 10)
---   python tools/bajar_cyber.py correos   --corrida <ID> …   (INSERT de correos nuevos)
---   python tools/bajar_cyber.py telefonos --corrida <ID> …   (pide usuario y contraseña de Oracle)   (gescar de cuentas sin teléfono)
--- Con linked server a CYBER también se puede llenar stg.CYBER_* con OPENQUERY y ejecutar
--- ops.sp_blanqueo_status / ops.sp_correos_nuevos / ops.sp_gescar_sin_telefono.
+-- Cruces con CYBER (todo en SQL Server, por servidor vinculado a Oracle)
+--   Una vez: depositar usuario y contraseña (se guardan cifrados) y armar el vínculo
+INSERT INTO cfg.CAPTURA_CREDENCIAL (SISTEMA, USUARIO, CLAVE) VALUES ('CYBER_ORACLE', N'<usuario>', N'<contraseña>');
+EXEC cfg.sp_cyber_conectar;
+--   Cuando toque (baja a stg.CYBER_* y ejecuta el procedimiento que sigue)
+EXEC ops.sp_bajar_cyber 'STATUS',    @id_corrida = @id;   -- blanqueo, día 1 al 10
+EXEC ops.sp_bajar_cyber 'CORREOS',   @id_corrida = @id;   -- INSERT de correos nuevos
+EXEC ops.sp_bajar_cyber 'TELEFONOS', @id_corrida = @id;   -- gescar de cuentas sin teléfono
 
 -- Bases maestras completas (todas las columnas)
 SELECT JSON_VALUE(DATOS, '$."ACC_NUM"') FROM dat.BASE_RECIBIDA WHERE ID_CORRIDA = @id AND CODIGO = 'MAESTRA_TDC';
@@ -78,7 +80,7 @@ EXEC ops.sp_marcar_arribo @id_corrida = 130, @evento = 'FIN';
 SELECT * FROM ops.v_TIEMPOS_CORRIDA ORDER BY ID_CORRIDA DESC;
 
 -- Cuadre de pagos después de arribar SCBPAG (antes BAJ.sql + C:\NO_SUBIERON486)
---   python tools/bajar_cyber.py pagos --corrida 130 --oracle … --conexion …
+EXEC ops.sp_bajar_cyber 'PAGOS', @id_corrida = 130;
 
 -- Retiros por actualización: ZIP con contraseña y correo con el adjunto
 --   python tools/exportar_salidas.py --conexion … --corrida 130 --carpeta D:\Banbaj\486\salida --zip RETIROS

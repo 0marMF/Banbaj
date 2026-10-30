@@ -16,7 +16,7 @@
 
    En CYBER, como hoy:
    1. Los correos nuevos se insertan directo en RCVRY.ADDRESS (email.sql):
-      tools/bajar_cyber.py correos baja lo que ya tiene CYBER a stg.CYBER_CORREO
+      ops.sp_bajar_cyber 'CORREOS' baja lo que ya tiene CYBER a stg.CYBER_CORREO
       y ops.sp_correos_nuevos arma los INSERT (MAIL_INSERTA_NUEVOS).
    2. Depuración (act_mail.prg): bandera de CYBER encendida, se vacía la
       remesa, se carga sub_mail.TXT, RCVRY.JSP_CORREOS_486 purga lo que ya no
@@ -96,7 +96,7 @@ GO
 /* ---------------------------------------------------------------------
    Correos nuevos (email.PRG -> email.sql): los que no tiene CYBER se
    insertan directo en RCVRY.ADDRESS. Después de la asignación:
-   1. python tools/bajar_cyber.py correos --corrida <asignación> … (correos tipo 3 del 486
+   1. EXEC ops.sp_bajar_cyber 'correos', @id_corrida = <asignación> (correos tipo 3 del 486
       a stg.CYBER_CORREO y ejecuta este procedimiento; sin archivos en la máquina).
    2. Correr cyber/MAIL_INSERTA_NUEVOS.sql y luego la depuración (banderas y remesa).
    --------------------------------------------------------------------- */
@@ -113,7 +113,7 @@ BEGIN
 
     /* Si la tabla de paso viene vacía y no se confirmó, se detiene: insertaría correos que CYBER ya tiene */
     IF NOT EXISTS (SELECT 1 FROM stg.CYBER_CORREO) AND @cyber_sin_datos = 0
-        THROW 50642, 'stg.CYBER_CORREO está vacía: baja primero los correos de CYBER (tools/bajar_cyber.py correos).', 1;
+        THROW 50642, 'stg.CYBER_CORREO está vacía: baja primero los correos de CYBER (ops.sp_bajar_cyber ''CORREOS'').', 1;
 
     DELETE FROM ops.CORREO_CYBER WHERE ID_CORRIDA = @id_corrida;
     INSERT INTO ops.CORREO_CYBER (ID_CORRIDA, CUENTA2, CORREO)

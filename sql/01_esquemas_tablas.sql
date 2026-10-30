@@ -250,7 +250,7 @@ CREATE TABLE ops.TELEFONO_CYBER (
     CONSTRAINT PK_TELEFONO_CYBER PRIMARY KEY (ID_CORRIDA, CUENTA2)
 );
 GO
-/* Paso para lo que se baja de CYBER (tools/bajar_cyber.py): no se guardan archivos en la máquina.
+/* Paso para lo que se baja de CYBER (ops.sp_bajar_cyber): no se guardan archivos en la máquina.
    Cada procedimiento copia lo que necesita a ops.* y vacía la tabla de paso. */
 IF OBJECT_ID('stg.CYBER_STATUS') IS NULL
 CREATE TABLE stg.CYBER_STATUS (CLIENTE NVARCHAR(10) NULL, FOLIO NVARCHAR(20) NULL, CUENTA NVARCHAR(28) NULL, STATUS NVARCHAR(10) NULL,

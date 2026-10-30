@@ -448,6 +448,9 @@ PARAMETROS = [
     ("ETIQUETADO_ALIAS", "SEG_CICLO=TRAMO,CLASIFICA=ESTRA3,ETIQUETA2=DES_PROD,ETIQUETA3=SEG,ETIQUETA4=RIESGO,LEYENDA=NOMBRE2,"
      "SALDO_VEN=SDO_VDO,ETIQUETA10=ETIQUETA,MORA=ETIQUETA1",
      "ETIQUETAS486.xlsx: nombre en el DAT de Operación = columna de nuestro DAT (ETIQUETA6/TOP va con cfg.sp_etiqueta_cargar)"),
+    ("CYBER_LINKED_SERVER", "CYBER", "Servidor vinculado a Oracle (cfg.sp_cyber_conectar / ops.sp_bajar_cyber)"),
+    ("CYBER_ORACLE_ORIGEN", "", "PENDIENTE: Oracle de CYBER como host:puerto/servicio (ej. 10.0.0.5:1521/servicio)"),
+    ("CYBER_ORACLE_PROVEEDOR", "OraOLEDB.Oracle", "Proveedor OLE DB de Oracle instalado en el servidor de SQL Server"),
     ("CYBER_PROC_TELEFONOS", "RCVRY.JSP_TELEFONOS_REMESA_486", "Procedimiento de CYBER que purga y agrega los teléfonos (ACTUALIZA_PHONE.SQL)"),
     ("CAMPOS_ACTUALIZA_EXISTENTES",
      "TEL1,TEL2,TEL3,TEL4,TEL5,TEL6,TEL7,TEL8,TEL9,TEL10,TEL11,TEL12,TEL13,CORREO1,CORREO2,"

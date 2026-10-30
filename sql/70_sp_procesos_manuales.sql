@@ -171,7 +171,7 @@ GO
 /* ---------------------------------------------------------------------
    Blanqueo de status (status.prg, REQ 2020-029307). Del día 1 al 10
    (DIAS_BLANQUEO_STATUS), después de arribar la asignación:
-   1. python tools/bajar_cyber.py status --corrida <asignación> … (consulta de STATUS.SQL
+   1. EXEC ops.sp_bajar_cyber 'status', @id_corrida = <asignación> (consulta de STATUS.SQL
       a stg.CYBER_STATUS y ejecuta este procedimiento; sin archivos en la máquina).
    2. Revisar BLANQUEO_LISTA y correr cyber/BLANQUEO_STATUS.sql.
    Se blanquean las cuentas nuevas y reasignadas de esa asignación, salvo
@@ -197,7 +197,7 @@ BEGIN
         RETURN;
     END;
 
-    IF NOT EXISTS (SELECT 1 FROM stg.CYBER_STATUS) THROW 50611, 'stg.CYBER_STATUS está vacía: baja primero los status de CYBER (tools/bajar_cyber.py status).', 1;
+    IF NOT EXISTS (SELECT 1 FROM stg.CYBER_STATUS) THROW 50611, 'stg.CYBER_STATUS está vacía: baja primero los status de CYBER (ops.sp_bajar_cyber ''STATUS'').', 1;
 
     DECLARE @no TABLE (STATUS VARCHAR(10) PRIMARY KEY);
     INSERT INTO @no SELECT DISTINCT UPPER(LTRIM(RTRIM(value))) FROM STRING_SPLIT(ISNULL(cfg.fn_param(@cliente, 'STATUS_NO_BLANQUEAR'), ''), ',') WHERE LTRIM(RTRIM(value)) <> '';
@@ -334,7 +334,7 @@ GO
 /* ---------------------------------------------------------------------
    Gescar de cuentas sin teléfono (ges486.prg, REQ 2021-051126). Después de
    arribar los teléfonos de la asignación:
-   1. python tools/bajar_cyber.py telefonos --corrida <asignación> … (teléfonos activos del 486
+   1. EXEC ops.sp_bajar_cyber 'telefonos', @id_corrida = <asignación> (teléfonos activos del 486
       a stg.CYBER_TELEFONO y ejecuta este procedimiento).
    2. Arribar SCBACTH_SINTEL.TXT ("CUENTA SIN NUMERO TELEFONICO", origen zzasg).
    Aplica a las cuentas nuevas y reasignadas de esa asignación que no tienen
@@ -349,7 +349,7 @@ BEGIN
     SELECT @cliente = CLIENTE, @proceso = PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
     IF @proceso IS NULL OR @proceso <> 'ASIG' THROW 50650, 'Indica una corrida de asignación.', 1;
 
-    IF NOT EXISTS (SELECT 1 FROM stg.CYBER_TELEFONO) THROW 50651, 'stg.CYBER_TELEFONO está vacía: baja primero los teléfonos de CYBER (tools/bajar_cyber.py telefonos).', 1;
+    IF NOT EXISTS (SELECT 1 FROM stg.CYBER_TELEFONO) THROW 50651, 'stg.CYBER_TELEFONO está vacía: baja primero los teléfonos de CYBER (ops.sp_bajar_cyber ''TELEFONOS'').', 1;
 
     DELETE FROM ops.TELEFONO_CYBER WHERE ID_CORRIDA = @id_corrida;
     INSERT INTO ops.TELEFONO_CYBER (ID_CORRIDA, CUENTA2, TELEFONOS)

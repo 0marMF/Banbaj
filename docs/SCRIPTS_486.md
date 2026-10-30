@@ -31,9 +31,9 @@ En el repo hay varios scripts con el mismo nombre porque cada programa los busca
 | `ACTIVA_BANDERA.SQL` / `INACTIVA_BANDERA.SQL` | act_mail.prg | Bandera en `RCVRY.RPT_LOG_CYBER_REG` (id_proc 416) y log en `rpt_log_cyber` | Se mantienen: `cyber/MAIL_ACTIVA_BANDERA.sql` y `MAIL_INACTIVA_BANDERA.sql` |
 | `LOAD_ORACLE_MAIL.CTL` | act_mail.prg | `sub_mail.TXT` → `RCVRY.JSP_TAB_MAIL_REMESA_486` | `cyber/486/LOAD_MAIL_REMESA.CTL` |
 | `INSERTA_MAIL.sql` | act_mail.prg | `EXECUTE RCVRY.JSP_CORREOS_486` | `cyber/MAIL_ACTUALIZA.sql` por corrida |
-| `cyadd.sql` | email.PRG | Baja `MAIL\baad.txt`: correos que ya tiene CYBER (`RCVRY.Address` tipo 3) | `tools/bajar_cyber.py correos` → `stg.CYBER_CORREO` |
+| `cyadd.sql` | email.PRG | Baja `MAIL\baad.txt`: correos que ya tiene CYBER (`RCVRY.Address` tipo 3) | `ops.sp_bajar_cyber 'CORREOS'` → `stg.CYBER_CORREO` |
 | `email.sql` | email.PRG (lo genera) | `INSERT INTO RCVRY.ADDRESS` de los correos nuevos | `ops.sp_correos_nuevos` → `cyber/MAIL_INSERTA_NUEVOS.sql` (mismo formato) |
-| `STATUS.SQL` | status.prg | Baja status de CYBER a `C:\STATUSBAJ.txt` | `tools/bajar_cyber.py status` → `stg.CYBER_STATUS` → `ops.sp_blanqueo_status` |
+| `STATUS.SQL` | status.prg | Baja status de CYBER a `C:\STATUSBAJ.txt` | `ops.sp_bajar_cyber 'STATUS'` → `stg.CYBER_STATUS` → `ops.sp_blanqueo_status` |
 | `PROMESA.SQL` | status.prg (comentado) | Promesas de pago vigentes | **No se usa** |
 | `LOAD_ORACLE_AMEX.CTL`, `BORRA_AMX.SQL` | ninguno del 486 | Tabla `rcvry.AMEX` de otro cliente | **No se usan** |
 | `TELADICIONAL.SQL` | ninguno | "TELEFONOS DE AMEX" a `tel.txt` | **No se usa** |
@@ -46,7 +46,7 @@ En el repo hay varios scripts con el mismo nombre porque cada programa los busca
 | `op9.prg` + `limpia.PRG` | Normaliza TEL1..16 de las cuentas que entran al DAT (AREA + TELEFONO; inválidos se borran) | `ops.sp_asig_normalizar_telefonos` |
 | `estructura.prg` | REE = 'REEST' o vacío según segmento, tramo, tipo, COVID y garantizada (actualización) | Reglas de `cfg.HOMOLOGACION` sobre `dat.DAT_486` (proceso ACT) |
 | `email.PRG` + `act_mail.prg` | Correos del DAT a CYBER | `ops.sp_correos` → `sub_mail.TXT` + scripts |
-| `ges486.prg` | Gescar "CUENTA SIN NUMERO TELEFONICO" para nuevas sin teléfono en CYBER | `tools/bajar_cyber.py telefonos` → `ops.sp_gescar_sin_telefono` |
+| `ges486.prg` | Gescar "CUENTA SIN NUMERO TELEFONICO" para nuevas sin teléfono en CYBER | `ops.sp_bajar_cyber 'TELEFONOS'` → `ops.sp_gescar_sin_telefono` |
 | `status.prg` | Blanqueo de status del día 1 al 10 | `ops.sp_blanqueo_status` |
 | `eti486.prg` | Etiquetado del DAT desde archivo de Operación | `ops.sp_etiquetar_campo` (un campo por archivo FOLIO,ETIQUETA) |
 | `devfianey.prg` | Aviso de devolución a AEM | `AVISO_DEVOLUCION_486` con `ops.sp_avisar` |

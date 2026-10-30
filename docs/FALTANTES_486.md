@@ -93,7 +93,7 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 - [ ] **Importes negativos** (ej. saldo TDC -87.13): SCBSDOS hoy manda `000000000087.13` (positivo) y el script de saldos `000000000-87.13`. Opciones: como hoy, `000000000000.00` (cero) o `-00000000087.13` (signo). Parámetro `NEGATIVO_MODO`.
 - [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.
-- [x] **Acceso a CYBER:** el usuario y la contraseña de Oracle se escriben a mano cada vez que corre `tools/bajar_cyber.py` (no se guardan). Falta solo confirmar host/servicio.
+- [x] **Acceso a CYBER:** servidor vinculado desde SQL Server. El usuario y la contraseña se depositan en `cfg.CAPTURA_CREDENCIAL` (se guardan cifrados) y `EXEC cfg.sp_cyber_conectar` arma el vínculo. Falta: parámetro `CYBER_ORACLE_ORIGEN` (host:puerto/servicio) y el cliente de Oracle (OraOLEDB) instalado en el servidor.
 - [ ] **Ruta de red de `Q:`** para la cuenta de servicio de SQL Server.
 - [x] **Días festivos:** no se agrega calendario (decisión 29/10). Antes: el T-1 de pagos y el job solo distinguen fin de semana. ¿Se agrega un calendario de días inhábiles (ej. después de un festivo, T-1 sería el último día hábil)?
 - [ ] **Estructura de las tablas de CYBER:** sin acceso; se mantienen los campos como se ven en los .prg.
@@ -104,7 +104,7 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 - Macro `ASIG_486.xlsm` corregida en `mapeos/ASIG_486.xlsm`: se quitó la línea D162 = C162 (pegaba NAME2 en Tipo de TDC en la fila 162). Solo cambió esa línea; el código precompilado se invalida para que Excel recompile al abrir.
 
 - Revisión de los flujos actuales (29/10), pasos que **ya no** van: ZIP con contraseña de los originales en C:\ORIGINALES, covid.dbf, garantizada.dbf, O:\ASIGNA\NUEVAS, C:\dev486_completa, captura de "a quién se pide el DAT", verifica.xls.
-- Pasos que **se quedan**: horas de solicitud, autorización y fin del arribo (`ops.sp_marcar_arribo`, `ops.v_TIEMPOS_CORRIDA`); cuadre de pagos contra CYBER (`bajar_cyber.py pagos` → `ops.sp_cuadrar_pagos`); saldos que no se actualizaron (regla `SALDOS_NO_ACTUALIZADOS`, paso POST_ACT); retiros por actualización con ZIP y correo; correos 1, 2, 9 y 10.
+- Pasos que **se quedan**: horas de solicitud, autorización y fin del arribo (`ops.sp_marcar_arribo`, `ops.v_TIEMPOS_CORRIDA`); cuadre de pagos contra CYBER (`ops.sp_bajar_cyber 'PAGOS'` → `ops.sp_cuadrar_pagos`); saldos que no se actualizaron (regla `SALDOS_NO_ACTUALIZADOS`, paso POST_ACT); retiros por actualización con ZIP y correo; correos 1, 2, 9 y 10.
 - Regla de la pestaña REGLAS "Validar que los saldos sean diferentes al último DAT": `*_SALDOS_IGUALES_DAT` avisa si toda la base maestra de un segmento trae los mismos SALDO1-3 que el DAT.
 - Corrección D162 = C162 de la macro: en la hoja BASE original C es NAME1 y D es NAME2, así que es la regla "si NAME2 viene vacío se toma NAME1" grabada para una sola fila. Como la macro ya borró columnas antes de esa línea, hoy pega NAME2 en Tipo de TDC (ESTRA3) en la fila 162. No se migra: la regla general ya está en la homologación.
 
@@ -128,7 +128,7 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 - Banderas de CYBER (`RPT_LOG_CYBER_REG`, id_proc 416) se mantienen alrededor de la depuración de correos.
 - Correos: se insertan los nuevos en `RCVRY.ADDRESS` (`ops.sp_correos_nuevos`) y la remesa + `JSP_CORREOS_486` purga lo que ya no llega. EMAILMALO se aplica a ambos.
 - Gescar de cuentas sin teléfono: contra los teléfonos activos en CYBER (`ops.sp_gescar_sin_telefono`).
-- Lo que se baja de CYBER para cruzar (status, correos, teléfonos) va directo a tablas de paso (`tools/bajar_cyber.py` → `stg.CYBER_*`); no se guardan archivos en la máquina.
+- Lo que se baja de CYBER para cruzar (status, correos, teléfonos) va directo a tablas de paso (`ops.sp_bajar_cyber` → `stg.CYBER_*`); no se guardan archivos en la máquina.
 - La copia del DAT para MIS sale en CSV (`DAT486_<fecha>.csv`, con encabezado).
 - Las bases maestras se guardan completas (`dat.BASE_RECIBIDA`); los procesos solo toman las columnas mapeadas.
 - `administrativo.mc6@` corregido.

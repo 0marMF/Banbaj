@@ -714,6 +714,38 @@ FROM (SELECT N'Retroceso ASIG: DAT, consecutivo e histórico como al inicio' AS 
 GO
 
 /* ---------------------------------------------------------------------
+   CREDENCIALES y consultas a CYBER (sin Oracle: solo arma la consulta)
+   --------------------------------------------------------------------- */
+INSERT INTO cfg.CAPTURA_CREDENCIAL (SISTEMA, USUARIO, CLAVE) VALUES ('cyber_oracle', 'usuario_prueba', N'Clave$Prueba1');
+INSERT INTO cfg.CAPTURA_CREDENCIAL (SISTEMA, USUARIO, CLAVE) VALUES ('CYBER_ORACLE', 'usuario_nuevo', N'Clave$Nueva2');   -- reemplaza
+DECLARE @u NVARCHAR(128), @c NVARCHAR(256), @err NVARCHAR(4000) = N'';
+EXEC cfg.sp_credencial_leer 'CYBER_ORACLE', @u OUTPUT, @c OUTPUT;
+BEGIN TRY
+    INSERT INTO cfg.CAPTURA_CREDENCIAL (SISTEMA, USUARIO, CLAVE) VALUES ('CYBER_ORACLE', 'x', N'********');
+END TRY
+BEGIN CATCH SET @err = CAST(ERROR_NUMBER() AS NVARCHAR(10)); END CATCH;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'CREDENCIAL: se guarda cifrada, se reemplaza y no se muestra' AS p, N'1|usuario_nuevo|1|********|0|50800' AS e,
+             CONCAT((SELECT COUNT(*) FROM cfg.CREDENCIAL), '|', @u, '|', CASE WHEN @c = N'Clave$Nueva2' THEN 1 ELSE 0 END, '|',
+                    (SELECT CLAVE FROM cfg.CAPTURA_CREDENCIAL WHERE SISTEMA = 'CYBER_ORACLE'), '|',
+                    (SELECT COUNT(*) FROM cfg.CREDENCIAL WHERE CHARINDEX(CAST(N'Clave$Nueva2' AS VARBINARY(100)), CLAVE) > 0), '|', @err) AS o) x;
+
+DECLARE @m TABLE (CONSULTA VARCHAR(20), SERVIDOR SYSNAME, ORACLE NVARCHAR(MAX), SQL_SERVER NVARCHAR(MAX));
+INSERT INTO @m EXEC ops.sp_bajar_cyber 'pagos', @fecha = '2026-11-03', @solo_mostrar = 1;
+INSERT INTO @m EXEC ops.sp_bajar_cyber 'STATUS', @solo_mostrar = 1;
+SET @err = N'';
+BEGIN TRY EXEC ops.sp_bajar_cyber 'TELEFONOS', @id_corrida = 2; END TRY
+BEGIN CATCH SET @err = CAST(ERROR_NUMBER() AS NVARCHAR(10)); END CATCH;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'CYBER: consultas por servidor vinculado (BAJ.sql, STATUS.SQL) y aviso si no está configurado' AS p, N'1|1|1|50823' AS e,
+             CONCAT((SELECT COUNT(*) FROM @m WHERE CONSULTA = 'PAGOS' AND ORACLE LIKE N'%RCVRY.pmtfil%' AND ORACLE LIKE N'%DMCOMPANY = ''486''%'
+                                                AND ORACLE LIKE N'%TO_DATE(''2026-11-03''%' AND SQL_SERVER LIKE N'INSERT INTO stg.CYBER_PAGO (CUENTA, MONTO, FECHA) EXEC (%) AT [CYBER];'), '|',
+                    (SELECT COUNT(*) FROM @m WHERE CONSULTA = 'STATUS' AND ORACLE LIKE N'%DMSTATUS is null%'), '|',
+                    (SELECT COUNT(*) FROM @m WHERE CONSULTA = 'PAGOS' AND SQL_SERVER LIKE N'%''''2026-11-03''''%'), '|', @err) AS o) x;
+DELETE FROM cfg.CAPTURA_CREDENCIAL WHERE SISTEMA = 'CYBER_ORACLE';
+GO
+
+/* ---------------------------------------------------------------------
    Resultado
    --------------------------------------------------------------------- */
 SELECT CASE OK WHEN 1 THEN 'OK   ' ELSE 'FALLA' END AS R, PRUEBA, DETALLE FROM pru.RESULTADO ORDER BY ID;

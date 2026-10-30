@@ -44,7 +44,7 @@ GO
 /* ---------------------------------------------------------------------
    Cuadre de pagos (saldos.prg después de PAGOS): se compara lo arribado en
    SCBPAG de la corrida (dat.PAGO_ARRIBADO) contra lo que CYBER registró hoy
-   (stg.CYBER_PAGO, lo llena tools/bajar_cyber.py pagos). Se empareja por
+   (stg.CYBER_PAGO, lo llena ops.sp_bajar_cyber 'PAGOS'). Se empareja por
    CUENTA2 + importe; lo que no aparece en CYBER es lo que "no subió".
    Si hay pagos sin subir: rechazos CUADRE_PAGOS + correo PAGOS_NO_SUBIERON_486.
    --------------------------------------------------------------------- */
