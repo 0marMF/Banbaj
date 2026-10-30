@@ -50,7 +50,7 @@ def main(destino):
         tdc("10000000011111", "1000000001", "CLIENTE PRUEBA UNO", "1000.00", "1100.00", "45", "VEN4", "COSECHA 2", "5599999999"),
         tdc("10000000033333", "1000000003", "CLIENTE PRUEBA TRES", "0", "750.00", "45", "VEN4", tel="477-123-4567",
             email1=" Persona.Tres@Correo.COM ", email2="notiene@hotmail.com"),
-        tdc("10000000044444", "1000000004", "CLIENTE PRUEBA CUATRO", "2000.00", "2000.00", "CASTIGADA", "CCAS"),
+        dict(tdc("10000000044444", "1000000004", "-", "2000.00", "2000.00", "CASTIGADA", "CCAS"), NAME1="CLIENTE PRUEBA CUATRO"),
         tdc("10000000055555", "1000000005", "CLIENTE PRUEBA MALO", "abc", "10.00", "45", "VEN4"),
     ])
 
