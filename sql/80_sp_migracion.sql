@@ -51,7 +51,9 @@ BEGIN
         IF ERROR_NUMBER() IN (4860, 4861, 12704) RETURN;          -- el archivo no existe
         THROW;
     END CATCH;
-    SELECT @hdr = REPLACE(REPLACE(REPLACE(L, NCHAR(13), N''), N'"', N''), NCHAR(65279), N'') FROM #h;
+    DECLARE @fdl NVARCHAR(20) = N'0x0a';
+    SELECT @fdl = CASE WHEN RIGHT(L, 1) = NCHAR(13) THEN N'0x0d0a' ELSE N'0x0a' END,      -- FoxPro escribe CRLF
+           @hdr = REPLACE(REPLACE(REPLACE(L, NCHAR(13), N''), N'"', N''), NCHAR(65279), N'') FROM #h;
     IF NULLIF(LTRIM(@hdr), N'') IS NULL BEGIN SET @n = 0; RETURN; END;
 
     SELECT CAST([key] AS INT) + 1 AS POS, UPPER(LTRIM(RTRIM([value]))) AS CAMPO
@@ -68,7 +70,7 @@ BEGIN
              + (SELECT STRING_AGG(CAST(QUOTENAME(CAMPO) AS NVARCHAR(MAX)), N', ') WITHIN GROUP (ORDER BY POS) FROM #c) + N' FROM ' + @tabla + N';';
     EXEC (@sql);
     SET @sql = N'BULK INSERT ' + @vista + N' FROM ' + QUOTENAME(@archivo, '''')
-             + N' WITH (FORMAT = ''CSV'', FIELDQUOTE = ''"'', FIRSTROW = 2, FIELDTERMINATOR = '','', ROWTERMINATOR = ''0x0a'', TABLOCK' + @cp + N');';
+             + N' WITH (FORMAT = ''CSV'', FIELDQUOTE = ''"'', FIRSTROW = 2, FIELDTERMINATOR = '','', ROWTERMINATOR = ''' + @fdl + N''', TABLOCK' + @cp + N');';
     EXEC (@sql);
     SET @sql = N'UPDATE ' + @tabla + N' SET ' + QUOTENAME(@ultima) + N' = REPLACE(' + QUOTENAME(@ultima) + N', NCHAR(13), N''''); SELECT @n = COUNT(*) FROM ' + @tabla + N';';
     EXEC sp_executesql @sql, N'@n INT OUTPUT', @n = @n OUTPUT;
