@@ -135,7 +135,7 @@ GO
    Correo dinámico
    --------------------------------------------------------------------- */
 DECLARE @r TABLE (PARA NVARCHAR(MAX), CC NVARCHAR(MAX), CCO NVARCHAR(MAX), ASUNTO NVARCHAR(255), CUERPO_HTML NVARCHAR(MAX), ADJUNTOS NVARCHAR(MAX));
-INSERT INTO @r EXEC mail.sp_enviar @plantilla = 'CONFIRMACION_ASIG_486', @solo_prueba = 1;
+INSERT INTO @r EXEC mail.sp_enviar @plantilla = 'CONFIRMACION_ASIG_486', @valores = N'{"RESUMEN":"Archivos: 2"}', @solo_prueba = 1;
 DECLARE @para NVARCHAR(MAX), @cco NVARCHAR(MAX), @cuerpo NVARCHAR(MAX);
 SELECT @para = PARA, @cco = CCO, @cuerpo = CUERPO_HTML FROM @r;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Correo: TO armado desde la tabla', ISNULL(CASE WHEN @para LIKE N'%erika.ramos@sertec.com.mx%' THEN 1 ELSE 0 END, 0), CAST(@para AS NVARCHAR(4000));

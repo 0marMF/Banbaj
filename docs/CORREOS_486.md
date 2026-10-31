@@ -1,167 +1,51 @@
-# Correos del cliente 486: ¿cuáles se quedan?
+# Correos del cliente 486
 
-Esta lista incluye todos los correos que mandan hoy los programas de FoxPro del 486, más los avisos nuevos que agrega Banbaj.
-Marca con una **x** lo que decidas en cada uno (`[x] Mantener` o `[x] Eliminar`). Si un correo se queda pero quieres cambiar algo (destinatarios, texto, si se manda solo o a mano), anótalo en **Cambios**.
+Decisiones del 29 y 30/10. Cada correo es una plantilla (`mail.PLANTILLA`) con su lista de destinatarios (`mail.LISTA` / `mail.DESTINATARIO`). Para cambiar a quién le llega un correo se edita la lista; no hay que tocar código.
 
-Hoy todos salen por CDO (SMTP 192.168.50.7) y casi todos esperan un "¿Deseas enviar…?" antes de mandarse. En Banbaj cada correo es una plantilla (`mail.PLANTILLA`) con su lista de destinatarios (`mail.LISTA`). Un correo que elimines se apaga en el catálogo, sin tocar código.
+Todos llevan la firma de Asignaciones y el aviso de confidencialidad.
 
----
+## Los que se quedan
 
-## A. Asignación (paso.prg)
+### Asignación
 
-### 1. Confirmación de asignación a Operación
-| | |
-|---|---|
-| **Programa hoy** | `mail.prg`, llamado desde `paso.prg` |
-| **Cuándo** | Al final de la asignación, si contestas "Sí" a *"¿Deseas enviar correo de confirmación de asignación a Operación?"* |
-| **Asunto** | `Asignación BANCO BAJIO del día dd/mm/aaaa` |
-| **Texto** | Se realiza asignación BANCO BAJIO. Favor de revisar y confirmar misma vía. |
-| **Para** | erika.ramos, administrativo.mc4, administrativo.mc5, supervisor.mc4, supervisorbackoffice.mc |
-| **CCO** | asignaciones.cdmx1, asignaciones3, asig.cdmx |
-| **En Banbaj** | `CONFIRMACION_ASIG_486`, lista `OPERACION_ASIG_486`. Se manda a mano con `ops.sp_avisar` después de arribar a CYBER |
-
-- [x] Mantener  - [ ] Eliminar  · **Decidido (29/10)**  · **Cambios:**
-
-### 2. Asignación Express
-| | |
-|---|---|
-| **Programa hoy** | `correo_486.prg`, llamado desde `paso.prg` |
-| **Cuándo** | Al final de la asignación, si contestas "Sí" a *"¿Deseas enviar correo express?"* |
-| **Asunto** | `Se realiza Asignacion Express Banco Bajio, dd/mm/aaaa` |
-| **Texto** | Asignacion Banco Bajio en Cyber; dat actualizado en ftp, FAVOR DE CONSTRUIR. |
-| **Para** | supervisor.mc5, erika.ramos |
-| **CC** | carlos.landa, aem.control1, aem.consultoria1, aem.consultoria2, aem.consultoria3, aem.entregables1, supervisor.aem.cdmx, supervisor.aem.cdmx2, supervisor.aem.cdmx3, aem.operativa1, aem.operativa2 |
-| **CCO** | asignaciones.cdmx1, asignaciones3, asig.cdmx |
-| **En Banbaj** | `ASIG_EXPRESS_486`, lista `ASIG_EXPRESS_486`. A mano con `ops.sp_avisar` |
-
-- [x] Mantener  - [ ] Eliminar  · **Decidido (29/10)**  · **Cambios:**
-
-### 3. Alerta de asignación grande (más de 100 nuevas)
-| | |
-|---|---|
-| **Programa hoy** | `aem_alerta.prg`, llamado desde `paso.prg` |
-| **Cuándo** | Automático, si la asignación trae más de 100 cuentas nuevas (NVA) |
-| **Asunto** | `Asignaciones grande de 486 dd/mm/aaaa` |
-| **Texto** | Se recibe una asignacion con mas de 100 registros nuevos, favor de construir al finalizar. |
-| **Para** | supervisor.aem.cdmx4, aem.control1, aem.proyectos1, aem.consultoria1, supervisor.aem.cdmx2 |
-| **CCO** | asig.cdmx |
-| **En Banbaj** | `ALERTA_NUEVAS_486`, lista `AEM_486`. Automático (el umbral de 100 es un parámetro) |
-
-- [x] Mantener  - [ ] Eliminar  · **Cambios:**
-
-### 4. Cuentas nuevas de Consumo con saldo actual ≤ 0
-| | |
-|---|---|
-| **Programa hoy** | `mail_sdo_act_cons.prg`, llamado desde `asig_bases.prg` |
-| **Cuándo** | Automático, si la base maestra de Consumo trae cuentas con SDO_ACT ≤ 0 |
-| **Asunto** | `EXISTEN CUENTAS NUEVAS DE CONSUMO CON SDO_ACT MENORES O IGUALES A CERO dd/mm/aaaa` |
-| **Texto hoy** | *"Se realiza asignación BANCO BAJIO. Favor de revisar y confirmar misma vía."* (es el texto de mail.prg copiado: no dice nada del saldo) |
-| **Para** | erika.ramos, administrativo.mc4, administrativo.mc5, supervisor.mc4, supervisorbackoffice.mc |
-| **CCO** | asignaciones.cdmx1, asignaciones3, asig.cdmx |
-| **En Banbaj** | `ALERTA_SDO_ACT_CONS_486`, lista `OPERACION_ASIG_486`. Automático; el texto ya explica el problema y trae el número de cuentas |
-
-- [x] Mantener  - [ ] Eliminar  · **Cambios:**
-
-### 5. Devolución del cliente (en la asignación)
-| | |
-|---|---|
-| **Programa hoy** | `devfianey.prg` (O:\ASIGNA), llamado por `prog15.prg`, que a su vez llama `paso.prg` |
-| **Cuándo** | Automático, al terminar el retiro dentro de la asignación |
-| **Asunto** | `Devolucion del cliente BANCO BAJIO <fecha>` |
-| **Texto** | ARCHIVO DE DEVOLUCION ACTUALIZADO, FAVOR DE VERIFICAR. |
-| **Para** | aem.control1, supervisor.aem.cdmx, supervisor.aem.cdmx2, supervisor.aem.cdmx3, supervisor.aem.cdmx4, aem.operativa1, aem.operativa2, aem.entregables1 |
-| **CC** | asignaciones3, asignaciones.cdmx1, asig.cdmx |
-| **En Banbaj** | `AVISO_DEVOLUCION_486`, lista `DEVOLUCION_AEM_486`. Recién agregado; a mano con `ops.sp_avisar` |
-
-- [x] Mantener  - [ ] Eliminar  · **Cambios:**
-
----
-
-## B. Actualización de saldos y pagos (saldos.prg)
-
-### 6. Los pagos no están actualizados (T-1)
-| | |
-|---|---|
-| **Programa hoy** | `mail_pagos.prg`, llamado desde `saldos.prg` |
-| **Cuándo** | Si el archivo de pagos no trae pagos del día anterior y contestas "Sí" a *"¿Deseas mandar correo de aviso?"* |
-| **Asunto** | `Los pagos de la Boveda no estan actualizados dd/mm/aaaa` |
-| **Texto hoy** | *"Se realiza asignación BANCO BAJIO…"* (mismo texto copiado de mail.prg) |
-| **Para** | erika.ramos, administrativo.mc4, administrativo.mc5, supervisor.mc4, supervisorbackoffice.mc |
-| **CCO** | asignaciones.cdmx1, asignaciones3, asig.cdmx |
-| **En Banbaj** | `PAGOS_NO_ACTUALIZADOS_486`. Automático (regla `PAGOS_T1`, el lunes revisa el viernes), con texto corregido |
-
-- [ ] Mantener  - [x] Eliminar  · **Cambios:**
-
-### 7. Retiros por actualización (con archivo adjunto)
-| | |
-|---|---|
-| **Programa hoy** | Dentro de `saldos.prg` |
-| **Cuándo** | Automático, después de generar los retiros de la actualización |
-| **Asunto** | `Retiros actualizacion, dd/mm/aaaa` |
-| **Texto** | Se comparte archivo retiro por actualizacion, FAVOR DE REVISAR. |
-| **Adjunto** | `RETIROS_PAG_486_<fecha><hora>.zip` |
-| **Para** | soluciones.486, supervisor.mc, supervisor.mc3, supervisorbackoffice.mc, soluciones_banbajio |
-| **CCO** | asignaciones3, asig.cdmx, asignaciones.cdmx1 |
-| **En Banbaj** | `RETIROS_ACT_486`. Se queda con ZIP con contraseña: `EXEC ops.sp_exportar_salidas @id_corrida = <corrida>, @zip = 'RETIROS', @enviar_zip = 1` arma el ZIP en C:\ (7-Zip) y lo manda |
-
-- [x] Mantener  - [ ] Eliminar  · **Decidido (29/10)**  · **Cambios:**
-
-### 8. Devolución del cliente (en la actualización)
-Es el mismo correo que el **5** (`devfianey.prg` por medio de `prog15.prg`), pero llamado desde `saldos.prg` cuando contestas "Sí" a *"Devolución: revisa que tengas el archivo en C:\DEVOLUCION"*.
-
-- [ ] Mantener  - [x] Eliminar  · **Cambios:**
-
-### 9. Notificación de actualización a Operación
-| | |
-|---|---|
-| **Programa hoy** | `correo_486noti.prg`, llamado desde `saldos.prg` |
-| **Cuándo** | Después de la devolución, si contestas "Sí" a *"Notificación para operación"* |
-| **Asunto** | `Actualización de Banco Bajio, dd/mm/aaaa` |
-| **Texto** | Se realiza actualización de Saldos, pagos y devolución del cliente 486. |
-| **Para** | supervisor.mc4, erika.ramos |
-| **CC** | supervisorbackoffice.mc3, **dministrativo.mc6** (le falta la "a": hoy ese correo rebota), supervisorbackoffice.mc2, supervisorbackoffice.mc, administrativo.mc4 |
-| **CCO** | asignaciones.cdmx1, asignaciones3, asig.cdmx |
-| **En Banbaj** | `NOTIFICACION_RETIRO_486`, lista `RETIROS_OPERACION_486` (ya con administrativo.mc6 bien escrito). A mano con `ops.sp_avisar` |
-
-- [x] Mantener  - [ ] Eliminar  · **Decidido (29/10)**  · **Cambios:**
-
-### 10. Actualización terminada
-| | |
-|---|---|
-| **Programa hoy** | `correo.prg`, llamado desde `saldos.prg` |
-| **Cuándo** | Al final, si contestas "Sí" a *"¿Deseas enviar correo?"* |
-| **Asunto** | `Se realiza Actualizacion de Banco Bajio, dd/mm/aaaa` |
-| **Texto** | Actualizacion de Banco Bajio en Cyber; dat actualizado en ftp, FAVOR DE REVISAR. |
-| **Para** | administrativo.mc, administrativo.mc2, administrativo.mc3, supervisor.mc, supervisor.mc2, supervisor.mc3, supervisor.mc4, erika.ramos |
-| **CC** | administrativo.mc6, supervisor.mc6, supervisorbackoffice.mc, administrativo.mc4 |
-| **CCO** | asignaciones.cdmx1, asignaciones3, asig.cdmx |
-| **En Banbaj** | `CONFIRMACION_ACT_486`, lista `ACTUALIZACION_486`. A mano con `ops.sp_avisar` |
-
-- [x] Mantener  - [ ] Eliminar  · **Decidido (29/10)**  · **Cambios:**
-
-> Los correos **9** y **10** salen el mismo día y a casi la misma gente. Si los juntas en uno, se ahorra un correo diario.
-
----
-
-## C. Avisos nuevos de Banbaj (hoy no existen como correo)
-
-Todos van a la lista `ASIGNACIONES_486` (buzón asig.486.cdmx con CCO al equipo), salvo el 11.
-
-| # | Plantilla | Cuándo se manda | Hoy qué pasa | Decisión |
+| Correo | Plantilla | Cuándo | Para | Copia oculta |
 |---|---|---|---|---|
-| 11 | `PAGOS_NEGATIVOS_486` | Llegan pagos negativos: no se arriban y se avisa a Operación con la lista | Aparece un mensaje en pantalla y se cancela el proceso; al cliente se le avisa a mano. **Falta definir los destinatarios** (hoy va al buzón) | [x] Mantener [ ] Eliminar |
-| 12 | `ERROR_PROCESO_486` | Cualquier proceso termina con error | Mensaje en pantalla | [ ] Mantener [x] Eliminar |
-| 13 | `DEVOLUCION_MASIVA_486` | La base maestra dejaría fuera más del % de `TOPE_DEVOLUCION_PCT` (hoy sin tope: no se dispara) | No existe | [ ] Mantener [x] Eliminar |
-| 14 | `MAESTRA_NUMEROS_EXCEL_486` | La base maestra se guardó como CSV con cuentas en notación científica (1.23457E+15) y se detiene la asignación | No existe (la macro lo evitaba) | [x] Mantener [ ] Eliminar |
+| **Inicio de asignación** (nuevo) | `INICIO_ASIG_486` | Solo, al arrancar la asignación. Dice la hora en que llegó la base | erika.ramos, administrativo.mc4, administrativo.mc5, supervisor.mc4, supervisorbackoffice.mc | asignaciones.cdmx1, asignaciones3, asig.cdmx |
+| **Fin de asignación** (antes MAIL.prg) | `CONFIRMACION_ASIG_486` | A mano, después de arribar a CYBER: `EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486'` | Los mismos del inicio | Los mismos del inicio |
+| **Asignación grande** (antes aem_alerta.prg) | `ALERTA_NUEVAS_486` | Solo, si llegan más de 100 cuentas nuevas (parámetro) | supervisor.aem.cdmx4, aem.control1, aem.proyectos1, aem.consultoria1, supervisor.aem.cdmx2 | asig.cdmx |
 
-**Retirados (29/10):** los avisos de saldos no actualizados, pagos que no subieron y saldos iguales al último DAT. Los saldos siempre se actualizan y los pagos siempre suben; el cuadre de pagos queda como revisión a mano (`ops.sp_bajar_cyber 'PAGOS'`), sin correo.
+### Devolución (un solo correo)
 
-**Cambios / comentarios:**
+Uno para cualquier retiro: asignación, actualización o retiro por solicitud. Sustituye a devfianey.prg, a "Retiros actualizacion" de saldos.prg y a la notificación de devolución en la actualización.
 
----
+| Copia | Plantilla | Para | Copia oculta | Adjunto |
+|---|---|---|---|---|
+| Operación | `DEVOLUCION_486` | soluciones.486, supervisor.mc, supervisor.mc3, supervisorbackoffice.mc, soluciones_banbajio | asignaciones.cdmx1, asignaciones3, asig.cdmx | ZIP con contraseña `C:\RETIROS_PAG_486_<fecha><hora>.zip` |
+| AEM | `DEVOLUCION_486_AEM` | — | aem.control1, supervisor.aem.cdmx, supervisor.aem.cdmx2, supervisor.aem.cdmx3, supervisor.aem.cdmx4, aem.operativa1, aem.operativa2, aem.entregables1 | Sin ZIP |
 
-## Notas para decidir
+- **Asunto:** `Devolucion del cliente BANCO BAJIO dd/mm/aaaa`
+- **Texto:** "Archivo de devolución actualizado (asignación / actualización / retiro por solicitud), favor de verificar." Incluye cuántas cuentas se devolvieron.
+- **Por qué son dos envíos:** el correo de SQL Server (Database Mail) manda el mismo adjunto a todos los destinatarios de un correo. Para que AEM no reciba el ZIP, sale una copia igual sin adjunto y con AEM solo en copia oculta.
+- **Cómo se manda:** al exportar los archivos de la corrida: `EXEC ops.sp_exportar_salidas @id, @zip = 'RETIROS', @enviar_zip = 1`. O suelto: `EXEC ops.sp_aviso_devolucion @id, N'C:\RETIROS_PAG_486_….zip'`.
 
-- **Automático o a mano.** Los correos que confirman algo a Operación (1, 2, 5/8, 9, 10) salen hoy solo si contestas "Sí", después de arribar a CYBER. Como Banbaj no arriba a CYBER, se quedan a mano con `ops.sp_avisar @id_corrida, '<PLANTILLA>'`. Las alertas (3, 4, 6, 11 a 14) salen solas.
-- **Destinatarios.** Cada lista se edita en `mail.DESTINATARIO`. Si quieres cambiar a quién le llega, anótalo en **Cambios** y lo paso a la semilla.
-- **Firma.** Todos llevan la firma de Asignaciones y el aviso de confidencialidad. La imagen de fondo de hoy (`C:\TOCAYO\IMAGE\F1.jpg`) no se ve fuera de las máquinas de SERTEC, así que no se migró.
+### Validaciones (salen solas)
+
+| Correo | Plantilla | Cuándo | Para |
+|---|---|---|---|
+| Consumo con saldo actual ≤ 0 (antes mail_sdo_act_cons.prg) | `ALERTA_SDO_ACT_CONS_486` | La base maestra de Consumo trae cuentas con SDO_ACT ≤ 0. El proceso sigue | Lista de Operación (la del inicio) |
+| Pagos negativos | `PAGOS_NEGATIVOS_486` | Llegan pagos negativos: no se arriban, se manda la lista y el proceso sigue | **Pendiente:** destinatarios de Operación (hoy va al buzón asig.486.cdmx) |
+| Base maestra con números cortados por Excel | `MAESTRA_NUMEROS_EXCEL_486` | La base se guardó con cuentas en notación científica (1.23457E+15). La asignación se detiene | Buzón asig.486.cdmx + equipo de asignaciones |
+
+## Retirados
+
+| Correo | Motivo |
+|---|---|
+| Asignación Express (correo_486.prg) | Decisión 30/10 |
+| Pagos no actualizados a T-1 (mail_pagos.prg) | Decisión 29/10. La revisión sigue y queda en la bitácora, sin correo |
+| Retiros por actualización (saldos.prg) | Se junta en el correo único de devolución |
+| Devolución del cliente (devfianey.prg), en asignación y en actualización | Se junta en el correo único de devolución |
+| Notificación de actualización a Operación (correo_486noti.prg) | Decisión 30/10 |
+| Actualización terminada (correo.prg) | Decisión 30/10 |
+| Error del proceso | Decisión 29/10. El error queda en `ops.CORRIDA` y `ops.BITACORA` |
+| Devolución masiva (tope de devolución) | Decisión 29/10. Si se pone un tope, la asignación se detiene sin correo |
+| Saldos no actualizados, saldos iguales al último DAT, pagos que no subieron | Decisión 29/10: los saldos siempre se actualizan y los pagos siempre suben |

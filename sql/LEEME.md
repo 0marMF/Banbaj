@@ -52,7 +52,9 @@ EXEC ops.sp_retiro @id;
 EXEC ops.sp_actualizacion_486 @id_corrida = @id OUTPUT;
 
 -- Después de arribar a CYBER: avisos a Operación (antes MAIL, correo_486, correo, correo_486noti)
-EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486';     -- o ASIG_EXPRESS_486, CONFIRMACION_ACT_486, NOTIFICACION_RETIRO_486
+EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486';     -- fin de asignación (el inicio sale solo)
+-- Correo único de devolución (Operación con el ZIP, AEM en copia oculta sin él)
+EXEC ops.sp_exportar_salidas @id_corrida = @id, @zip = 'RETIROS', @enviar_zip = 1;
 
 -- Cruces con CYBER (todo en SQL Server, por servidor vinculado a Oracle)
 --   Una vez: depositar usuario y contraseña (se guardan cifrados) y armar el vínculo
@@ -145,10 +147,10 @@ La salida SCBSDOS toma la etiqueta en U1EXT2 por CUENTA2 (`486-` + folio).
 Para cambiar a quién le llega un correo no se toca código:
 
 ```sql
-EXEC mail.sp_destinatario_alta 'RETIROS_ACT_486', 'persona@sertec.com.mx', 'TO';
-EXEC mail.sp_destinatario_baja 'RETIROS_ACT_486', 'persona@sertec.com.mx';
+EXEC mail.sp_destinatario_alta 'DEVOLUCION_OPERACION_486', 'persona@sertec.com.mx', 'TO';
+EXEC mail.sp_destinatario_baja 'DEVOLUCION_OPERACION_486', 'persona@sertec.com.mx';
 SELECT * FROM mail.v_LISTA_RESUELTA;          -- cómo queda cada lista
-EXEC mail.sp_enviar 'RETIROS_ACT_486', @solo_prueba = 1;   -- ver el correo sin enviarlo
+EXEC ops.sp_aviso_devolucion @id, @solo_prueba = 1;   -- ver los correos sin enviarlos
 ```
 
 ## Pendientes antes de producción

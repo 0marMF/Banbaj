@@ -28,9 +28,9 @@ Formato preferido para compartir:
 ### Correos (solo hacen falta destinatarios y texto; la lógica ya está en `mail.*`)
 
 - [x] **`MAIL.prg`** — `CONFIRMACION_ASIG_486`.
-- [x] **`correo_486.prg`** — `ASIG_EXPRESS_486`.
-- [x] **`correo.prg`** — `CONFIRMACION_ACT_486`.
-- [x] **`correo_486noti.prg`** — `NOTIFICACION_RETIRO_486`.
+- [x] **`correo_486.prg`** — retirado (30/10).
+- [x] **`correo.prg`** — retirado (30/10).
+- [x] **`correo_486noti.prg`** — retirado (30/10). Correos finales en `docs/CORREOS_486.md`.
 - [x] **`mail_sdo_act_cons.prg`** — `ALERTA_SDO_ACT_CONS_486`.
 - [x] **`aem_alerta.prg`** — `ALERTA_NUEVAS_486`.
 - [x] **`devfianey.prg`** — `AVISO_DEVOLUCION_486`.
