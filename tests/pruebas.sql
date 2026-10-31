@@ -363,6 +363,15 @@ FROM (SELECT N'ACT: dmamtdlq solo para quien trae vencido (3 + commit + exit)' A
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'ACT: cada script termina en commit y exit' AS p, CAST(N'commit;|exit;' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(SENTENCIA, '|') WITHIN GROUP (ORDER BY NUM) FROM (SELECT TOP (2) SENTENCIA, NUM FROM ops.CYBER_SCRIPT
       WHERE ID_CORRIDA = @id AND SCRIPT = 'ACT_PAGMIN' ORDER BY NUM DESC) x) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ACT: PVS y REE por script (ACT_PVS_REE) y sin SCBSDOS' AS p,
+             N'update RCVRY.uda1 set u1arcod1=''120'' ,u1arcod3=''' + ISNULL((SELECT LTRIM(RTRIM(REE)) FROM dat.DAT_486 WHERE CUENTA2 = '486-102'), '') + N''' Where u1acct=''486-102'';|commit;|exit;|1|0' AS e,
+             CONCAT((SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'ACT_PVS_REE' AND SENTENCIA LIKE N'%''486-102''%'), '|',
+                    (SELECT STRING_AGG(SENTENCIA, '|') WITHIN GROUP (ORDER BY NUM) FROM (SELECT TOP (2) SENTENCIA, NUM FROM ops.CYBER_SCRIPT
+                     WHERE ID_CORRIDA = @id AND SCRIPT = 'ACT_PVS_REE' ORDER BY NUM DESC) z), '|',
+                    CASE WHEN (SELECT COUNT(*) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'ACT_PVS_REE') - 2
+                              = (SELECT COUNT(*) FROM dat.DAT_486 WHERE CUENTA2 IS NOT NULL) THEN 1 ELSE 0 END, '|',
+                    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS_ACT')) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'ACT: se arriban todos los pagos (iguales van los dos; crédito sin cruce va tal cual)' AS p, CAST(N'29999999:10.00,486-100001:500.00,486-100001:500.00,486-102:1000.00' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(CONCAT(ISNULL(CUENTA2, CUENTA), ':', IMPORTE), ',') WITHIN GROUP (ORDER BY ISNULL(CUENTA2, CUENTA), ID) FROM dat.PAGO_ARRIBADO WHERE ID_CORRIDA = @id) AS NVARCHAR(4000)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')

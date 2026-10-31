@@ -522,7 +522,7 @@ SALIDAS_ARCHIVO = [
      "AND NOT EXISTS (SELECT 1 FROM ops.TELEFONO_CYBER t WHERE t.ID_CORRIDA = @id_corrida AND t.CUENTA2 = d.CUENTA2)",
      "d.CUENTA2", None, "SCBACTH_SINTEL.TXT",
      "Gescar de nuevas y reasignadas sin teléfono activo en CYBER (ges486.prg); lo genera ops.sp_gescar_sin_telefono"),
-    ("SCBSDOS_ACT", "ACT", 10, None, "d.CUENTA2", None, "SCBSDOS.TXT", "Cuentas del DAT después de la actualización"),
+    ("SCBSDOS_ACT", "ACT", 10, None, "d.CUENTA2", None, "SCBSDOS.TXT", "Apagado (30/10): la actualización sube PVS y REE con el script ACT_PVS_REE", 0),
     ("SCBSDOS_ETI", "ETI", 10, None, "d.CUENTA2", None, "SCBSDOS.TXT", "SCBSDOS de etiquetado del DAT (eti486.prg) o fuera de proceso"),
     ("BLANQUEO_LISTA", "BLANQUEO", 10, "ops.STATUS_CYBER d WHERE d.ID_CORRIDA = @id_corrida AND d.BLANQUEA = 1", "d.CUENTA", ",",
      "BLANQUEA_486_{AAAAMMDD}.csv", "Cuentas a las que se blanquea el status (status.prg)"),
@@ -722,7 +722,7 @@ def sql_semilla(scb, dat):
     L.append("")
     L.append("/* Catálogo de archivos planos */")
     for arch, proc, orden_a, origen, orden_l, sep, nombre, desc, *resto in SALIDAS_ARCHIVO + DAT_MIS_ARCHIVOS:
-        activo, comillas, encabezado = (list(resto) + [1, 0, 0])[:3] if resto else (1, 0, 0)
+        activo, comillas, encabezado = (list(resto) + [1, 0, 0][len(resto):])[:3]
         L.append(f"INSERT INTO cfg.SALIDA_ARCHIVO (CLIENTE, ARCHIVO, PROCESO, ORDEN, ORIGEN, ORDEN_LINEAS, SEPARADOR, NOMBRE, DESCRIPCION, ACTIVO, COMILLAS, ENCABEZADO) "
                  f"VALUES ({cli}, {q(arch)}, {q(proc)}, {orden_a}, {q(origen)}, {q(orden_l)}, {q(sep)}, {q(nombre)}, {q(desc)}, {activo}, {comillas}, {encabezado});")
     L.append("/* Copia del DAT para MIS en CSV (resdat.PRG): CUENTA = 486-folio, CUENTA3 = crédito */")

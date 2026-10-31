@@ -119,7 +119,7 @@ Requiere `Ole Automation Procedures` activado (y `xp_cmdshell` solo para el ZIP 
 | Asignación | `SCBSDOS.TXT`, `SCBTEL.TXT`, `sub_mst.TXT`, `sub_mail.TXT`, `SCBACTH_486NU.TXT`, `SCBACTH_486REA.TXT`, `cyber/TEL_ACTUALIZA.sql`, `cyber/MAIL_BORRA.sql`, `cyber/MAIL_ACTUALIZA.sql` |
 | Blanqueo de status | `BLANQUEA_486_<fecha>.csv`, `cyber/BLANQUEO_STATUS.sql` |
 | Etiquetado / mora | `SCBSDOS.TXT` |
-| Actualización | `SCBSDOS.TXT`, `SCBPAG.TXT`, `cyber/ACT_SALDOS.sql`, `ACT_VENCIDO.sql`, `ACT_PAGMIN.sql` |
+| Actualización | `SCBPAG.TXT`, `cyber/ACT_SALDOS.sql`, `ACT_VENCIDO.sql`, `ACT_PAGMIN.sql`, `ACT_PVS_REE.sql` (PVS y REE; ya no se arriba SCBSDOS) |
 | Retiro | `MX_G1MCT_DVBJIG_<fecha>_<hora>`, `SCBACTH_486.TXT`, `RETIROS_486_<fecha>.csv`, `cyber/RETIRO.sql` |
 
 Un archivo nuevo o un cambio de layout se configura en `cfg.SALIDA_ARCHIVO` (origen, nombre, separador) y `cfg.SALIDA` (campos), sin tocar los procedimientos. Alternativa con bcp:

@@ -42,13 +42,15 @@ La bitácora `RCVRY.JSP_VALIDADOR_TELEFONOS` ya no se alimenta: la bitácora es 
 
 | Archivo | Qué es |
 | --- | --- |
-| `SCBSDOS.TXT` | Cuentas del DAT actualizadas |
 | `SCBPAG.TXT` | Arribo de pagos, 104 posiciones (pagos.prg) |
-| `cyber\ACT_SALDOS.sql`, `ACT_VENCIDO.sql`, `ACT_PAGMIN.sql` | Saldos, vencido y pago mínimo |
+| `cyber\ACT_SALDOS.sql`, `ACT_VENCIDO.sql`, `ACT_PAGMIN.sql` | Saldos y etiqueta (SEG), vencido y pago mínimo |
+| `cyber\ACT_PVS_REE.sql` | Días de mora (PVS → U1ARCOD1) y REE (→ U1ARCOD3) de todas las cuentas del DAT |
 
-Después de arribar: `EXEC ops.sp_avisar <corrida>, 'CONFIRMACION_ACT_486'` y, si hubo retiro, `'NOTIFICACION_RETIRO_486'`.
+Ya no se genera ni se arriba SCBSDOS en la actualización (decisión 30/10): lo que sólo subía por el SCBSDOS (PVS y REE) va en `ACT_PVS_REE.sql`.
 
-Los pagos negativos no salen en `SCBPAG.TXT`: quedan en `ops.RECHAZO` (origen `PAGOS_NEGATIVOS`) y se avisa a Operación con la plantilla `PAGOS_NEGATIVOS_486`.
+Si hubo retiro: `EXEC ops.sp_exportar_salidas <corrida>, @zip = 'RETIROS', @enviar_zip = 1` (correo único de devolución).
+
+Los pagos negativos no salen en `SCBPAG.TXT`: quedan en `ops.RECHAZO` (origen `PAGOS_NEGATIVOS`) y se avisa al equipo de asignaciones con la plantilla `PAGOS_NEGATIVOS_486`.
 
 ## Retiro (`ops.sp_retiro`, también desde `ops.sp_retiro_solicitud`)
 

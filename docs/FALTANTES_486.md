@@ -90,6 +90,8 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 ## 6. Preguntas abiertas
 
+- [ ] **Confirmar con CYBER** que `U1ARCOD1` (PVS) y `U1ARCOD3` (REE) son columnas de `RCVRY.uda1` (script `ACT_PVS_REE`, que reemplaza el arribo diario del SCBSDOS en la actualización).
+
 
 - [x] **Importes negativos:** suben en cero (`NEGATIVO_MODO = CERO`, decisión 30/10). Una cuenta con saldo <= 0 se retira, así que antes del retiro CYBER recibe 0 y no un negativo. Aplica a DMCURBAL, U1PAGMIN y DMAMTDLQ del SCBSDOS y a los scripts de saldos; SALDO1-3 conservan el signo.
 - [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.

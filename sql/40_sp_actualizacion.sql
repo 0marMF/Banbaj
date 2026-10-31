@@ -216,3 +216,35 @@ BEGIN
         EXEC ops.sp_log @id_corrida, 'ACT PAGOS', 'AVISO', NULL, N'Hay pagos de créditos que no están en el DAT ni en el histórico; se arriban con el crédito tal como llegó.';
 END;
 GO
+
+/* ---------------------------------------------------------------------
+   Script ACT_PVS_REE (decisión 30/10): sube a CYBER los dos datos de la
+   actualización que no van en los scripts de saldos, para no tener que
+   arribar el SCBSDOS completo cada día:
+     PVS (días de mora; en la actualización cambia fuera de TDC) -> U1ARCOD1
+     REE (estructura.prg)                                         -> U1ARCOD3
+   Mismo formato que el SCBSDOS: ALLTRIM del valor. Va para todas las cuentas
+   que quedan en el DAT después del retiro (el REE se recalcula para todas).
+   Por confirmar con CYBER: que U1ARCOD1 y U1ARCOD3 estén en RCVRY.uda1.
+   --------------------------------------------------------------------- */
+CREATE OR ALTER PROCEDURE ops.sp_act_script_pvs_ree
+    @id_corrida INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @cliente VARCHAR(10) = (SELECT CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida), @n INT, @msg NVARCHAR(400);
+    DELETE FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id_corrida AND SCRIPT = 'ACT_PVS_REE';
+    INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
+    SELECT @id_corrida, 'ACT_PVS_REE', ROW_NUMBER() OVER (ORDER BY d.CUENTA2),
+           CONCAT(N'update RCVRY.uda1 set u1arcod1=''', REPLACE(LTRIM(RTRIM(ISNULL(d.PVS, ''))), '''', ''''''),
+                  N''' ,u1arcod3=''', REPLACE(LTRIM(RTRIM(ISNULL(d.REE, ''))), '''', ''''''),
+                  N''' Where u1acct=''', d.CUENTA2, N''';')
+    FROM dat.DAT_486 d
+    WHERE d.CLIENTE = @cliente AND d.CUENTA2 IS NOT NULL;
+    SET @n = @@ROWCOUNT;
+    INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
+    VALUES (@id_corrida, 'ACT_PVS_REE', @n + 1, N'commit;'), (@id_corrida, 'ACT_PVS_REE', @n + 2, N'exit;');
+    SET @msg = CONCAT(N'ACT_PVS_REE: ', @n, N' cuentas (PVS -> U1ARCOD1, REE -> U1ARCOD3)');
+    EXEC ops.sp_log @id_corrida, 'SCRIPT PVS REE', 'OK', @n, @msg;
+END;
+GO

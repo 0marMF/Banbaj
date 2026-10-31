@@ -119,7 +119,8 @@ BEGIN
         EXEC ops.sp_homologar          @id_corrida, 'dat.DAT_486';     -- estructura.prg: REE por segmento, tramo y tipo
         IF @aplicar_retiro = 1
             EXEC ops.sp_retiro         @id_corrida;
-        EXEC ops.sp_generar_salidas    @id_corrida, 'ACT';             -- SCBSDOS y SCBPAG
+        EXEC ops.sp_act_script_pvs_ree @id_corrida;                    -- PVS y REE a CYBER por script (ya no se arriba SCBSDOS en la actualización)
+        EXEC ops.sp_generar_salidas    @id_corrida, 'ACT';             -- SCBPAG
 
         SET @msg = CONCAT(N'Archivos: ', @recibidos,
                           N' · devoluciones: ', (SELECT COUNT(*) FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id_corrida),
