@@ -47,7 +47,7 @@ Hoy todos salen por CDO (SMTP 192.168.50.7) y casi todos esperan un "¿Deseas en
 | **CCO** | asig.cdmx |
 | **En Banbaj** | `ALERTA_NUEVAS_486`, lista `AEM_486`. Automático (el umbral de 100 es un parámetro) |
 
-- [ ] Mantener  - [ ] Eliminar  · **Cambios:**
+- [x] Mantener  - [ ] Eliminar  · **Cambios:**
 
 ### 4. Cuentas nuevas de Consumo con saldo actual ≤ 0
 | | |
@@ -60,7 +60,7 @@ Hoy todos salen por CDO (SMTP 192.168.50.7) y casi todos esperan un "¿Deseas en
 | **CCO** | asignaciones.cdmx1, asignaciones3, asig.cdmx |
 | **En Banbaj** | `ALERTA_SDO_ACT_CONS_486`, lista `OPERACION_ASIG_486`. Automático; el texto ya explica el problema y trae el número de cuentas |
 
-- [ ] Mantener  - [ ] Eliminar  · **Cambios:**
+- [x] Mantener  - [ ] Eliminar  · **Cambios:**
 
 ### 5. Devolución del cliente (en la asignación)
 | | |
@@ -73,7 +73,7 @@ Hoy todos salen por CDO (SMTP 192.168.50.7) y casi todos esperan un "¿Deseas en
 | **CC** | asignaciones3, asignaciones.cdmx1, asig.cdmx |
 | **En Banbaj** | `AVISO_DEVOLUCION_486`, lista `DEVOLUCION_AEM_486`. Recién agregado; a mano con `ops.sp_avisar` |
 
-- [ ] Mantener  - [ ] Eliminar  · **Cambios:**
+- [x] Mantener  - [ ] Eliminar  · **Cambios:**
 
 ---
 
@@ -90,7 +90,7 @@ Hoy todos salen por CDO (SMTP 192.168.50.7) y casi todos esperan un "¿Deseas en
 | **CCO** | asignaciones.cdmx1, asignaciones3, asig.cdmx |
 | **En Banbaj** | `PAGOS_NO_ACTUALIZADOS_486`. Automático (regla `PAGOS_T1`, el lunes revisa el viernes), con texto corregido |
 
-- [ ] Mantener  - [ ] Eliminar  · **Cambios:**
+- [ ] Mantener  - [x] Eliminar  · **Cambios:**
 
 ### 7. Retiros por actualización (con archivo adjunto)
 | | |
@@ -109,7 +109,7 @@ Hoy todos salen por CDO (SMTP 192.168.50.7) y casi todos esperan un "¿Deseas en
 ### 8. Devolución del cliente (en la actualización)
 Es el mismo correo que el **5** (`devfianey.prg` por medio de `prog15.prg`), pero llamado desde `saldos.prg` cuando contestas "Sí" a *"Devolución: revisa que tengas el archivo en C:\DEVOLUCION"*.
 
-- [ ] Mantener  - [ ] Eliminar  · **Cambios:**
+- [ ] Mantener  - [x] Eliminar  · **Cambios:**
 
 ### 9. Notificación de actualización a Operación
 | | |
@@ -149,10 +149,10 @@ Todos van a la lista `ASIGNACIONES_486` (buzón asig.486.cdmx con CCO al equipo)
 
 | # | Plantilla | Cuándo se manda | Hoy qué pasa | Decisión |
 |---|---|---|---|---|
-| 11 | `PAGOS_NEGATIVOS_486` | Llegan pagos negativos: no se arriban y se avisa a Operación con la lista | Aparece un mensaje en pantalla y se cancela el proceso; al cliente se le avisa a mano. **Falta definir los destinatarios** (hoy va al buzón) | [ ] Mantener [ ] Eliminar |
-| 12 | `ERROR_PROCESO_486` | Cualquier proceso termina con error | Mensaje en pantalla | [ ] Mantener [ ] Eliminar |
-| 13 | `DEVOLUCION_MASIVA_486` | La base maestra dejaría fuera más del % de `TOPE_DEVOLUCION_PCT` (hoy sin tope: no se dispara) | No existe | [ ] Mantener [ ] Eliminar |
-| 14 | `MAESTRA_NUMEROS_EXCEL_486` | La base maestra se guardó como CSV con cuentas en notación científica (1.23457E+15) y se detiene la asignación | No existe (la macro lo evitaba) | [ ] Mantener [ ] Eliminar |
+| 11 | `PAGOS_NEGATIVOS_486` | Llegan pagos negativos: no se arriban y se avisa a Operación con la lista | Aparece un mensaje en pantalla y se cancela el proceso; al cliente se le avisa a mano. **Falta definir los destinatarios** (hoy va al buzón) | [x] Mantener [ ] Eliminar |
+| 12 | `ERROR_PROCESO_486` | Cualquier proceso termina con error | Mensaje en pantalla | [ ] Mantener [x] Eliminar |
+| 13 | `DEVOLUCION_MASIVA_486` | La base maestra dejaría fuera más del % de `TOPE_DEVOLUCION_PCT` (hoy sin tope: no se dispara) | No existe | [ ] Mantener [x] Eliminar |
+| 14 | `MAESTRA_NUMEROS_EXCEL_486` | La base maestra se guardó como CSV con cuentas en notación científica (1.23457E+15) y se detiene la asignación | No existe (la macro lo evitaba) | [x] Mantener [ ] Eliminar |
 
 **Retirados (29/10):** los avisos de saldos no actualizados, pagos que no subieron y saldos iguales al último DAT. Los saldos siempre se actualizan y los pagos siempre suben; el cuadre de pagos queda como revisión a mano (`ops.sp_bajar_cyber 'PAGOS'`), sin correo.
 
