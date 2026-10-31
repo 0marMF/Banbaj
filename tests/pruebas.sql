@@ -752,6 +752,9 @@ FROM (SELECT N'EXPORTAR: archivos de la asignación con nombre, carpeta y línea
                     (SELECT COUNT(*) FROM @p WHERE RUTA = @dir + N'cyber\RETIRO.sql'), '|',
                     (SELECT COUNT(*) FROM @p WHERE RUTA = @dir + N'cyber\TEL_ACTUALIZA.sql'), '|',
                     (SELECT STRING_AGG(CS, ',') FROM (SELECT DISTINCT CONCAT(CHARSET, ':', EOL) AS CS FROM @p WHERE TIPO <> 'ZIP') d)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'EXPORTAR: copia del DAT para MIS en Q:\MIS\SERTEC98\CLIENTES\486\',
+       CASE WHEN (SELECT COUNT(*) FROM @p WHERE TIPO = 'MIS' AND RUTA = N'Q:\MIS\SERTEC98\CLIENTES\486\DAT486_20261102.csv' AND LINEAS = 9) = 1 THEN 1 ELSE 0 END,
+       (SELECT STRING_AGG(CONCAT(TIPO, ':', RUTA, ':', LINEAS), ' | ') FROM @p WHERE TIPO = 'MIS');
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'EXPORTAR: ZIP de retiros en C:\ con 7-Zip y la contraseña oculta',
        CASE WHEN RUTA LIKE N'C:\RETIROS[_]PAG[_]486[_]%.zip' AND COMANDO LIKE N'""C:\Program Files\7-Zip\7z.exe" a -tzip -mem=ZipCrypto -p"********" -y "C:\RETIROS[_]PAG[_]486[_]%.zip" "'
                  + @dir + N'RETIROS_486_20261102.csv""' THEN 1 ELSE 0 END, CONCAT(RUTA, ' | ', COMANDO)

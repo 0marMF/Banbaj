@@ -71,7 +71,7 @@ Se cargan con `ops.sp_migrar_486` desde CSV exportados con FoxPro (`cyber/486/EX
 Las bitácoras que se subían a Oracle y a server (`RCVRY.JSP_VALIDADOR_TELEFONOS`, `RCVRY.asig`, `asignaciones..tiempos`, `cyberdti.flags_cyber*`) **se descartan**: la bitácora es `ops.CORRIDA` + `ops.BITACORA`.
 
 - [x] **`O:\asigna\asignaciones`** y **`O:\ASIGNA\NUEVAS`** — se descartan.
-- [ ] **`Q:\MIS\SERTEC98\CLIENTES\486\DAT`** — `prog15.prg` copia ahí el DAT después de cada retiro. ¿Quién lo usa? Si sigue haciendo falta, se reemplaza por una vista o una exportación.
+- [x] **`Q:\MIS\SERTEC98\CLIENTES\486\`** — se sigue dejando (30/10): `ops.sp_exportar_salidas` escribe ahí también `DAT486_<fecha>.csv` (parámetro `RUTA_MIS`; poner la ruta UNC).
 - [x] **Devolución para CYBER** (`MX_G1MCT_DVBJIG_<fecha>_<hora>`) — se genera como archivo plano para arribo manual.
 - [x] **`cyber.reg_serv`** — ya no hace falta: el arribo es manual con los archivos y scripts que deja `ops.sp_exportar_salidas`.
 
@@ -90,7 +90,7 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 ## 6. Preguntas abiertas
 
-- [ ] **Confirmar con CYBER** que `U1ARCOD1` (PVS) y `U1ARCOD3` (REE) son columnas de `RCVRY.uda1` (script `ACT_PVS_REE`, que reemplaza el arribo diario del SCBSDOS en la actualización).
+- [x] **`U1ARCOD1` (PVS) y `U1ARCOD3` (REE)** son columnas de `RCVRY.uda1` (confirmado 30/10): el script `ACT_PVS_REE` queda listo.
 
 
 - [x] **Importes negativos:** suben en cero (`NEGATIVO_MODO = CERO`, decisión 30/10). Una cuenta con saldo <= 0 se retira, así que antes del retiro CYBER recibe 0 y no un negativo. Aplica a DMCURBAL, U1PAGMIN y DMAMTDLQ del SCBSDOS y a los scripts de saldos; SALDO1-3 conservan el signo.

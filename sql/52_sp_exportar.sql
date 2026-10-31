@@ -180,6 +180,15 @@ BEGIN
         GROUP BY SCRIPT ORDER BY SCRIPT;
     UPDATE #plan SET RUTA = @destino + NOMBRE;
 
+    /* Copia del DAT para MIS (antes prog15.prg: COPY TO Q:\MIS\SERTEC98\CLIENTES\486\DAT): el mismo CSV también en RUTA_MIS */
+    DECLARE @ruta_mis NVARCHAR(400) = NULLIF(cfg.fn_param(@cliente, 'RUTA_MIS'), N'');
+    IF @ruta_mis IS NOT NULL
+    BEGIN
+        IF RIGHT(@ruta_mis, 1) <> N'\' SET @ruta_mis += N'\';
+        INSERT INTO #plan (TIPO, ARCHIVO, NOMBRE, RUTA, CHARSET, EOL, ENCABEZADO, SEP, LINEAS)
+        SELECT 'MIS', ARCHIVO, NOMBRE, @ruta_mis + NOMBRE, CHARSET, EOL, ENCABEZADO, SEP, LINEAS FROM #plan WHERE TIPO = 'ARCHIVO' AND ARCHIVO LIKE 'DAT[_]MIS%';
+    END;
+
     /* ZIP */
     DECLARE @zip_ruta NVARCHAR(400), @zip_cmd NVARCHAR(4000), @zip_mostrar NVARCHAR(4000), @siete NVARCHAR(400), @archivos_zip NVARCHAR(3000);
     IF NULLIF(@zip, N'') IS NOT NULL
@@ -210,6 +219,7 @@ BEGIN
     /* Escribir */
     EXEC ops.sp_crear_carpeta @destino;
     DECLARE @dir_cyber NVARCHAR(400) = @destino + N'cyber\';
+    IF EXISTS (SELECT 1 FROM #plan WHERE TIPO = 'MIS') EXEC ops.sp_crear_carpeta @ruta_mis;
     IF EXISTS (SELECT 1 FROM #plan WHERE TIPO = 'SCRIPT') EXEC ops.sp_crear_carpeta @dir_cyber;
     CREATE TABLE #archivo_lineas (NUM INT NOT NULL, LINEA NVARCHAR(4000) NOT NULL);
     DECLARE @o INT, @tipo VARCHAR(10), @arch VARCHAR(50), @ruta NVARCHAR(400), @cs VARCHAR(30), @eol VARCHAR(4), @enc BIT, @sep VARCHAR(5), @n INT, @escritos INT = 0;
@@ -218,7 +228,7 @@ BEGIN
     WHILE @@FETCH_STATUS = 0
     BEGIN
         TRUNCATE TABLE #archivo_lineas;
-        IF @tipo = 'ARCHIVO'
+        IF @tipo IN ('ARCHIVO', 'MIS')
         BEGIN
             IF @enc = 1
                 INSERT INTO #archivo_lineas (NUM, LINEA)

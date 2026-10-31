@@ -432,6 +432,7 @@ PARAMETROS = [
      "SALDO_VEN=SDO_VDO,ETIQUETA10=ETIQUETA,MORA=ETIQUETA1",
      "ETIQUETAS486.xlsx: nombre en el DAT de Operación = columna de nuestro DAT (ETIQUETA6/TOP va con cfg.sp_etiqueta_cargar)"),
     ("RUTA_SALIDA", "C:\\BANBAJ\\486\\SALIDA\\", "ops.sp_exportar_salidas: carpeta de los archivos planos (se crea <AAAAMMDD>_corrida<ID>)"),
+    ("RUTA_MIS", "Q:\\MIS\\SERTEC98\\CLIENTES\\486\\", "ops.sp_exportar_salidas deja aquí también DAT486_<fecha>.csv (antes prog15.prg copiaba el DAT). Usar la ruta UNC de Q: (el servicio de SQL Server no ve unidades mapeadas)"),
     ("CARPETA_ZIP", "C:\\", "ops.sp_exportar_salidas: carpeta del ZIP de retiros (C:\\RETIROS_PAG_486_<fecha><hora>.zip, como saldos.prg)"),
     ("RUTA_7ZIP", "C:\\Program Files\\7-Zip\\7z.exe", "7-Zip instalado en el servidor de SQL Server (ZIP con contraseña de retiros)"),
     ("CYBER_LINKED_SERVER", "CYBER", "Servidor vinculado a Oracle (cfg.sp_cyber_conectar / ops.sp_bajar_cyber)"),

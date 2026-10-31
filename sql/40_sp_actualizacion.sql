@@ -225,7 +225,7 @@ GO
      REE (estructura.prg)                                         -> U1ARCOD3
    Mismo formato que el SCBSDOS: ALLTRIM del valor. Va para todas las cuentas
    que quedan en el DAT después del retiro (el REE se recalcula para todas).
-   Por confirmar con CYBER: que U1ARCOD1 y U1ARCOD3 estén en RCVRY.uda1.
+   Confirmado (30/10): U1ARCOD1 y U1ARCOD3 son columnas de RCVRY.uda1.
    --------------------------------------------------------------------- */
 CREATE OR ALTER PROCEDURE ops.sp_act_script_pvs_ree
     @id_corrida INT
