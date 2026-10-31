@@ -94,7 +94,8 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 
 - [x] **Importes negativos:** suben en cero (`NEGATIVO_MODO = CERO`, decisión 30/10). Una cuenta con saldo <= 0 se retira, así que antes del retiro CYBER recibe 0 y no un negativo. Aplica a DMCURBAL, U1PAGMIN y DMAMTDLQ del SCBSDOS y a los scripts de saldos; SALDO1-3 conservan el signo.
-- [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.
+- [x] **Columnas de las bases maestras (30/10):** ENFOQUE se queda (regla de TDC 90+). COVID y Reestructura se quitan: ETIQUETA llega por etiquetado (mapeo de Operación) y REE por estructura.
+- [x] **Perfil de Database Mail:** `asig.486.cdmx`.
 - [x] **Acceso a CYBER:** servidor vinculado desde SQL Server. El usuario y la contraseña se depositan en `cfg.CAPTURA_CREDENCIAL` (se guardan cifrados) y `EXEC cfg.sp_cyber_conectar` arma el vínculo. Falta: parámetro `CYBER_ORACLE_ORIGEN` (host:puerto/servicio) y el cliente de Oracle (OraOLEDB) instalado en el servidor.
 - [ ] **Ruta de red de `Q:`** para la cuenta de servicio de SQL Server.
 - [x] **Días festivos:** no se agrega calendario (decisión 29/10). Antes: el T-1 de pagos y el job solo distinguen fin de semana. ¿Se agrega un calendario de días inhábiles (ej. después de un festivo, T-1 sería el último día hábil)?

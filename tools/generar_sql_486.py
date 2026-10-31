@@ -16,7 +16,7 @@ import openpyxl
 RAIZ = Path(__file__).resolve().parent.parent
 CLIENTE = "486"
 RUTA_ENTRADA = "Q:\\CYBER\\C_486\\{AAAA}\\{MES}\\{DD}\\"   # carpeta del día (cfg.fn_ruta): Q:\CYBER\C_486\2026\octubre\28\
-PERFIL_DBMAIL = "Asignaciones486"           # perfil de Database Mail
+PERFIL_DBMAIL = "asig.486.cdmx"             # perfil de Database Mail (confirmado 30/10)
 
 
 def q(v):
@@ -163,9 +163,7 @@ COLUMNAS = {
         ("SDO_ACT", "Saldo actualizado VEN4/CCAS al 00/00/0000", N, 1, True, None),
         ("SALDO1", "MONTO A CUBRIR 1 PAGO LIQUIDACION", N, 0, False, None),
         ("SALDO2", "MONTO A CUBRIR PLAZOS PAGO <= 6 LIQUIDACION", N, 0, False, None),
-        ("ENFOQUE", "ENFOQUE_LIQUIDACION_1_PAGO", C(60), 0, False, "POR CONFIRMAR: columna 'enfoque' que usa la regla de TRAMO 90+"),
-        ("ETIQUETA", "COVID", C(15), 0, False, "POR CONFIRMAR: etiqueta covid"),
-        ("REE", "Reestructura", C(15), 0, False, "POR CONFIRMAR"),
+        ("ENFOQUE", "ENFOQUE_LIQUIDACION_1_PAGO", C(60), 0, False, "Lo usa la regla de TRAMO 90+ (CAS / VEN). ETIQUETA y REE ya no salen de la base: llegan por etiquetado y estructura (30/10)"),
         ("CORREO1", "EMAIL 1", C(100), 0, False, None),
         ("CORREO2", "EMAIL 2", C(100), 0, False, None),
         ("SEGMENTO", "Estatus al 00/00/0000", C(30), 0, True, None),
@@ -194,8 +192,6 @@ COLUMNAS = {
         ("PVS", "DIAS MORA AL 00/00/0000", PVS, 0, True, None),
         ("SEGMENTO", "ESTATUS AL 00/00/0000", C(30), 0, True, None),
         ("TRAMO", "TRAMO AL 00/00/0000", C(20), 0, True, None),
-        ("ETIQUETA", "ESTATUS COVID", C(15), 0, False, "POR CONFIRMAR: etiqueta covid"),
-        ("REE", "STATUS REESTRUCTURA", C(15), 0, False, "POR CONFIRMAR"),
         ("CORREO1", "CORREO1", C(100), 0, False, None),
         ("CORREO2", "CORREO2", C(100), 0, False, None),
         ("ETIQUETA1", "COSECHAS", C(10), 0, False, None),
@@ -663,7 +659,8 @@ def sql_semilla(scb, dat):
           "DELETE FROM mail.PLANTILLA WHERE CODIGO IN (" + ", ".join(q(x) for x in PLANTILLAS_RETIRADAS) + ");",
           "DELETE FROM mail.DESTINATARIO WHERE LISTA IN (" + ", ".join(q(x) for x in LISTAS_RETIRADAS) + ");",
           "DELETE FROM mail.LISTA WHERE CODIGO IN (" + ", ".join(q(x) for x in LISTAS_RETIRADAS) + ");",
-          "DELETE FROM mail.DESTINATARIO WHERE LISTA = N'DEVOLUCION_AEM_486';   -- antes TO/CC, ahora todo en copia oculta", ""]
+          "DELETE FROM mail.DESTINATARIO WHERE LISTA = N'DEVOLUCION_AEM_486';   -- antes TO/CC, ahora todo en copia oculta",
+          f"UPDATE mail.PLANTILLA SET PERFIL_DBMAIL = {q(PERFIL_DBMAIL)} WHERE CODIGO LIKE N'%486%';", ""]
 
     L.append("/* Parámetros */")
     for k, v, d in PARAMETROS:

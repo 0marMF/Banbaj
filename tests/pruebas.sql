@@ -662,6 +662,14 @@ FROM (SELECT N'PAGOS: cuadre contra CYBER detecta el que no subió' AS p,
                        AND CAST(JSON_VALUE(r.DATOS, '$.IMPORTE') AS DECIMAL(15,2)) = p.IMPORTE), '|',
                     (SELECT COUNT(*) FROM stg.CYBER_PAGO)) AS o) x;
 
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE)
+SELECT N'Catálogo: perfil de correo asig.486.cdmx y sin COVID/Reestructura en las bases maestras', CASE WHEN x.o = N'0|0|1' THEN 1 ELSE 0 END, x.o
+FROM (SELECT CONCAT((SELECT COUNT(*) FROM mail.PLANTILLA WHERE PERFIL_DBMAIL <> N'asig.486.cdmx'), '|',
+                    (SELECT COUNT(*) FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO
+                     WHERE a.CLIENTE = '486' AND c.CAMPO_DESTINO IN ('ETIQUETA', 'REE') AND a.CODIGO LIKE 'MAESTRA%'), '|',
+                    (SELECT COUNT(*) FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO
+                     WHERE a.CODIGO = 'MAESTRA_TDC' AND c.CAMPO_DESTINO = 'ENFOQUE')) AS o) x;
+
 /* Avisos retirados (29/10): no deben quedar reglas ni plantillas */
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE)
 SELECT N'REGLAS: sin avisos de saldos no actualizados, saldos iguales ni pagos sin subir', CASE WHEN x.o = N'0|0' THEN 1 ELSE 0 END, x.o

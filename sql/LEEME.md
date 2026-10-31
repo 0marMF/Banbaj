@@ -158,7 +158,7 @@ EXEC ops.sp_aviso_devolucion @id, @solo_prueba = 1;   -- ver los correos sin env
 Lista completa de programas, tablas y preguntas en [`docs/FALTANTES_486.md`](../docs/FALTANTES_486.md).
 
 
-- `mail.PLANTILLA.PERFIL_DBMAIL` real. La ruta de entrada ya es `Q:\CYBER\C_486\{AAAA}\{MES}\{DD}\` (ej. `Q:\CYBER\C_486\2026\octubre\28\`); la cuenta de servicio de SQL Server necesita lectura en `Q:` (mejor por ruta UNC, porque las unidades mapeadas no existen para el servicio).
+- Perfil de Database Mail: `asig.486.cdmx` (ya en la semilla; debe existir con ese nombre en el servidor). La ruta de entrada ya es `Q:\CYBER\C_486\{AAAA}\{MES}\{DD}\` (ej. `Q:\CYBER\C_486\2026\octubre\28\`); la cuenta de servicio de SQL Server necesita lectura en `Q:` (mejor por ruta UNC, porque las unidades mapeadas no existen para el servicio).
 - `NEGATIVO_MODO` (hoy igual que el legado: el negativo sale positivo, H-01). `TOPE_DEVOLUCION_PCT` va vacío: la base maestra se trabaja como llega; poner un número solo si se quiere el freno.
 - Columnas marcadas POR CONFIRMAR en `cfg.ARCHIVO_COLUMNA` (ENFOQUE, ETIQUETA, REE) y el archivo de Hipotecario.
 - Destinatarios: el equipo de Operación (`OPERACION_ASIG_486`) recibe el inicio y fin de asignación, el saldo <= 0 en Consumo y los pagos negativos.
