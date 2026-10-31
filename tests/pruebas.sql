@@ -403,12 +403,16 @@ BEGIN CATCH
 END CATCH;
 SET @id = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ACT');
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'Pagos negativos: no se arriban, quedan en rechazos y se avisa a Operación' AS p, N'OK|1|0|4|1' AS e,
+FROM (SELECT N'Pagos negativos: no se arriban, quedan en rechazos y se avisa al equipo de asignaciones' AS p, N'OK|1|0|4|1' AS e,
              CONCAT((SELECT ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = @id), '|',
                     (SELECT COUNT(*) FROM ops.RECHAZO WHERE ID_CORRIDA = @id AND ORIGEN = 'PAGOS_NEGATIVOS'), '|',
                     (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBPAG'), '|',
                     (SELECT COUNT(*) FROM dat.PAGO_ARRIBADO), '|',
                     (SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @id AND PLANTILLA = 'PAGOS_NEGATIVOS_486')) AS o) x;
+DECLARE @pn TABLE (PARA NVARCHAR(MAX), CC NVARCHAR(MAX), CCO NVARCHAR(MAX), ASUNTO NVARCHAR(255), CUERPO_HTML NVARCHAR(MAX), ADJUNTOS NVARCHAR(MAX));
+INSERT INTO @pn EXEC mail.sp_enviar @plantilla = 'PAGOS_NEGATIVOS_486', @valores = N'{"REGISTROS":"1","DETALLE":"x"}', @solo_prueba = 1;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Pagos negativos: el correo va al equipo de asignaciones',
+       CASE WHEN PARA = N'asig.486.cdmx@sertec.com.mx' AND CCO LIKE N'%asignaciones3@sertec.com.mx%' THEN 1 ELSE 0 END, CONCAT(PARA, ' | ', CCO) FROM @pn;
 GO
 
 /* ---------------------------------------------------------------------

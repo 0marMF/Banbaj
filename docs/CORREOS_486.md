@@ -33,7 +33,7 @@ Uno para cualquier retiro: asignación, actualización o retiro por solicitud. S
 | Correo | Plantilla | Cuándo | Para |
 |---|---|---|---|
 | Consumo con saldo actual ≤ 0 (antes mail_sdo_act_cons.prg) | `ALERTA_SDO_ACT_CONS_486` | La base maestra de Consumo trae cuentas con SDO_ACT ≤ 0. El proceso sigue | Lista de Operación (la del inicio) |
-| Pagos negativos | `PAGOS_NEGATIVOS_486` | Llegan pagos negativos: no se arriban, se manda la lista y el proceso sigue | Lista de Operación (la del inicio) |
+| Pagos negativos | `PAGOS_NEGATIVOS_486` | Llegan pagos negativos: no se arriban, se manda la lista y el proceso sigue | Equipo de asignaciones: buzón asig.486.cdmx, con copia oculta a asignaciones.cdmx1, asignaciones3 y asig.cdmx |
 | Base maestra con números cortados por Excel | `MAESTRA_NUMEROS_EXCEL_486` | La base se guardó con cuentas en notación científica (1.23457E+15). La asignación se detiene | Buzón asig.486.cdmx + equipo de asignaciones |
 
 ## Retirados

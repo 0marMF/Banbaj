@@ -393,7 +393,7 @@ REGLAS = [
      "t.ES_EXISTENTE = 0 AND EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'CUENTA' AND e.ACTIVO = 1 AND e.VALOR = t.CUENTA)",
      "FILAS", "EXCLUIR", "Cuenta en la lista de exclusión (exc486)", None, 10, "Yolanda Osornio 02/09/2020"),
     ("ACT", "POST_CARGA", "PAGOS_NEGATIVOS", "stg.ENT_PAGOS", "t.IMPORTE < 0", "FILAS", "EXCLUIR",
-     "Llegaron pagos negativos: no se arriban (no salen en SCBPAG) y se avisa a Operación", "PAGOS_NEGATIVOS_486", 10, None),
+     "Llegaron pagos negativos: no se arriban (no salen en SCBPAG) y se avisa al equipo de asignaciones", "PAGOS_NEGATIVOS_486", 10, None),
     ("ACT", "POST_CARGA", "PAGOS_T1", "stg.ENT_PAGOS", "t.FECHA = cfg.fn_dia_habil_anterior(CAST('{FECHA}' AS DATE))", "SIN_FILAS", "ALERTAR",
      "No hay pagos del día hábil anterior (T-1; el lunes es el viernes). Solo bitácora: el correo se retiró (30/10)", None, 20, None),
     ("ACT", "RETIRO", "RETIRO_TDC", "stg.SALDOS_486",
@@ -604,7 +604,7 @@ LISTAS = {
         [(e, "TO") for e in ["supervisor.aem.cdmx4@sertec.com.mx", "aem.control1@sertec.com.mx", "aem.proyectos1@sertec.com.mx",
                              "aem.consultoria1@sertec.com.mx", "supervisor.aem.cdmx2@sertec.com.mx"]]
         + [("asig.cdmx@sertec.com.mx", "BCC")]),
-    "ASIGNACIONES_486": ("Equipo de asignaciones: validaciones que detienen el proceso", [(BUZON, "TO")] + [(e, "BCC") for e in INTERNOS_BCC]),
+    "ASIGNACIONES_486": ("Equipo de asignaciones: validaciones (pagos negativos, números cortados por Excel)", [(BUZON, "TO")] + [(e, "BCC") for e in INTERNOS_BCC]),
 }
 TEXTO_DEVOLUCION = "Archivo de devolución actualizado ({{ORIGEN}}), favor de verificar."
 EXTRA_DEVOLUCION = "<p>Cuentas devueltas: {{CUENTAS}} · corrida {{CORRIDA}}</p>"
@@ -626,7 +626,7 @@ PLANTILLAS = [
     ("ALERTA_SDO_ACT_CONS_486", "OPERACION_ASIG_486", "EXISTEN CUENTAS NUEVAS DE CONSUMO CON SDO_ACT MENORES O IGUALES A CERO {{FECHA}}",
      "La base maestra de Consumo trae cuentas con saldo actual menor o igual a cero. Reportarlo al banco.",
      "<p>Registros: {{REGISTROS}}</p>", "High"),
-    ("PAGOS_NEGATIVOS_486", "OPERACION_ASIG_486", "Banco Bajío: llegaron pagos negativos {{FECHA}}",
+    ("PAGOS_NEGATIVOS_486", "ASIGNACIONES_486", "Banco Bajío: llegaron pagos negativos {{FECHA}}",
      "En el archivo de pagos de Banco Bajío llegaron pagos negativos. No se arribaron a CYBER.",
      "<p>Pagos negativos: {{REGISTROS}}</p><pre>{{DETALLE}}</pre>", "High"),
     ("MAESTRA_NUMEROS_EXCEL_486", "ASIGNACIONES_486", "Asignación 486 detenida: base maestra con números cortados por Excel {{FECHA}}",
