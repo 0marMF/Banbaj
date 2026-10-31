@@ -34,7 +34,7 @@ Formato preferido para compartir:
 - [x] **`mail_sdo_act_cons.prg`** — `ALERTA_SDO_ACT_CONS_486`.
 - [x] **`aem_alerta.prg`** — `ALERTA_NUEVAS_486`.
 - [x] **`devfianey.prg`** — `AVISO_DEVOLUCION_486`.
-- [ ] **Elegir cuáles correos se quedan:** `docs/CORREOS_486.md`.
+- [x] **Correos:** decididos (30/10), ver `docs/CORREOS_486.md`.
 
 ### Macro
 
@@ -91,12 +91,12 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 ## 6. Preguntas abiertas
 
 
-- [ ] **Importes negativos** (ej. saldo TDC -87.13): SCBSDOS hoy manda `000000000087.13` (positivo) y el script de saldos `000000000-87.13`. Opciones: como hoy, `000000000000.00` (cero) o `-00000000087.13` (signo). Parámetro `NEGATIVO_MODO`.
+- [ ] **Importes negativos** (ej. saldo TDC -87.13 en la columna SALDO de SERTEC_Saldos_tdc → DAT.SDO_ACT): el campo DMCURBAL del SCBSDOS hoy manda `000000000087.13` (asi486.prg cambia el '-' por '0') y el script act486.sql de saldos.prg `000000000-87.13`. Igual pasa con U1PAGMIN (PAG_MIN) y DMAMTDLQ (SDO_VDO); SALDO1-3 conservan el signo. Esa cuenta TDC se retira el mismo día (saldo <= 0). Opciones: como hoy, `000000000000.00` (cero) o `-00000000087.13` (signo). Parámetro `NEGATIVO_MODO`.
 - [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.
 - [x] **Acceso a CYBER:** servidor vinculado desde SQL Server. El usuario y la contraseña se depositan en `cfg.CAPTURA_CREDENCIAL` (se guardan cifrados) y `EXEC cfg.sp_cyber_conectar` arma el vínculo. Falta: parámetro `CYBER_ORACLE_ORIGEN` (host:puerto/servicio) y el cliente de Oracle (OraOLEDB) instalado en el servidor.
 - [ ] **Ruta de red de `Q:`** para la cuenta de servicio de SQL Server.
 - [x] **Días festivos:** no se agrega calendario (decisión 29/10). Antes: el T-1 de pagos y el job solo distinguen fin de semana. ¿Se agrega un calendario de días inhábiles (ej. después de un festivo, T-1 sería el último día hábil)?
-- [ ] **Estructura de las tablas de CYBER:** sin acceso; se mantienen los campos como se ven en los .prg.
+- [x] **Estructura de las tablas de CYBER:** sin acceso; se mantienen los campos como se ven en los .prg (decisión).
 
 ## Ya resuelto
 
