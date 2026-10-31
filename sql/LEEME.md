@@ -161,7 +161,7 @@ Lista completa de programas, tablas y preguntas en [`docs/FALTANTES_486.md`](../
 - `mail.PLANTILLA.PERFIL_DBMAIL` real. La ruta de entrada ya es `Q:\CYBER\C_486\{AAAA}\{MES}\{DD}\` (ej. `Q:\CYBER\C_486\2026\octubre\28\`); la cuenta de servicio de SQL Server necesita lectura en `Q:` (mejor por ruta UNC, porque las unidades mapeadas no existen para el servicio).
 - `NEGATIVO_MODO` (hoy igual que el legado: el negativo sale positivo, H-01). `TOPE_DEVOLUCION_PCT` va vacío: la base maestra se trabaja como llega; poner un número solo si se quiere el freno.
 - Columnas marcadas POR CONFIRMAR en `cfg.ARCHIVO_COLUMNA` (ENFOQUE, ETIQUETA, REE) y el archivo de Hipotecario.
-- Destinatarios de `OPERACION_ASIG_486` (MAIL.prg / correo_486 no están versionados) y de `OPERACION_PAGOS_486` (aviso de pagos negativos).
+- Destinatarios: el equipo de Operación (`OPERACION_ASIG_486`) recibe el inicio y fin de asignación, el saldo <= 0 en Consumo y los pagos negativos.
 - Carga inicial desde los DBF: CSV exportados con FoxPro + `ops.sp_migrar_486` (ver abajo).
 
 ## Migración de los DBF (una sola vez)

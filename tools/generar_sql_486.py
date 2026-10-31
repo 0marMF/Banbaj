@@ -592,7 +592,7 @@ AEM = ["aem.control1@sertec.com.mx", "supervisor.aem.cdmx@sertec.com.mx", "super
        "aem.operativa2@sertec.com.mx", "aem.entregables1@sertec.com.mx"]
 # Correos del 486 (decisión 30/10): inicio y fin de asignación, alerta de más de 100 nuevas, devolución única y validaciones
 LISTAS = {
-    "OPERACION_ASIG_486": ("Inicio y fin de asignación a Operación (MAIL.prg) y saldo <= 0 en Consumo (mail_sdo_act_cons.prg)",
+    "OPERACION_ASIG_486": ("Equipo de Operación: inicio y fin de asignación (MAIL.prg), saldo <= 0 en Consumo y pagos negativos (mail_pagos.prg)",
         [(e, "TO") for e in ["erika.ramos@sertec.com.mx", "administrativo.mc4@sertec.com.mx", "administrativo.mc5@sertec.com.mx", "supervisor.mc4@sertec.com.mx", "supervisorbackoffice.mc@sertec.com.mx"]] + [(e, "BCC") for e in INTERNOS_BCC]),
     "DEVOLUCION_OPERACION_486": ("Devolución (asignación, actualización o solicitud) a Operación, con el ZIP (saldos.prg: Retiros actualizacion)",
         [(e, "TO") for e in ["soluciones.486@sertec.com.mx", "supervisor.mc@sertec.com.mx", "supervisor.mc3@sertec.com.mx",
@@ -604,8 +604,6 @@ LISTAS = {
         [(e, "TO") for e in ["supervisor.aem.cdmx4@sertec.com.mx", "aem.control1@sertec.com.mx", "aem.proyectos1@sertec.com.mx",
                              "aem.consultoria1@sertec.com.mx", "supervisor.aem.cdmx2@sertec.com.mx"]]
         + [("asig.cdmx@sertec.com.mx", "BCC")]),
-    "OPERACION_PAGOS_486": ("PENDIENTE: destinatarios de Operación para el aviso de pagos negativos", [(BUZON, "TO")]
-        + [(e, "BCC") for e in INTERNOS_BCC]),
     "ASIGNACIONES_486": ("Equipo de asignaciones: validaciones que detienen el proceso", [(BUZON, "TO")] + [(e, "BCC") for e in INTERNOS_BCC]),
 }
 TEXTO_DEVOLUCION = "Archivo de devolución actualizado ({{ORIGEN}}), favor de verificar."
@@ -628,7 +626,7 @@ PLANTILLAS = [
     ("ALERTA_SDO_ACT_CONS_486", "OPERACION_ASIG_486", "EXISTEN CUENTAS NUEVAS DE CONSUMO CON SDO_ACT MENORES O IGUALES A CERO {{FECHA}}",
      "La base maestra de Consumo trae cuentas con saldo actual menor o igual a cero. Reportarlo al banco.",
      "<p>Registros: {{REGISTROS}}</p>", "High"),
-    ("PAGOS_NEGATIVOS_486", "OPERACION_PAGOS_486", "Banco Bajío: llegaron pagos negativos {{FECHA}}",
+    ("PAGOS_NEGATIVOS_486", "OPERACION_ASIG_486", "Banco Bajío: llegaron pagos negativos {{FECHA}}",
      "En el archivo de pagos de Banco Bajío llegaron pagos negativos. No se arribaron a CYBER.",
      "<p>Pagos negativos: {{REGISTROS}}</p><pre>{{DETALLE}}</pre>", "High"),
     ("MAESTRA_NUMEROS_EXCEL_486", "ASIGNACIONES_486", "Asignación 486 detenida: base maestra con números cortados por Excel {{FECHA}}",
@@ -639,7 +637,7 @@ PLANTILLAS = [
 PLANTILLAS_RETIRADAS = ["ASIG_EXPRESS_486", "PAGOS_NO_ACTUALIZADOS_486", "RETIROS_ACT_486", "AVISO_DEVOLUCION_486", "NOTIFICACION_RETIRO_486",
                         "CONFIRMACION_ACT_486", "ERROR_PROCESO_486", "DEVOLUCION_MASIVA_486",
                         "SALDOS_NO_ACTUALIZADOS_486", "SALDOS_IGUALES_DAT_486", "PAGOS_NO_SUBIERON_486"]
-LISTAS_RETIRADAS = ["ASIG_EXPRESS_486", "PAGOS_NO_ACTUALIZADOS_486", "RETIROS_ACT_486", "ACTUALIZACION_486", "RETIROS_OPERACION_486"]
+LISTAS_RETIRADAS = ["OPERACION_PAGOS_486", "ASIG_EXPRESS_486", "PAGOS_NO_ACTUALIZADOS_486", "RETIROS_ACT_486", "ACTUALIZACION_486", "RETIROS_OPERACION_486"]
 
 
 # ---------------------------------------------------------------- escritura
