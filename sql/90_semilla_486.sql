@@ -30,7 +30,7 @@ INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'RESPALDOS_A_CONSERVAR', N'15', N'Corridas con respaldo del DAT que se conservan para retroceso');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'ALERTA_NUEVAS', N'100', N'Más cuentas nuevas que esto dispara la alerta (aem_alerta)');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'DIAS_FE_REG', N'30', N'FE_REG = FE_REC + días');
-INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'NEGATIVO_MODO', N'ABS_LEGADO', N'ABS_LEGADO (como hoy) | CERO | SIGNO. Pendiente de decidir (H-01)');
+INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'NEGATIVO_MODO', N'CERO', N'Importes negativos en SCBSDOS (DMCURBAL, U1PAGMIN, DMAMTDLQ) y scripts de saldos: CERO (decisión 30/10: saldo <= 0 se retira, sube en cero antes del retiro) | ABS_LEGADO | SIGNO');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'LADAS_2_DIGITOS', N'33,55,56,81', N'Ladas de 2 dígitos (telbnx.prg); el resto son de 3');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'LADAS_044', N'55,56', N'Celulares de estas ladas van con área 044; el resto con 045');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'TEL_DAT_LADAS_2', N'33,55,81', N'op9.prg: ladas de 2 dígitos al guardar los teléfonos de cuentas nuevas en el DAT');

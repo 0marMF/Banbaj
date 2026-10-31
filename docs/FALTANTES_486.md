@@ -91,7 +91,7 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 ## 6. Preguntas abiertas
 
 
-- [ ] **Importes negativos** (ej. saldo TDC -87.13 en la columna SALDO de SERTEC_Saldos_tdc → DAT.SDO_ACT): el campo DMCURBAL del SCBSDOS hoy manda `000000000087.13` (asi486.prg cambia el '-' por '0') y el script act486.sql de saldos.prg `000000000-87.13`. Igual pasa con U1PAGMIN (PAG_MIN) y DMAMTDLQ (SDO_VDO); SALDO1-3 conservan el signo. Esa cuenta TDC se retira el mismo día (saldo <= 0). Opciones: como hoy, `000000000000.00` (cero) o `-00000000087.13` (signo). Parámetro `NEGATIVO_MODO`.
+- [x] **Importes negativos:** suben en cero (`NEGATIVO_MODO = CERO`, decisión 30/10). Una cuenta con saldo <= 0 se retira, así que antes del retiro CYBER recibe 0 y no un negativo. Aplica a DMCURBAL, U1PAGMIN y DMAMTDLQ del SCBSDOS y a los scripts de saldos; SALDO1-3 conservan el signo.
 - [ ] **Columnas POR CONFIRMAR** de las bases maestras: ENFOQUE (TDC), REE, ETIQUETA.
 - [x] **Acceso a CYBER:** servidor vinculado desde SQL Server. El usuario y la contraseña se depositan en `cfg.CAPTURA_CREDENCIAL` (se guardan cifrados) y `EXEC cfg.sp_cyber_conectar` arma el vínculo. Falta: parámetro `CYBER_ORACLE_ORIGEN` (host:puerto/servicio) y el cliente de Oracle (OraOLEDB) instalado en el servidor.
 - [ ] **Ruta de red de `Q:`** para la cuenta de servicio de SQL Server.

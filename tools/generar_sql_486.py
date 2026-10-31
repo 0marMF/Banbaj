@@ -414,7 +414,7 @@ PARAMETROS = [
     ("RESPALDOS_A_CONSERVAR", "15", "Corridas con respaldo del DAT que se conservan para retroceso"),
     ("ALERTA_NUEVAS", "100", "Más cuentas nuevas que esto dispara la alerta (aem_alerta)"),
     ("DIAS_FE_REG", "30", "FE_REG = FE_REC + días"),
-    ("NEGATIVO_MODO", "ABS_LEGADO", "ABS_LEGADO (como hoy) | CERO | SIGNO. Pendiente de decidir (H-01)"),
+    ("NEGATIVO_MODO", "CERO", "Importes negativos en SCBSDOS (DMCURBAL, U1PAGMIN, DMAMTDLQ) y scripts de saldos: CERO (decisión 30/10: saldo <= 0 se retira, sube en cero antes del retiro) | ABS_LEGADO | SIGNO"),
     ("LADAS_2_DIGITOS", "33,55,56,81", "Ladas de 2 dígitos (telbnx.prg); el resto son de 3"),
     ("LADAS_044", "55,56", "Celulares de estas ladas van con área 044; el resto con 045"),
     ("TEL_DAT_LADAS_2", "33,55,81", "op9.prg: ladas de 2 dígitos al guardar los teléfonos de cuentas nuevas en el DAT"),
