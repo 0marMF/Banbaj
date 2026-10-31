@@ -57,6 +57,9 @@ BEGIN
         THROW 50110, 'Primero debe terminar OK la actualización del mismo día (parámetro ASIG_REQUIERE_ACT).', 1;
 
     EXEC ops.sp_corrida_iniciar '486', 'ASIG', @fecha, @hora_llegada, @id_corrida OUTPUT;
+    /* Correo de inicio de asignación a Operación (decisión 30/10) */
+    SET @json = (SELECT @id_corrida AS CORRIDA, ISNULL(CONVERT(VARCHAR(5), @hora_llegada, 108), 'sin registrar') AS HORA_LLEGADA FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
+    EXEC mail.sp_enviar @plantilla = 'INICIO_ASIG_486', @id_corrida = @id_corrida, @valores = @json;
 
     BEGIN TRY
         EXEC ops.sp_respaldo           @id_corrida;
@@ -80,16 +83,14 @@ BEGIN
                           N' · devoluciones: ', (SELECT COUNT(*) FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id_corrida),
                           CASE WHEN @aplicar_retiro = 0 THEN N' (pendientes de aplicar con ops.sp_retiro)' ELSE N'' END);
         EXEC ops.sp_corrida_finalizar @id_corrida, 'OK', @msg;
-        /* La confirmación a Operación se manda después de arribar a CYBER:
-           EXEC ops.sp_avisar @id_corrida, 'CONFIRMACION_ASIG_486' (y 'ASIG_EXPRESS_486' si aplica) */
+        /* Fin de asignación: se manda después de arribar a CYBER con EXEC ops.sp_avisar @id_corrida, 'CONFIRMACION_ASIG_486'
+           Si hubo devolución: EXEC ops.sp_exportar_salidas @id_corrida, @zip = 'RETIROS', @enviar_zip = 1 (correo único de devolución) */
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
         SET @msg = ERROR_MESSAGE();
         DECLARE @estatus VARCHAR(15) = CASE WHEN ERROR_NUMBER() IN (50040, 50100) THEN 'CANCELADA' ELSE 'ERROR' END;
         EXEC ops.sp_corrida_finalizar @id_corrida, @estatus, @msg;
-        SET @json = (SELECT @id_corrida AS CORRIDA, N'Asignación 486' AS PROCESO, @msg AS ERROR FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
-        EXEC mail.sp_enviar @plantilla = 'ERROR_PROCESO_486', @id_corrida = @id_corrida, @valores = @json;
         THROW;
     END CATCH;
 END;
@@ -130,8 +131,6 @@ BEGIN
         SET @msg = ERROR_MESSAGE();
         DECLARE @estatus VARCHAR(15) = CASE WHEN ERROR_NUMBER() IN (50040, 50100) THEN 'CANCELADA' ELSE 'ERROR' END;
         EXEC ops.sp_corrida_finalizar @id_corrida, @estatus, @msg;
-        SET @json = (SELECT @id_corrida AS CORRIDA, N'Actualización 486' AS PROCESO, @msg AS ERROR FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
-        EXEC mail.sp_enviar @plantilla = 'ERROR_PROCESO_486', @id_corrida = @id_corrida, @valores = @json;
         THROW;
     END CATCH;
 END;

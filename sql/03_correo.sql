@@ -5,7 +5,7 @@
    Para cambiar a quién le llega un correo solo se editan filas de
    mail.DESTINATARIO (o se usan mail.sp_destinatario_alta / _baja).
 
-   LISTA         -> grupo de destinatarios (ej. RETIROS_ACT_486)
+   LISTA         -> grupo de destinatarios (ej. DEVOLUCION_OPERACION_486)
    DESTINATARIO  -> correo + tipo (TO / CC / BCC) + vigencia
    FRAGMENTO     -> HTML reutilizable (firma, aviso de confidencialidad)
    PLANTILLA     -> asunto y cuerpo con marcadores {{FECHA}}, {{FRAG:FIRMA_486}}…

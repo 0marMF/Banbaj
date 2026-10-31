@@ -11,8 +11,8 @@
    cfg.sp_exclusion_cargar   blacklist_486.prg: alta masiva de exclusiones con
    cfg.sp_exclusion_alta/baja requerimiento y quién lo solicita
    ops.sp_gescar_sin_telefono ges486.prg: gescar de nuevas sin teléfono en CYBER
-   ops.sp_avisar             correos de confirmación a Operación, después de
-                             arribar a CYBER (MAIL, correo_486, correo, correo_486noti)
+   ops.sp_avisar             correo de fin de asignación (MAIL.prg), después de arribar a CYBER
+   ops.sp_aviso_devolucion   correo único de devolución (Operación con ZIP, AEM en copia oculta)
    ===================================================================== */
 SET NOCOUNT ON;
 GO
@@ -309,12 +309,10 @@ END;
 GO
 
 /* ---------------------------------------------------------------------
-   Avisos a Operación después de arribar a CYBER (hoy se mandan a mano al final):
-     CONFIRMACION_ASIG_486    MAIL.prg
-     ASIG_EXPRESS_486         correo_486.prg
-     CONFIRMACION_ACT_486     correo.prg
-     NOTIFICACION_RETIRO_486  correo_486noti.prg
-     AVISO_DEVOLUCION_486     devfianey.prg (archivo de devolución actualizado, a AEM)
+   Correos que se mandan a mano (decisión 30/10):
+     CONFIRMACION_ASIG_486    fin de asignación (MAIL.prg), después de arribar a CYBER
+     DEVOLUCION_486           devolución única (asignación, actualización o solicitud): ops.sp_aviso_devolucion
+   Los demás salen solos: INICIO_ASIG_486, ALERTA_NUEVAS_486 y las validaciones.
    --------------------------------------------------------------------- */
 CREATE OR ALTER PROCEDURE ops.sp_avisar
     @id_corrida INT,
@@ -328,6 +326,34 @@ BEGIN
                                    FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
     IF @json IS NULL THROW 50630, 'La corrida no existe.', 1;
     EXEC mail.sp_enviar @plantilla = @plantilla, @id_corrida = @id_corrida, @valores = @json, @adjuntos = @adjuntos, @solo_prueba = @solo_prueba;
+END;
+GO
+
+/* ---------------------------------------------------------------------
+   Correo único de devolución (antes devfianey.prg + "Retiros actualizacion"
+   de saldos.prg): sirve para asignación, actualización y retiro por solicitud.
+   Database Mail no puede quitarle el adjunto a una parte de los destinatarios,
+   así que salen dos copias del mismo correo:
+     DEVOLUCION_486      Operación, con el ZIP de retiros
+     DEVOLUCION_486_AEM  equipo de AEM en copia oculta, sin el ZIP
+   Normalmente lo manda ops.sp_exportar_salidas … @zip = 'RETIROS', @enviar_zip = 1.
+   --------------------------------------------------------------------- */
+CREATE OR ALTER PROCEDURE ops.sp_aviso_devolucion
+    @id_corrida  INT,
+    @adjunto     NVARCHAR(400) = NULL,      -- ZIP de retiros (ruta visible para SQL Server)
+    @solo_prueba BIT = 0
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @proceso VARCHAR(10), @cliente VARCHAR(10), @json NVARCHAR(MAX);
+    SELECT @proceso = PROCESO, @cliente = CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
+    IF @proceso IS NULL THROW 50631, 'La corrida no existe.', 1;
+    SET @json = (SELECT @id_corrida AS CORRIDA,
+                        CASE @proceso WHEN 'ASIG' THEN N'asignación' WHEN 'ACT' THEN N'actualización' WHEN 'RET' THEN N'retiro por solicitud' ELSE @proceso END AS ORIGEN,
+                        (SELECT COUNT(*) FROM dat.HISTORIA_FOLIO WHERE CLIENTE = @cliente AND ID_CORRIDA_BAJA = @id_corrida AND MOTIVO_BAJA <> 'CIERRE POR REASIGNACION') AS CUENTAS
+                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
+    EXEC mail.sp_enviar @plantilla = 'DEVOLUCION_486', @id_corrida = @id_corrida, @valores = @json, @adjuntos = @adjunto, @solo_prueba = @solo_prueba;
+    EXEC mail.sp_enviar @plantilla = 'DEVOLUCION_486_AEM', @id_corrida = @id_corrida, @valores = @json, @solo_prueba = @solo_prueba;
 END;
 GO
 

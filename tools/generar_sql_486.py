@@ -395,7 +395,7 @@ REGLAS = [
     ("ACT", "POST_CARGA", "PAGOS_NEGATIVOS", "stg.ENT_PAGOS", "t.IMPORTE < 0", "FILAS", "EXCLUIR",
      "Llegaron pagos negativos: no se arriban (no salen en SCBPAG) y se avisa a Operación", "PAGOS_NEGATIVOS_486", 10, None),
     ("ACT", "POST_CARGA", "PAGOS_T1", "stg.ENT_PAGOS", "t.FECHA = cfg.fn_dia_habil_anterior(CAST('{FECHA}' AS DATE))", "SIN_FILAS", "ALERTAR",
-     "No hay pagos del día hábil anterior (T-1; el lunes es el viernes)", "PAGOS_NO_ACTUALIZADOS_486", 20, None),
+     "No hay pagos del día hábil anterior (T-1; el lunes es el viernes). Solo bitácora: el correo se retiró (30/10)", None, 20, None),
     ("ACT", "RETIRO", "RETIRO_TDC", "stg.SALDOS_486",
      "t.SEGMENTO2 = 'TDC' AND (t.SEG IN ('CERR', 'NORM', '0', '-') OR t.SDO_ACT <= 0)", "FILAS", "DEVOLVER",
      "TDC cerrada, normalizada o sin saldo", None, 10, "REQ 2021-028883"),
@@ -587,83 +587,59 @@ CUERPO = "<html><body><font face='Book Antiqua'><p><b>{texto}</b></p>{extra}<p>S
 
 BUZON = "asig.486.cdmx@sertec.com.mx"
 INTERNOS_BCC = ["asignaciones.cdmx1@sertec.com.mx", "asignaciones3@sertec.com.mx", "asig.cdmx@sertec.com.mx"]
+AEM = ["aem.control1@sertec.com.mx", "supervisor.aem.cdmx@sertec.com.mx", "supervisor.aem.cdmx2@sertec.com.mx",
+       "supervisor.aem.cdmx3@sertec.com.mx", "supervisor.aem.cdmx4@sertec.com.mx", "aem.operativa1@sertec.com.mx",
+       "aem.operativa2@sertec.com.mx", "aem.entregables1@sertec.com.mx"]
+# Correos del 486 (decisión 30/10): inicio y fin de asignación, alerta de más de 100 nuevas, devolución única y validaciones
 LISTAS = {
-    "PAGOS_NO_ACTUALIZADOS_486": ("Aviso de pagos a T-1 sin actualizar (mail_pagos.prg)",
-        [(e, "TO") for e in ["erika.ramos@sertec.com.mx", "administrativo.mc4@sertec.com.mx", "administrativo.mc5@sertec.com.mx",
-                             "supervisor.mc4@sertec.com.mx", "supervisorbackoffice.mc@sertec.com.mx"]]
-        + [(e, "BCC") for e in INTERNOS_BCC]),
-    "RETIROS_ACT_486": ("Retiros por actualización (saldos.prg)",
+    "OPERACION_ASIG_486": ("Inicio y fin de asignación a Operación (MAIL.prg) y saldo <= 0 en Consumo (mail_sdo_act_cons.prg)",
+        [(e, "TO") for e in ["erika.ramos@sertec.com.mx", "administrativo.mc4@sertec.com.mx", "administrativo.mc5@sertec.com.mx", "supervisor.mc4@sertec.com.mx", "supervisorbackoffice.mc@sertec.com.mx"]] + [(e, "BCC") for e in INTERNOS_BCC]),
+    "DEVOLUCION_OPERACION_486": ("Devolución (asignación, actualización o solicitud) a Operación, con el ZIP (saldos.prg: Retiros actualizacion)",
         [(e, "TO") for e in ["soluciones.486@sertec.com.mx", "supervisor.mc@sertec.com.mx", "supervisor.mc3@sertec.com.mx",
                              "supervisorbackoffice.mc@sertec.com.mx", "soluciones_banbajio@sertec.com.mx"]]
         + [(e, "BCC") for e in INTERNOS_BCC]),
-    "OPERACION_ASIG_486": ("Confirmación de asignación a Operación (MAIL.prg) y saldo <= 0 en Consumo (mail_sdo_act_cons.prg)",
-        [(e, "TO") for e in ["erika.ramos@sertec.com.mx", "administrativo.mc4@sertec.com.mx", "administrativo.mc5@sertec.com.mx", "supervisor.mc4@sertec.com.mx", "supervisorbackoffice.mc@sertec.com.mx"]] + [(e, "BCC") for e in INTERNOS_BCC]),
-    "ASIG_EXPRESS_486": ("Asignación express (correo_486.prg)",
-        [(e, "TO") for e in ["supervisor.mc5@sertec.com.mx", "erika.ramos@sertec.com.mx"]]
-        + [(e, "CC") for e in ["carlos.landa@sertec.com.mx", "aem.control1@sertec.com.mx", "aem.consultoria2@sertec.com.mx",
-                               "aem.consultoria3@sertec.com.mx", "aem.consultoria1@sertec.com.mx", "aem.entregables1@sertec.com.mx",
-                               "supervisor.aem.cdmx2@sertec.com.mx", "supervisor.aem.cdmx3@sertec.com.mx", "supervisor.aem.cdmx@sertec.com.mx",
-                               "aem.operativa1@sertec.com.mx", "aem.operativa2@sertec.com.mx"]]
-        + [(e, "BCC") for e in INTERNOS_BCC]),
-    "ACTUALIZACION_486": ("Confirmación de actualización (correo.prg)",
-        [(e, "TO") for e in ["administrativo.mc@sertec.com.mx", "administrativo.mc2@sertec.com.mx", "supervisor.mc2@sertec.com.mx",
-                             "supervisor.mc4@sertec.com.mx", "supervisor.mc3@sertec.com.mx", "supervisor.mc@sertec.com.mx",
-                             "administrativo.mc3@sertec.com.mx", "erika.ramos@sertec.com.mx"]]
-        + [(e, "CC") for e in ["administrativo.mc6@sertec.com.mx", "supervisor.mc6@sertec.com.mx", "supervisorbackoffice.mc@sertec.com.mx",
-                               "administrativo.mc4@sertec.com.mx"]]
-        + [(e, "BCC") for e in INTERNOS_BCC]),
-    "RETIROS_OPERACION_486": ("Notificación de retiros a Operación (correo_486noti.prg)",
-        [(e, "TO") for e in ["supervisor.mc4@sertec.com.mx", "erika.ramos@sertec.com.mx"]]
-        + [(e, "CC") for e in ["supervisorbackoffice.mc3@sertec.com.mx", "administrativo.mc6@sertec.com.mx",
-                               "supervisorbackoffice.mc2@sertec.com.mx", "supervisorbackoffice.mc@sertec.com.mx",
-                               "administrativo.mc4@sertec.com.mx"]]
-        + [(e, "BCC") for e in INTERNOS_BCC]),
+    "DEVOLUCION_AEM_486": ("Devolución: copia oculta al equipo de AEM, sin el ZIP (devfianey.prg)",
+        [(e, "BCC") for e in AEM]),
     "AEM_486": ("Alerta de asignación grande (aem_alerta.prg)",
         [(e, "TO") for e in ["supervisor.aem.cdmx4@sertec.com.mx", "aem.control1@sertec.com.mx", "aem.proyectos1@sertec.com.mx",
                              "aem.consultoria1@sertec.com.mx", "supervisor.aem.cdmx2@sertec.com.mx"]]
         + [("asig.cdmx@sertec.com.mx", "BCC")]),
     "OPERACION_PAGOS_486": ("PENDIENTE: destinatarios de Operación para el aviso de pagos negativos", [(BUZON, "TO")]
         + [(e, "BCC") for e in INTERNOS_BCC]),
-    "DEVOLUCION_AEM_486": ("Aviso de archivo de devolución actualizado a AEM (devfianey.prg)",
-        [(e, "TO") for e in ["aem.control1@sertec.com.mx", "supervisor.aem.cdmx2@sertec.com.mx", "supervisor.aem.cdmx3@sertec.com.mx",
-                             "supervisor.aem.cdmx@sertec.com.mx", "aem.operativa1@sertec.com.mx", "aem.operativa2@sertec.com.mx",
-                             "supervisor.aem.cdmx4@sertec.com.mx", "aem.entregables1@sertec.com.mx"]]
-        + [(e, "CC") for e in ["asignaciones3@sertec.com.mx", "asignaciones.cdmx1@sertec.com.mx", "asig.cdmx@sertec.com.mx"]]),
-    "ASIGNACIONES_486": ("Equipo de asignaciones: alertas y errores del proceso", [(BUZON, "TO")] + [(e, "BCC") for e in INTERNOS_BCC]),
+    "ASIGNACIONES_486": ("Equipo de asignaciones: validaciones que detienen el proceso", [(BUZON, "TO")] + [(e, "BCC") for e in INTERNOS_BCC]),
 }
+TEXTO_DEVOLUCION = "Archivo de devolución actualizado ({{ORIGEN}}), favor de verificar."
+EXTRA_DEVOLUCION = "<p>Cuentas devueltas: {{CUENTAS}} · corrida {{CORRIDA}}</p>"
 PLANTILLAS = [
-    ("PAGOS_NO_ACTUALIZADOS_486", "PAGOS_NO_ACTUALIZADOS_486", "Los pagos de la Boveda no estan actualizados {{FECHA}}",
-     "Los pagos de Banco Bajío no traen movimientos a T-1. Favor de revisar.", "", "High"),
-    ("RETIROS_ACT_486", "RETIROS_ACT_486", "Retiros actualizacion, {{FECHA}}",
-     "Se comparte archivo retiro por actualizacion, FAVOR DE REVISAR.", "", "Normal"),
+    # Asignación
+    ("INICIO_ASIG_486", "OPERACION_ASIG_486", "Inicia asignación BANCO BAJIO del día {{FECHA_PROCESO}}",
+     "Se inicia la asignación BANCO BAJIO.", "<p>La base llegó a las {{HORA_LLEGADA}}.</p>", "Normal"),
     ("CONFIRMACION_ASIG_486", "OPERACION_ASIG_486", "Asignación BANCO BAJIO del día {{FECHA_PROCESO}}",
      "Se realiza asignación BANCO BAJIO. Favor de revisar y confirmar misma vía.", "<p>{{RESUMEN}}</p>", "Normal"),
-    ("ASIG_EXPRESS_486", "ASIG_EXPRESS_486", "Se realiza Asignacion Express Banco Bajio, {{FECHA}}",
-     "Asignacion Banco Bajio en Cyber; dat actualizado en ftp, FAVOR DE CONSTRUIR.", "", "Normal"),
-    ("CONFIRMACION_ACT_486", "ACTUALIZACION_486", "Se realiza Actualizacion de Banco Bajio, {{FECHA}}",
-     "Actualizacion de Banco Bajio en Cyber; dat actualizado en ftp, FAVOR DE REVISAR.", "", "Normal"),
-    ("NOTIFICACION_RETIRO_486", "RETIROS_OPERACION_486", "Actualización de Banco Bajio, {{FECHA}}",
-     "Se realiza actualización de Saldos, pagos y devolución del cliente 486.", "", "Normal"),
     ("ALERTA_NUEVAS_486", "AEM_486", "Asignaciones grande de 486 {{FECHA}}",
      "Se recibe una asignacion con mas de 100 registros nuevos, favor de construir al finalizar.",
      "<p>Nuevas: {{NUEVAS}} · umbral: {{UMBRAL}}</p>", "High"),
+    # Devolución única: Operación con el ZIP; AEM en copia oculta sin el ZIP (Database Mail no puede quitar el adjunto a una parte de los destinatarios)
+    ("DEVOLUCION_486", "DEVOLUCION_OPERACION_486", "Devolucion del cliente BANCO BAJIO {{FECHA}}",
+     TEXTO_DEVOLUCION, EXTRA_DEVOLUCION + "<p>Se adjunta el archivo de retiros.</p>", "Normal"),
+    ("DEVOLUCION_486_AEM", "DEVOLUCION_AEM_486", "Devolucion del cliente BANCO BAJIO {{FECHA}}",
+     TEXTO_DEVOLUCION, EXTRA_DEVOLUCION, "Normal"),
+    # Validaciones
     ("ALERTA_SDO_ACT_CONS_486", "OPERACION_ASIG_486", "EXISTEN CUENTAS NUEVAS DE CONSUMO CON SDO_ACT MENORES O IGUALES A CERO {{FECHA}}",
      "La base maestra de Consumo trae cuentas con saldo actual menor o igual a cero. Reportarlo al banco.",
      "<p>Registros: {{REGISTROS}}</p>", "High"),
-    ("DEVOLUCION_MASIVA_486", "ASIGNACIONES_486", "Asignación 486 detenida: devolución masiva en {{SEGMENTO}}",
-     "La base maestra recibida dejaría fuera demasiadas cuentas del DAT. La asignación se detuvo.",
-     "<p>Segmento: {{SEGMENTO}} · devoluciones: {{DEVOLUCIONES}} de {{TOTAL_DAT}} ({{PORCENTAJE}}%, tope {{TOPE}}%)</p>", "High"),
     ("PAGOS_NEGATIVOS_486", "OPERACION_PAGOS_486", "Banco Bajío: llegaron pagos negativos {{FECHA}}",
      "En el archivo de pagos de Banco Bajío llegaron pagos negativos. No se arribaron a CYBER.",
      "<p>Pagos negativos: {{REGISTROS}}</p><pre>{{DETALLE}}</pre>", "High"),
-    ("AVISO_DEVOLUCION_486", "DEVOLUCION_AEM_486", "Devolucion del cliente BANCO BAJIO {{FECHA}}",
-     "ARCHIVO DE DEVOLUCION ACTUALIZADO, FAVOR DE VERIFICAR.", "", "Normal"),
     ("MAESTRA_NUMEROS_EXCEL_486", "ASIGNACIONES_486", "Asignación 486 detenida: base maestra con números cortados por Excel {{FECHA}}",
      "La base maestra se guardó como CSV con cuentas en notación científica (ej. 1.23457E+15). Formatea esas columnas como Texto en Excel, vuelve a guardar el CSV y corre de nuevo.",
      "<p>Registros: {{REGISTROS}}</p>", "High"),
-    ("ERROR_PROCESO_486", "ASIGNACIONES_486", "Error en {{PROCESO}} (corrida {{ID_CORRIDA}})",
-     "El proceso terminó con error.", "<p>{{ERROR}}{{MENSAJE}}</p>", "High"),
 ]
+# Retirados (decisión 30/10): se borran de bases que ya los tengan
+PLANTILLAS_RETIRADAS = ["ASIG_EXPRESS_486", "PAGOS_NO_ACTUALIZADOS_486", "RETIROS_ACT_486", "AVISO_DEVOLUCION_486", "NOTIFICACION_RETIRO_486",
+                        "CONFIRMACION_ACT_486", "ERROR_PROCESO_486", "DEVOLUCION_MASIVA_486",
+                        "SALDOS_NO_ACTUALIZADOS_486", "SALDOS_IGUALES_DAT_486", "PAGOS_NO_SUBIERON_486"]
+LISTAS_RETIRADAS = ["ASIG_EXPRESS_486", "PAGOS_NO_ACTUALIZADOS_486", "RETIROS_ACT_486", "ACTUALIZACION_486", "RETIROS_OPERACION_486"]
 
 
 # ---------------------------------------------------------------- escritura
@@ -684,8 +660,11 @@ def sql_semilla(scb, dat):
           f"DELETE FROM cfg.SALIDA_ARCHIVO WHERE CLIENTE = {cli};",
           f"DELETE FROM cfg.PARAMETRO WHERE CLIENTE = {cli};",
           "DELETE FROM cfg.CP_ESTADO;",
-          "-- Plantillas retiradas (decisión 29/10: los saldos siempre se actualizan y los pagos siempre suben)",
-          "DELETE FROM mail.PLANTILLA WHERE CODIGO IN (N'SALDOS_NO_ACTUALIZADOS_486', N'SALDOS_IGUALES_DAT_486', N'PAGOS_NO_SUBIERON_486');", ""]
+          "-- Correos retirados (decisiones 29 y 30/10)",
+          "DELETE FROM mail.PLANTILLA WHERE CODIGO IN (" + ", ".join(q(x) for x in PLANTILLAS_RETIRADAS) + ");",
+          "DELETE FROM mail.DESTINATARIO WHERE LISTA IN (" + ", ".join(q(x) for x in LISTAS_RETIRADAS) + ");",
+          "DELETE FROM mail.LISTA WHERE CODIGO IN (" + ", ".join(q(x) for x in LISTAS_RETIRADAS) + ");",
+          "DELETE FROM mail.DESTINATARIO WHERE LISTA = N'DEVOLUCION_AEM_486';   -- antes TO/CC, ahora todo en copia oculta", ""]
 
     L.append("/* Parámetros */")
     for k, v, d in PARAMETROS:

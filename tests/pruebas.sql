@@ -135,19 +135,19 @@ GO
    Correo dinámico
    --------------------------------------------------------------------- */
 DECLARE @r TABLE (PARA NVARCHAR(MAX), CC NVARCHAR(MAX), CCO NVARCHAR(MAX), ASUNTO NVARCHAR(255), CUERPO_HTML NVARCHAR(MAX), ADJUNTOS NVARCHAR(MAX));
-INSERT INTO @r EXEC mail.sp_enviar @plantilla = 'PAGOS_NO_ACTUALIZADOS_486', @solo_prueba = 1;
+INSERT INTO @r EXEC mail.sp_enviar @plantilla = 'CONFIRMACION_ASIG_486', @solo_prueba = 1;
 DECLARE @para NVARCHAR(MAX), @cco NVARCHAR(MAX), @cuerpo NVARCHAR(MAX);
 SELECT @para = PARA, @cco = CCO, @cuerpo = CUERPO_HTML FROM @r;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Correo: TO armado desde la tabla', ISNULL(CASE WHEN @para LIKE N'%erika.ramos@sertec.com.mx%' THEN 1 ELSE 0 END, 0), CAST(@para AS NVARCHAR(4000));
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Correo: BCC armado desde la tabla', ISNULL(CASE WHEN @cco LIKE N'%asig.cdmx@sertec.com.mx%' THEN 1 ELSE 0 END, 0), CAST(@cco AS NVARCHAR(4000));
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Correo: firma y aviso insertados', ISNULL(CASE WHEN @cuerpo NOT LIKE N'%{{%' AND @cuerpo LIKE N'%SERTEC%' THEN 1 ELSE 0 END, 0), CAST(LEFT(@cuerpo, 300) AS NVARCHAR(4000));
 
-EXEC mail.sp_destinatario_alta 'PAGOS_NO_ACTUALIZADOS_486', 'Nuevo.Correo@Sertec.com.mx', 'CC';
+EXEC mail.sp_destinatario_alta 'OPERACION_ASIG_486', 'Nuevo.Correo@Sertec.com.mx', 'CC';
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'Correo: alta de destinatario' AS p, CAST(N'nuevo.correo@sertec.com.mx' AS NVARCHAR(4000)) AS e, CAST((SELECT CC FROM mail.v_LISTA_RESUELTA WHERE LISTA = 'PAGOS_NO_ACTUALIZADOS_486') AS NVARCHAR(4000)) AS o) x;
-EXEC mail.sp_destinatario_baja 'PAGOS_NO_ACTUALIZADOS_486', 'nuevo.correo@sertec.com.mx';
+FROM (SELECT N'Correo: alta de destinatario' AS p, CAST(N'nuevo.correo@sertec.com.mx' AS NVARCHAR(4000)) AS e, CAST((SELECT CC FROM mail.v_LISTA_RESUELTA WHERE LISTA = 'OPERACION_ASIG_486') AS NVARCHAR(4000)) AS o) x;
+EXEC mail.sp_destinatario_baja 'OPERACION_ASIG_486', 'nuevo.correo@sertec.com.mx';
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'Correo: baja de destinatario' AS p, CAST(NULL AS NVARCHAR(4000)) AS e, CAST((SELECT CC FROM mail.v_LISTA_RESUELTA WHERE LISTA = 'PAGOS_NO_ACTUALIZADOS_486') AS NVARCHAR(4000)) AS o) x;
+FROM (SELECT N'Correo: baja de destinatario' AS p, CAST(NULL AS NVARCHAR(4000)) AS e, CAST((SELECT CC FROM mail.v_LISTA_RESUELTA WHERE LISTA = 'OPERACION_ASIG_486') AS NVARCHAR(4000)) AS o) x;
 GO
 
 /* ---------------------------------------------------------------------
@@ -601,18 +601,19 @@ FROM (SELECT N'GESCAR sin teléfono: cuentas sin teléfono en CYBER (119, zzasg)
                     (SELECT STRING_AGG(SUBSTRING(RTRIM(LEFT(LINEA, 29)), 5, 25), ',') WITHIN GROUP (ORDER BY NUM) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = 2 AND ARCHIVO = 'GESCAR_SINTEL')) AS o) x;
 GO
 
-/* Aviso a Operación después del arribo (correo_486.prg) */
+/* Correos del 486 (30/10): inicio de asignación automático y devolución única en dos copias */
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'CORREO: inicio de asignación al arrancar la corrida',
+       CASE WHEN EXISTS (SELECT 1 FROM mail.ENVIO WHERE ID_CORRIDA = 2 AND PLANTILLA = 'INICIO_ASIG_486') THEN 1 ELSE 0 END, NULL;
 DECLARE @m TABLE (PARA NVARCHAR(MAX), CC NVARCHAR(MAX), CCO NVARCHAR(MAX), ASUNTO NVARCHAR(255), CUERPO_HTML NVARCHAR(MAX), ADJUNTOS NVARCHAR(MAX));
-INSERT INTO @m EXEC ops.sp_avisar 2, 'ASIG_EXPRESS_486', 1;
-INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'AVISO: correo express con sus destinatarios', CASE WHEN (SELECT CC FROM @m) LIKE N'%carlos.landa@sertec.com.mx%'
-       AND (SELECT ASUNTO FROM @m) LIKE N'Se realiza Asignacion Express Banco Bajio,%' THEN 1 ELSE 0 END, (SELECT ASUNTO FROM @m);
-
-/* Retiros por actualización con el ZIP adjunto (saldos.prg) */
-DELETE FROM @m;
-INSERT INTO @m EXEC ops.sp_avisar 3, 'RETIROS_ACT_486', 1, N'D:\Banbaj\486\salida\RETIROS_486_prueba.zip';
-INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'AVISO: retiros por actualización con adjunto',
-       CASE WHEN (SELECT ADJUNTOS FROM @m) = N'D:\Banbaj\486\salida\RETIROS_486_prueba.zip' AND (SELECT PARA FROM @m) LIKE N'%soluciones.486@sertec.com.mx%' THEN 1 ELSE 0 END,
-       (SELECT CONCAT(ASUNTO, ' | ', ADJUNTOS) FROM @m);
+INSERT INTO @m EXEC ops.sp_aviso_devolucion 3, N'C:\RETIROS_PAG_486_prueba.zip', 1;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'CORREO: devolución única, Operación con el ZIP y AEM en copia oculta sin él' AS p, N'2|1|1|1|1' AS e,
+             CONCAT((SELECT COUNT(*) FROM @m WHERE ASUNTO LIKE N'Devolucion del cliente BANCO BAJIO%' AND CUERPO_HTML LIKE N'%(actualización)%'), '|',
+                    (SELECT COUNT(*) FROM @m WHERE PARA LIKE N'%soluciones.486@sertec.com.mx%' AND ADJUNTOS = N'C:\RETIROS_PAG_486_prueba.zip' AND CCO NOT LIKE N'%aem.%'), '|',
+                    (SELECT COUNT(*) FROM @m WHERE PARA IS NULL AND CC IS NULL AND CCO LIKE N'%aem.control1@sertec.com.mx%' AND ADJUNTOS IS NULL), '|',
+                    (SELECT COUNT(*) FROM mail.PLANTILLA WHERE CODIGO IN ('INICIO_ASIG_486', 'CONFIRMACION_ASIG_486', 'ALERTA_NUEVAS_486', 'DEVOLUCION_486', 'DEVOLUCION_486_AEM')) / 5, '|',
+                    CASE WHEN NOT EXISTS (SELECT 1 FROM mail.PLANTILLA WHERE CODIGO IN ('ASIG_EXPRESS_486', 'RETIROS_ACT_486', 'NOTIFICACION_RETIRO_486', 'CONFIRMACION_ACT_486',
+                                                                                      'PAGOS_NO_ACTUALIZADOS_486', 'ERROR_PROCESO_486', 'DEVOLUCION_MASIVA_486', 'AVISO_DEVOLUCION_486')) THEN 1 ELSE 0 END) AS o) x;
 
 /* Horas del arribo (bitac/bitact: solicitud, autorización y fin) */
 DECLARE @act INT = (SELECT MIN(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ACT');

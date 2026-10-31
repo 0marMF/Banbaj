@@ -5,7 +5,7 @@
 
        EXEC ops.sp_exportar_salidas @id_corrida = 125;                    -- todos los archivos de la corrida
        EXEC ops.sp_exportar_salidas @id_corrida = 130, @zip = 'RETIROS';  -- + ZIP con contraseña en C:\
-       EXEC ops.sp_exportar_salidas @id_corrida = 130, @zip = 'RETIROS', @enviar_zip = 1;   -- + correo RETIROS_ACT_486
+       EXEC ops.sp_exportar_salidas @id_corrida = 130, @zip = 'RETIROS', @enviar_zip = 1;   -- + correo único de devolución
        EXEC ops.sp_exportar_salidas @id_corrida = 125, @solo_mostrar = 1; -- qué escribiría, sin tocar el disco
 
    - Carpeta: <RUTA_SALIDA>\<AAAAMMDD>_corrida<ID>\ ; los scripts de CYBER en \cyber\.
@@ -115,7 +115,7 @@ CREATE OR ALTER PROCEDURE ops.sp_exportar_salidas
     @sin_scripts  BIT           = 0,
     @zip          NVARCHAR(100) = NULL,     -- archivos que van en el ZIP con contraseña (ej. RETIROS)
     @carpeta_zip  NVARCHAR(400) = NULL,     -- NULL = parámetro CARPETA_ZIP (C:\)
-    @enviar_zip   BIT           = 0,        -- 1 = manda RETIROS_ACT_486 con el ZIP adjunto
+    @enviar_zip   BIT           = 0,        -- 1 = correo de devolución: Operación con el ZIP, AEM en copia oculta sin él
     @solo_mostrar BIT           = 0
 AS
 BEGIN
@@ -253,7 +253,7 @@ BEGIN
         END;
         PRINT CONCAT('ZIP con contraseña: ', @zip_ruta);
         IF @enviar_zip = 1
-            EXEC ops.sp_avisar @id_corrida, 'RETIROS_ACT_486', 0, @zip_ruta;
+            EXEC ops.sp_aviso_devolucion @id_corrida, @zip_ruta;
     END;
 
     SET @msg = CONCAT(@escritos, N' archivos en ', @destino, CASE WHEN @zip_ruta IS NOT NULL THEN N' · ZIP: ' + @zip_ruta ELSE N'' END);

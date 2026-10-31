@@ -119,9 +119,6 @@ BEGIN
         IF @tope IS NOT NULL AND @pct > @tope AND @forzar = 0
         BEGIN
             EXEC ops.sp_log @id_corrida, 'ASIG DEVOLUCION', 'ERROR', @dev, @msg;
-            SET @json = (SELECT @seg AS SEGMENTO, @dev AS DEVOLUCIONES, @total AS TOTAL_DAT, @pct AS PORCENTAJE, @tope AS TOPE
-                         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
-            EXEC mail.sp_enviar @plantilla = 'DEVOLUCION_MASIVA_486', @id_corrida = @id_corrida, @valores = @json;
             CLOSE cur; DEALLOCATE cur;
             SET @msg = @msg + N'. Supera el tope de ' + CAST(@tope AS NVARCHAR(10)) + N'%. Revisa la base o vuelve a correr con @forzar_devolucion = 1.';
             THROW 50100, @msg, 1;
