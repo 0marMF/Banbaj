@@ -74,8 +74,12 @@ CREATE TABLE ops.CORRIDA (
     USUARIO        SYSNAME       NOT NULL CONSTRAINT DF_CORRIDA_USUARIO DEFAULT SUSER_SNAME(),
     MENSAJE        NVARCHAR(4000) NULL,
     CONSTRAINT CK_CORRIDA_PROCESO CHECK (PROCESO IN ('ASIG','ACT','RET','ETI')),
-    CONSTRAINT CK_CORRIDA_ESTATUS CHECK (ESTATUS IN ('EN_PROCESO','OK','ERROR','CANCELADA','REVERTIDA'))
+    CONSTRAINT CK_CORRIDA_ESTATUS CHECK (ESTATUS IN ('EN_PROCESO','OK','ERROR','CANCELADA','REVERTIDA')),
+    REVERTIDA_AUTO BIT          NOT NULL CONSTRAINT DF_CORRIDA_REV_AUTO DEFAULT 0   -- 1 = falló y se revirtió sola (conserva ERROR / CANCELADA)
 );
+GO
+IF COL_LENGTH('ops.CORRIDA', 'REVERTIDA_AUTO') IS NULL
+    ALTER TABLE ops.CORRIDA ADD REVERTIDA_AUTO BIT NOT NULL CONSTRAINT DF_CORRIDA_REV_AUTO DEFAULT 0;
 GO
 /* Bases creadas antes: se agregan 'RET' y 'ETI' al check */
 IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_CORRIDA_PROCESO' AND definition NOT LIKE '%ETI%')
@@ -266,8 +270,10 @@ GO
 IF OBJECT_ID('stg.CYBER_PAGO') IS NULL
 CREATE TABLE stg.CYBER_PAGO (CUENTA NVARCHAR(28) NULL, MONTO NVARCHAR(30) NULL, FECHA NVARCHAR(20) NULL);
 GO
-/* Base maestra completa (todas las columnas, tal como llegó): solo la última de cada
-   segmento; cuando llega una nueva, reemplaza a la anterior. La historia por cuenta
+/* Base maestra completa (todas las columnas, tal como llegó): por segmento se guardan
+   dos versiones, la vigente (VIGENTE = 1) y la anterior (VIGENTE = 0). Cuando llega una
+   nueva, la vigente pasa a anterior y la anterior se borra; si la corrida se revierte,
+   la anterior vuelve a ser la vigente. La historia por cuenta
    queda en dat.HISTORIA_FOLIO. Los procesos solo toman las columnas de cfg.ARCHIVO_COLUMNA.
    Un renglón del archivo = un renglón con DATOS en JSON {"encabezado": "valor", …}.
    Consulta: SELECT JSON_VALUE(DATOS, '$."ACC_NUM"') FROM dat.BASE_RECIBIDA WHERE … */
@@ -280,8 +286,12 @@ CREATE TABLE dat.BASE_RECIBIDA_ARCHIVO (
     ENCABEZADOS  NVARCHAR(MAX)  NOT NULL,          -- arreglo JSON con los encabezados en orden
     REGISTROS    INT            NOT NULL,
     FE_CARGA     DATETIME2(0)   NOT NULL CONSTRAINT DF_BASE_RECIBIDA_ARCHIVO_FE DEFAULT SYSDATETIME(),
+    VIGENTE      BIT            NOT NULL CONSTRAINT DF_BASE_RECIBIDA_ARCHIVO_VIG DEFAULT 1,
     CONSTRAINT PK_BASE_RECIBIDA_ARCHIVO PRIMARY KEY (ID_CORRIDA, CODIGO)
 );
+GO
+IF COL_LENGTH('dat.BASE_RECIBIDA_ARCHIVO', 'VIGENTE') IS NULL
+    ALTER TABLE dat.BASE_RECIBIDA_ARCHIVO ADD VIGENTE BIT NOT NULL CONSTRAINT DF_BASE_RECIBIDA_ARCHIVO_VIG DEFAULT 1;
 GO
 IF OBJECT_ID('dat.BASE_RECIBIDA') IS NULL
 CREATE TABLE dat.BASE_RECIBIDA (
@@ -291,6 +301,14 @@ CREATE TABLE dat.BASE_RECIBIDA (
     DATOS       NVARCHAR(MAX)  NOT NULL,
     CONSTRAINT PK_BASE_RECIBIDA PRIMARY KEY (ID_CORRIDA, CODIGO, FILA)
 );
+GO
+/* La base maestra vigente de cada segmento */
+CREATE OR ALTER VIEW dat.v_BASE_VIGENTE
+AS
+SELECT a.CLIENTE, a.CODIGO, a.ID_CORRIDA, a.ARCHIVO, a.FE_CARGA, b.FILA, b.DATOS
+FROM dat.BASE_RECIBIDA_ARCHIVO a
+JOIN dat.BASE_RECIBIDA b ON b.ID_CORRIDA = a.ID_CORRIDA AND b.CODIGO = a.CODIGO
+WHERE a.VIGENTE = 1;
 GO
 /* Bases creadas antes: RIESGO en el histórico (para arribar pagos de cuentas retiradas) */
 IF COL_LENGTH('dat.HISTORIA_FOLIO', 'RIESGO') IS NULL

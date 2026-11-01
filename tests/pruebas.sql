@@ -171,6 +171,16 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o 
 FROM (SELECT N'Asignación cancelada: estatus de la corrida' AS p, CAST(N'CANCELADA' AS NVARCHAR(4000)) AS e, CAST((SELECT TOP (1) ESTATUS FROM ops.CORRIDA WHERE PROCESO = 'ASIG' ORDER BY ID_CORRIDA DESC) AS NVARCHAR(4000)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'Asignación cancelada: el DAT no cambió' AS p, CAST(N'5' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.DAT_486) AS NVARCHAR(4000)) AS o) x;
+DECLARE @c1 INT = (SELECT TOP (1) ID_CORRIDA FROM ops.CORRIDA WHERE PROCESO = 'ASIG' ORDER BY ID_CORRIDA DESC);
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'Retroceso automático: la corrida cancelada conserva su estatus y no deja base maestra' AS p, N'CANCELADA|1|1|0' AS e,
+             CONCAT((SELECT ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = @c1), '|',
+                    (SELECT CAST(REVERTIDA_AUTO AS INT) FROM ops.CORRIDA WHERE ID_CORRIDA = @c1), '|',
+                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @c1 AND PASO = 'RETROCESO' AND ESTATUS = 'OK'), '|',
+                    (SELECT COUNT(*) FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @c1)) AS o) x;
+/* Una base anterior de TDC (ficticia) para probar que el retroceso la devuelve a vigente */
+INSERT INTO dat.BASE_RECIBIDA_ARCHIVO (ID_CORRIDA, CODIGO, CLIENTE, ARCHIVO, ENCABEZADOS, REGISTROS, VIGENTE)
+VALUES (0, 'MAESTRA_TDC', '486', N'BASE MAESTRA_TARJETA anterior.csv', N'[]', 0, 1);
 GO
 
 /* ---------------------------------------------------------------------
@@ -201,6 +211,10 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o 
 FROM (SELECT N'ASIG: DAT final (3 existentes + 4 NVA + 1 REA)' AS p, CAST(N'8' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM dat.DAT_486) AS NVARCHAR(4000)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'ASIG: folios NVA consecutivos' AS p, CAST(N'20000004:100001,20000005:100002,3333XAXX010101000:100003,4444XAXX010101000:100004' AS NVARCHAR(4000)) AS e, CAST((SELECT STRING_AGG(CONCAT(CUENTA, ':', FOLIO), ',') WITHIN GROUP (ORDER BY FOLIO) FROM dat.DAT_486 WHERE SUB_CTE = 'NVA' AND ID_CORRIDA_ALTA = @id) AS NVARCHAR(4000)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ASIG: base maestra vigente y anterior por segmento' AS p, N'0|1' AS e,
+             CONCAT((SELECT CAST(VIGENTE AS INT) FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = 0 AND CODIGO = 'MAESTRA_TDC'), '|',
+                    (SELECT CAST(VIGENTE AS INT) FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @id AND CODIGO = 'MAESTRA_TDC')) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'ASIG: consecutivo actualizado' AS p, CAST(N'100004' AS NVARCHAR(4000)) AS e, CAST((SELECT CAST(ULTIMO_FOLIO AS NVARCHAR(10)) FROM dat.FOLIO_CONSECUTIVO WHERE CLIENTE = '486') AS NVARCHAR(4000)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
@@ -737,6 +751,10 @@ FROM (SELECT N'Retroceso ASIG: DAT, consecutivo e histórico como al inicio' AS 
                     (SELECT STRING_AGG(ESTATUS, ',') FROM dat.HISTORIA_FOLIO WHERE CUENTA = '20000009'), '|',
                     (SELECT COUNT(*) FROM dat.HISTORIA_FOLIO WHERE CUENTA = '20000009'), '|',
                     (SELECT ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = 2)) AS o) x;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'Retroceso ASIG: la base maestra anterior de TDC vuelve a ser la vigente' AS p, N'1|0' AS e,
+             CONCAT((SELECT CAST(VIGENTE AS INT) FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = 0 AND CODIGO = 'MAESTRA_TDC'), '|',
+                    (SELECT COUNT(*) FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = 2)) AS o) x;
 GO
 
 /* ---------------------------------------------------------------------

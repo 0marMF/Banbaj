@@ -49,7 +49,8 @@ GO
 
 CREATE OR ALTER PROCEDURE ops.sp_revertir_corrida
     @id_corrida INT,
-    @confirmar  BIT = 0          -- 0 = solo muestra qué cambiaría; 1 = revierte
+    @confirmar  BIT = 0,         -- 0 = solo muestra qué cambiaría; 1 = revierte
+    @automatico BIT = 0          -- 1 = retroceso automático de una corrida que falló: conserva ERROR / CANCELADA
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -58,16 +59,18 @@ BEGIN
     SELECT @cliente = CLIENTE, @estatus = ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
 
     IF @cliente IS NULL THROW 50300, 'La corrida no existe.', 1;
-    IF @estatus = 'REVERTIDA' THROW 50301, 'La corrida ya fue revertida.', 1;
+    IF @estatus = 'REVERTIDA' OR EXISTS (SELECT 1 FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida AND REVERTIDA_AUTO = 1)
+        THROW 50301, 'La corrida ya fue revertida.', 1;
     IF @estatus = 'EN_PROCESO' THROW 50302, 'La corrida sigue en proceso; ciérrala antes de revertirla.', 1;
     IF NOT EXISTS (SELECT 1 FROM ops.RESPALDO_CONTROL WHERE ID_CORRIDA = @id_corrida)
         THROW 50303, 'No hay respaldo de esa corrida (se conservan solo los últimos RESPALDOS_A_CONSERVAR).', 1;
-    IF EXISTS (SELECT 1 FROM ops.CORRIDA WHERE CLIENTE = @cliente AND ID_CORRIDA > @id_corrida AND ESTATUS <> 'REVERTIDA')
+    IF EXISTS (SELECT 1 FROM ops.CORRIDA WHERE CLIENTE = @cliente AND ID_CORRIDA > @id_corrida AND ESTATUS <> 'REVERTIDA' AND REVERTIDA_AUTO = 0)
         THROW 50304, 'Hay corridas posteriores sin revertir: revierte primero la más reciente.', 1;
 
     SELECT @folio = ULTIMO_FOLIO FROM ops.RESPALDO_CONTROL WHERE ID_CORRIDA = @id_corrida;
 
-    /* Vista previa */
+    /* Vista previa (el retroceso automático no la regresa) */
+    IF @automatico = 0
     SELECT 'DAT actual' AS CONCEPTO, COUNT(*) AS REGISTROS FROM dat.DAT_486
     UNION ALL SELECT 'DAT en el respaldo', COUNT(*) FROM ops.RESPALDO_DAT_486 WHERE ID_CORRIDA_RESPALDO = @id_corrida
     UNION ALL SELECT 'Altas en el histórico a borrar', COUNT(*) FROM dat.HISTORIA_FOLIO WHERE ID_CORRIDA_ALTA = @id_corrida
@@ -104,14 +107,53 @@ BEGIN
 
     DELETE FROM dat.PAGO_ARRIBADO WHERE ID_CORRIDA = @id_corrida AND ORIGEN = 'CORRIDA';
     DELETE FROM ops.TELEFONO WHERE ID_CORRIDA = @id_corrida;
+    /* Bases maestras: se borra la de esta corrida y la anterior de ese segmento vuelve a ser la vigente */
+    SELECT CODIGO INTO #bases_rev FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @id_corrida AND VIGENTE = 1;
     DELETE FROM dat.BASE_RECIBIDA WHERE ID_CORRIDA = @id_corrida;
     DELETE FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @id_corrida;
+    UPDATE a SET VIGENTE = 1
+    FROM dat.BASE_RECIBIDA_ARCHIVO a
+    WHERE a.CLIENTE = @cliente AND a.CODIGO IN (SELECT CODIGO FROM #bases_rev)
+      AND a.ID_CORRIDA = (SELECT MAX(x.ID_CORRIDA) FROM dat.BASE_RECIBIDA_ARCHIVO x WHERE x.CLIENTE = @cliente AND x.CODIGO = a.CODIGO);
     UPDATE ops.DEVOLUCION SET PROCESADA = 0 WHERE ID_CORRIDA = @id_corrida;
 
-    SET @msg = CONCAT(N'Revertida (estatus previo ', @estatus, N'). Lo que ya se haya arribado a CYBER no se revierte.');
-    UPDATE ops.CORRIDA SET ESTATUS = 'REVERTIDA', MENSAJE = @msg WHERE ID_CORRIDA = @id_corrida;
+    IF @automatico = 1
+    BEGIN
+        SET @msg = N'Revertida automáticamente: el DAT, el histórico, los folios y la base maestra quedaron como antes de la corrida.';
+        UPDATE ops.CORRIDA SET REVERTIDA_AUTO = 1, MENSAJE = LEFT(CONCAT(MENSAJE, N' · ', @msg), 4000) WHERE ID_CORRIDA = @id_corrida;
+    END
+    ELSE
+    BEGIN
+        SET @msg = CONCAT(N'Revertida (estatus previo ', @estatus, N'). Lo que ya se haya arribado a CYBER no se revierte.');
+        UPDATE ops.CORRIDA SET ESTATUS = 'REVERTIDA', MENSAJE = @msg WHERE ID_CORRIDA = @id_corrida;
+    END;
 
     COMMIT TRANSACTION;
     EXEC ops.sp_log @id_corrida, 'RETROCESO', 'OK', NULL, @msg;
+END;
+GO
+
+/* ---------------------------------------------------------------------
+   Retroceso automático: lo llaman los procesos en su CATCH, después de
+   cerrar la corrida en ERROR o CANCELADA. Deja el DAT como estaba antes de
+   la corrida (con el respaldo que la corrida tomó al empezar). Si el
+   retroceso mismo falla, queda en la bitácora y se ve el error original.
+   Parámetro RETROCESO_AUTOMATICO = 0 lo apaga (para revisar a mano).
+   --------------------------------------------------------------------- */
+CREATE OR ALTER PROCEDURE ops.sp_retroceso_automatico
+    @id_corrida INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @cliente VARCHAR(10) = (SELECT CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida), @msg NVARCHAR(4000);
+    IF @cliente IS NULL OR ISNULL(cfg.fn_param(@cliente, 'RETROCESO_AUTOMATICO'), '1') = '0' RETURN;
+    BEGIN TRY
+        EXEC ops.sp_revertir_corrida @id_corrida = @id_corrida, @confirmar = 1, @automatico = 1;
+    END TRY
+    BEGIN CATCH
+        IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+        SET @msg = CONCAT(N'No se pudo revertir automáticamente: ', ERROR_MESSAGE(), N' Revisa y revierte a mano con ops.sp_revertir_corrida.');
+        EXEC ops.sp_log @id_corrida, 'RETROCESO AUTOMATICO', 'ERROR', NULL, @msg;
+    END CATCH;
 END;
 GO

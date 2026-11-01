@@ -145,6 +145,7 @@ BEGIN
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
         SET @msg = ERROR_MESSAGE();
         EXEC ops.sp_corrida_finalizar @id_corrida, 'ERROR', @msg;
+        EXEC ops.sp_retroceso_automatico @id_corrida;
         THROW;
     END CATCH;
 
