@@ -70,7 +70,7 @@ SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486';     -- parámetros
 
 ## Configuración del servidor
 
-Tres scripts en `sql/instalacion/`, en orden. No los corre el CI porque tocan el servidor real.
+Cuatro scripts en `sql/instalacion/`, en orden. Los tres primeros no los corre el CI porque tocan el servidor real; el 04 (accesos) sí se prueba con usuarios de SQL.
 
 ### 1. Opciones del servidor y correo (`01_configurar_servidor.sql`)
 
@@ -126,6 +126,69 @@ Cambiar uno: `UPDATE cfg.PARAMETRO SET VALOR = N'…' WHERE CLIENTE = '486' AND 
 En SSMS: Objetos de servidor → Servidores vinculados → Proveedores → **OraOLEDB.Oracle** → Propiedades → marcar **Permitir en proceso** (*Allow inprocess*). Sin esto la bajada falla con un error de acceso al proveedor.
 
 > **Si se vuelve a correr `90_semilla_486.sql`**, la ruta UNC y el origen de Oracle regresan a `Q:` y vacío. Hay que volver a correr las tres líneas de rutas del script 03. Las credenciales no se pierden.
+
+### Conexión desde otras computadoras
+
+Por omisión SQL Server solo acepta conexiones locales. Para trabajar desde SSMS en otra PC de la red:
+
+**1. Activar TCP/IP con puerto fijo** (en el servidor)
+
+1. Abrir **SQL Server Configuration Manager** → Configuración de red de SQL Server → Protocolos de MSSQLSERVER (o de la instancia con nombre).
+2. **TCP/IP** → Habilitar.
+3. Propiedades de TCP/IP → pestaña Direcciones IP → sección **IPAll**: borrar *Puertos dinámicos TCP* y poner **Puerto TCP = 1433**.
+4. Reiniciar el servicio **SQL Server**. Si es instancia con nombre y no se quiere escribir el puerto al conectarse, iniciar también **SQL Server Browser**.
+
+**2. Permitir conexiones remotas**
+
+En SSMS, clic derecho en el servidor → Propiedades → Conexiones → marcar **Permitir conexiones remotas con este servidor**. Viene marcado de fábrica.
+
+**3. Abrir el firewall de Windows** (PowerShell como administrador)
+
+```
+New-NetFirewallRule -DisplayName "SQL Server 1433" -Direction Inbound -Protocol TCP -LocalPort 1433 -Action Allow -Profile Domain
+New-NetFirewallRule -DisplayName "SQL Browser 1434" -Direction Inbound -Protocol UDP -LocalPort 1434 -Action Allow -Profile Domain   # solo instancia con nombre
+```
+
+Si hay un firewall de red entre las PCs y el servidor, pedir a Sistemas que abra el mismo puerto.
+
+**4. Autenticación**
+
+- **Recomendado:** usuarios de Windows del dominio (`DOMINIO\usuario`). No hay contraseñas en SQL.
+- **Usuarios de SQL:** solo si no hay dominio. Requieren modo mixto: Propiedades del servidor → Seguridad → **Modo de autenticación de SQL Server y Windows**, y reiniciar el servicio. No usar `sa` para trabajar.
+
+**5. Crear los accesos** (`sql/instalacion/04_accesos_remotos.sql`)
+
+Llenar la lista `@accesos` con cada usuario y su nivel, y correr el script como sysadmin. Se puede volver a correr para agregar gente.
+
+| Nivel | Qué puede hacer | Para quién |
+| --- | --- | --- |
+| CONSULTA | Leer DAT, histórico, corridas y bitácora | Supervisión, MIS |
+| OPERADOR | Correr todos los procesos (es db\_owner de la base), bajar de CYBER, mandar correos | Equipo de asignaciones |
+| ADMIN | Todo, incluida la escritura de archivos y el ZIP (`sp_exportar_salidas`) | 1 o 2 responsables |
+
+CONSULTA y OPERADOR tienen negado leer `cfg.CREDENCIAL` y `cfg.sp_credencial_leer`. Capturar credenciales en `cfg.CAPTURA_CREDENCIAL` sí está permitido, porque la vista nunca muestra la contraseña.
+
+Escribir archivos y armar el ZIP usa Automatización OLE y `xp_cmdshell`, y SQL Server solo los permite a sysadmin. Por eso `sp_exportar_salidas` necesita ADMIN. El job diario no se ve afectado porque corre como el Agente.
+
+Un db\_owner podría quitarse a sí mismo la negación sobre las credenciales. El nivel OPERADOR es para gente de confianza del equipo.
+
+**6. Conectarse desde la otra PC**
+
+- Probar el puerto: `Test-NetConnection <servidor> -Port 1433` debe decir `TcpTestSucceeded : True`.
+- En SSMS, nombre del servidor:
+  - `SERVIDOR` (instancia por omisión)
+  - `SERVIDOR\INSTANCIA` (instancia con nombre)
+  - `192.168.x.x,1433` (por IP; la coma separa el puerto)
+- SSMS 20 o superior cifra la conexión por omisión. Si el servidor no tiene certificado propio, marcar **Confiar en el certificado del servidor** (*Trust server certificate*). Si no, sale un error de cadena de certificados.
+
+**Errores frecuentes al conectar**
+
+| Error | Causa |
+| --- | --- |
+| 53 / "No se encontró el servidor" | TCP/IP apagado, firewall cerrado o nombre mal escrito |
+| 18456 | Usuario sin inicio de sesión, contraseña mal o modo mixto apagado (ver `sys.server_principals` y el log de errores) |
+| 4060 | El inicio de sesión no tiene usuario en la base Banbaj (correr el script 04) |
+| Cadena de certificados no confiable | Marcar *Confiar en el certificado del servidor* |
 
 ## Migración de los datos de FoxPro
 
