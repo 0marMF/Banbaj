@@ -15,11 +15,12 @@
 
    Destinos (en una sola transacción; si algo falla no queda nada a medias):
      DAT          DAT.csv                              -> dat.DAT_486
-     HISTORIA     DAT.csv (activas) + HISTORIA.csv (último folio de cada cuenta que ya no
-                  está en el DAT, como baja: sirve para reasignar con el mismo folio y
-                  para ubicar pagos de cuentas retiradas)  -> dat.HISTORIA_FOLIO   (PURGA y DEVOL no se migran)
+     HISTORIA     DAT.csv (activas) + HISTORIA.csv (cada asignación anterior como baja: fechas de
+                  asignación, reasignación y retiro, y en DATOS_BAJA saldos, correos, teléfonos y
+                  dirección; sirve para reasignar con el mismo folio y ubicar pagos de cuentas
+                  retiradas)  -> dat.HISTORIA_FOLIO   (PURGA y DEVOL no se migran)
      CONSECUTIVO  máximo folio de TAB7, DAT e HISTORIA -> dat.FOLIO_CONSECUTIVO
-     PAGOS        PAGTOT.csv (CUENTA, FE_PAG, MONT)    -> dat.PAGO_ARRIBADO
+     PAGOS        PAGTOT.csv (CUENTA, MONT, FE_PAG, FE_REG) -> dat.PAGO_ARRIBADO
      ETIQUETAS    ETI, DM1, TOP, STATUS                -> cfg.ETIQUETA
      EXCLUSIONES  EXC486, DIRMAL, EMAILMALO, BLACKLIST -> cfg.EXCLUSION
                   BLACKLIST: TELEFONO (o TEL, 10 dígitos), OS, FECHA, STATUS. STATUS 'X' excluye,
@@ -130,7 +131,7 @@ BEGIN
 
     /* 2. Transformar a tablas temporales con la forma del destino */
     SELECT TOP (0) * INTO #d_dat FROM dat.DAT_486;
-    SELECT TOP (0) CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA INTO #d_hist FROM dat.HISTORIA_FOLIO;
+    SELECT TOP (0) CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA, DATOS_BAJA INTO #d_hist FROM dat.HISTORIA_FOLIO;
     CREATE TABLE #d_cons (CLIENTE VARCHAR(10), ULTIMO_FOLIO INT);
     CREATE TABLE #d_pag (CLIENTE VARCHAR(10), CUENTA VARCHAR(25), FE_PAG DATE, IMPORTE DECIMAL(15,2), FE_REG DATE, ID_CORRIDA INT, ORIGEN VARCHAR(10));
     CREATE TABLE #d_eti (CLIENTE VARCHAR(10), TIPO VARCHAR(20), LLAVE VARCHAR(30), VALOR NVARCHAR(100));
@@ -178,32 +179,53 @@ BEGIN
         FROM #d_dat d WHERE TRY_CONVERT(INT, d.FOLIO) IS NOT NULL;
     END;
 
-    -- HISTORIA.csv: último folio de cada cuenta que ya no está activa en el DAT (baja)
+    -- HISTORIA.csv: cada asignación anterior queda como baja en el histórico (decisión 01/11).
+    -- Se guardan las fechas de asignación (FE_ALTA; si SUB_CTE = REA es la reasignación) y de retiro (FE_BAJA),
+    -- y en DATOS_BAJA (JSON) las fechas, saldos, correos, teléfonos y dirección que traiga el archivo.
     IF EXISTS (SELECT 1 FROM @hay WHERE F = 'HISTORIA')
     BEGIN
         SET @falta = ops.fn_mig_faltan('HISTORIA', N'CUENTA, FOLIO');
         IF @falta IS NOT NULL BEGIN SET @msg = CONCAT(N'HISTORIA.csv: faltan las columnas ', @falta); THROW 50907, @msg, 1; END;
-        DECLARE @h_fecha SYSNAME = CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'FE_ASIG') IS NOT NULL THEN N'FE_ASIG'
-                                        WHEN COL_LENGTH('stg.MIG_HISTORIA', 'FECHA') IS NOT NULL THEN N'FECHA' END;
-        DECLARE @h_fec_expr NVARCHAR(400) = CASE WHEN @h_fecha IS NULL THEN N'CAST(NULL AS DATE)'
-            ELSE N'COALESCE(TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_fecha) + N'), 112), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_fecha) + N'), 23), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_fecha) + N'), 101))' END;
+        DECLARE @h_alta SYSNAME = (SELECT TOP (1) c FROM (VALUES (1, N'FE_ASIG'), (2, N'FECHA'), (3, N'FE_ALTA')) v(o, c) WHERE COL_LENGTH('stg.MIG_HISTORIA', c) IS NOT NULL ORDER BY o),
+                @h_baja SYSNAME = (SELECT TOP (1) c FROM (VALUES (1, N'FE_BAJA'), (2, N'FE_RET'), (3, N'FE_RETIRO'), (4, N'FE_DEV')) v(o, c) WHERE COL_LENGTH('stg.MIG_HISTORIA', c) IS NOT NULL ORDER BY o),
+                @h_json NVARCHAR(MAX);
+        /* Campos que se conservan en DATOS_BAJA si vienen en el archivo */
+        SELECT @h_json = STRING_AGG(CAST(N'cfg.fn_texto(' + QUOTENAME(c) + N') AS ' + QUOTENAME(c) AS NVARCHAR(MAX)), N', ') WITHIN GROUP (ORDER BY o)
+        FROM (VALUES (1, N'FE_ASIG'), (2, N'FE_REA'), (3, N'FE_REASIG'), (4, N'FE_BAJA'), (5, N'FE_RET'), (6, N'FE_RETIRO'), (7, N'FE_DEV'),
+                     (10, N'SDO_ACT'), (11, N'SDO_VDO'), (12, N'PAG_MIN'), (13, N'CAPITAL'), (14, N'SALDO1'), (15, N'SALDO2'), (16, N'SALDO3'),
+                     (20, N'MAIL'), (21, N'CORREO1'), (22, N'CORREO2'),
+                     (30, N'TEL1'), (31, N'TEL2'), (32, N'TEL3'), (33, N'TEL4'), (34, N'TEL5'), (35, N'TEL6'), (36, N'TEL7'), (37, N'TEL8'),
+                     (38, N'TEL9'), (39, N'TEL10'), (40, N'TEL11'), (41, N'TEL12'), (42, N'TEL13'), (43, N'TEL14'), (44, N'TEL15'), (45, N'TEL16'),
+                     (50, N'DIRECC1'), (51, N'DIRECC2'), (52, N'DIRECC3'), (53, N'DIRECC4'), (54, N'DIRECC5'), (55, N'ESTADO'), (56, N'EDO')) v(o, c)
+        WHERE COL_LENGTH('stg.MIG_HISTORIA', c) IS NOT NULL;
+        DECLARE @fx_alta NVARCHAR(600) = CASE WHEN @h_alta IS NULL THEN N'CAST(NULL AS DATE)'
+                ELSE N'COALESCE(TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_alta) + N'), 112), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_alta) + N'), 23), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_alta) + N'), 103))' END,
+                @fx_baja NVARCHAR(600) = CASE WHEN @h_baja IS NULL THEN N'CAST(NULL AS DATE)'
+                ELSE N'COALESCE(TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_baja) + N'), 112), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_baja) + N'), 23), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_baja) + N'), 103))' END;
         SET @sql = N';WITH h AS (
                 SELECT LEFT(cfg.fn_texto(CUENTA), 20) AS CUENTA, TRY_CONVERT(INT, cfg.fn_texto(FOLIO)) AS FOLIO,
                        ' + CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'CUENTA2') IS NOT NULL THEN N'LEFT(cfg.fn_texto(CUENTA2), 28)' ELSE N'CAST(NULL AS VARCHAR(28))' END + N' AS CUENTA2,
                        ' + CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'SEGMENTO2') IS NOT NULL THEN N'LEFT(cfg.fn_texto(SEGMENTO2), 20)' ELSE N'CAST(NULL AS VARCHAR(20))' END + N' AS SEGMENTO2,
                        ' + CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'RIESGO') IS NOT NULL THEN N'LEFT(cfg.fn_texto(RIESGO), 35)' ELSE N'CAST(NULL AS VARCHAR(35))' END + N' AS RIESGO,
                        ' + CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'SUB_CTE') IS NOT NULL THEN N'cfg.fn_texto(SUB_CTE)' ELSE N'CAST(NULL AS NVARCHAR(3))' END + N' AS SUB_CTE,
-                       ' + @h_fec_expr + N' AS FE, FILA
+                       ' + @fx_alta + N' AS FE_ALTA, ' + @fx_baja + N' AS FE_BAJA,
+                       ' + CASE WHEN @h_json IS NULL THEN N'CAST(NULL AS NVARCHAR(MAX))' ELSE N'(SELECT ' + @h_json + N' FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)' END + N' AS DATOS, FILA
                 FROM stg.MIG_HISTORIA),
-            u AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY CUENTA ORDER BY FE DESC, FILA DESC) AS RN FROM h WHERE CUENTA IS NOT NULL AND FOLIO > 0)
-            INSERT INTO #d_hist (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA)
+            u AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY CUENTA, FOLIO, FE_ALTA ORDER BY FILA DESC) AS RN FROM h WHERE CUENTA IS NOT NULL AND FOLIO > 0)
+            INSERT INTO #d_hist (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA, DATOS_BAJA)
             SELECT @cliente, u.CUENTA, u.FOLIO, ISNULL(u.CUENTA2, CONCAT(@cliente, ''-'', u.FOLIO)), u.SEGMENTO2, u.RIESGO,
-                   CASE WHEN u.SUB_CTE IN (''NVA'', ''REA'') THEN u.SUB_CTE ELSE ''NVA'' END, ''B'', ISNULL(u.FE, ''19000101''), NULL, ''MIGRACION (historia.dbf)''
-            FROM u WHERE u.RN = 1 AND NOT EXISTS (SELECT 1 FROM #d_hist a WHERE a.CUENTA = u.CUENTA);';
+                   CASE WHEN u.SUB_CTE IN (''NVA'', ''REA'') THEN u.SUB_CTE ELSE ''NVA'' END, ''B'', ISNULL(u.FE_ALTA, ''19000101''), u.FE_BAJA,
+                   ''MIGRACION (historia.dbf)'', u.DATOS
+            FROM u
+            WHERE u.RN = 1
+              /* el periodo vigente ya entró como activo desde el DAT */
+              AND NOT EXISTS (SELECT 1 FROM #d_hist a WHERE a.ESTATUS = ''A'' AND a.CUENTA = u.CUENTA AND a.FOLIO = u.FOLIO
+                                AND u.FE_BAJA IS NULL AND (u.FE_ALTA IS NULL OR u.FE_ALTA >= a.FE_ALTA));';
         EXEC sp_executesql @sql, N'@cliente VARCHAR(10)', @cliente = @cliente;
         SET @n = @@ROWCOUNT;
-        INSERT INTO #aviso (TEXTO) SELECT CONCAT(N'HISTORIA: ', @n, N' cuentas que ya no están en el DAT quedan como baja con su último folio (de ', FILAS, N' renglones)') FROM #fuente WHERE FUENTE = 'HISTORIA';
-        IF @h_fecha IS NULL INSERT INTO #aviso (TEXTO) VALUES (N'HISTORIA: sin FE_ASIG ni FECHA; cuando una cuenta tiene varios folios se toma el último renglón del archivo');
+        INSERT INTO #aviso (TEXTO) SELECT CONCAT(N'HISTORIA: ', @n, N' asignaciones anteriores quedan como baja en el histórico (de ', FILAS, N' renglones)') FROM #fuente WHERE FUENTE = 'HISTORIA';
+        INSERT INTO #aviso (TEXTO) VALUES (CONCAT(N'HISTORIA: fecha de asignación = ', ISNULL(@h_alta, N'(no viene)'), N' · fecha de retiro = ', ISNULL(@h_baja, N'(no viene)'),
+                                                  N' · se conservan: ', ISNULL(REPLACE(REPLACE(REPLACE(@h_json, N'cfg.fn_texto(', N''), N') AS ', N'='), N'[', N''), N'(nada)')));
     END;
 
     -- CONSECUTIVO: máximo de TAB7, DAT e HISTORIA.csv
@@ -364,8 +386,8 @@ BEGIN
         BEGIN
             IF @reemplazar = 0 AND EXISTS (SELECT 1 FROM dat.HISTORIA_FOLIO WHERE CLIENTE = @cliente) THROW 50911, 'dat.HISTORIA_FOLIO ya tiene registros; usa @reemplazar = 1. No se cargó nada.', 1;
             DELETE FROM dat.HISTORIA_FOLIO WHERE CLIENTE = @cliente;
-            INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA)
-            SELECT CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA FROM #d_hist;
+            INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA, DATOS_BAJA)
+            SELECT CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA, DATOS_BAJA FROM #d_hist;
         END;
         IF EXISTS (SELECT 1 FROM @dest WHERE D = 'CONSECUTIVO') AND EXISTS (SELECT 1 FROM #d_cons)
         BEGIN

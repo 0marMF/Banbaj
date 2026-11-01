@@ -147,10 +147,11 @@ def main(destino):
         ["       102", "486", "NVA", "REPETIDA", "20000002", "486-102", "TDC", dt.date(2026, 10, 3), 0, ""],   # cuenta repetida: se omite
     ])
     vfp(mig / "TAB7.csv", ["folio"], [["        95"], ["       150"]])
-    vfp(mig / "HISTORIA.csv", ["folio", "cuenta", "riesgo", "fe_asig"], [
-        ["       160", "20000007", "R7", dt.date(2024, 5, 1)], ["        90", "20000009", "R9", dt.date(2019, 1, 1)],
-        ["       150", "20000009", "R9B", dt.date(2023, 3, 1)],        # misma cuenta, folio más reciente: gana este
-        ["       100", "20000001", "R1", dt.date(2026, 10, 1)]])      # activa en el DAT: no se duplica
+    vfp(mig / "HISTORIA.csv", ["folio", "cuenta", "riesgo", "sub_cte", "fe_asig", "fe_baja", "sdo_act", "tel1", "direcc1", "correo1"], [
+        ["       160", "20000007", "R7", "NVA", dt.date(2024, 5, 1), dt.date(2024, 9, 30), 1234.5, "5511112222", "CALLE FICTICIA 7", "uno@correo.com"],
+        ["        90", "20000009", "R9", "NVA", dt.date(2019, 1, 1), dt.date(2019, 6, 1), None, None, None, None],
+        ["       150", "20000009", "R9B", "REA", dt.date(2023, 3, 1), None, None, None, None, None],   # reasignación
+        ["       100", "20000001", "R1", "NVA", dt.date(2026, 10, 1), None, None, None, None, None]])  # periodo vigente: ya está en el DAT
     vfp(mig / "PAGTOT.csv", ["ide", "grupo", "cuenta", "fe_pag", "mont", "segmento", "agen", "fe_reg", "tran"], [
         ["500", "1", "20000001", "10022026", "000000001000.00", "pbank", "SERTEC", "10032026", "PAGO"],
         ["500", "1", "20000001", "10022026", "000000001000.00", "pbank", "SERTEC", "10032026", "PAGO"],
