@@ -2,6 +2,10 @@
 
 Levantamiento de requerimientos de los procesos de **asignación** y **actualización** del cliente 486, como base para migrarlos a SQL Server con catálogos y stored procedures.
 
+## Instalación y operación
+
+Manual completo (requisitos, instalación de la base, configuración del servidor, migración desde FoxPro, operación diaria, respaldo y retroceso, salida a producción): [`docs/MANUAL_INSTALACION_486.md`](docs/MANUAL_INSTALACION_486.md). Scripts en [`sql/`](sql/LEEME.md).
+
 ## Contenido
 
 | Archivo | Proceso | Hojas principales |

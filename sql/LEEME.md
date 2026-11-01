@@ -4,6 +4,8 @@ Migración dinámica de la asignación y la actualización del 486. Las únicas 
 
 Requiere SQL Server 2017 o superior y Database Mail configurado.
 
+Para instalar en el servidor, migrar desde FoxPro y operar día a día, sigue el manual: [`docs/MANUAL_INSTALACION_486.md`](../docs/MANUAL_INSTALACION_486.md).
+
 ## Orden de ejecución
 
 | Archivo | Contenido |
