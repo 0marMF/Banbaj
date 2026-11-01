@@ -854,22 +854,21 @@ BEGIN TRY
 END TRY
 BEGIN CATCH SET @err = ERROR_MESSAGE(); END CATCH;
 EXEC ops.sp_telefonos_refrescar_cyber @id;
+DECLARE @o NVARCHAR(4000);
+SET @o = (SELECT CONCAT(COUNT(*), '|', STRING_AGG(CONCAT(LADA, '-', SERIE, '-', TIPORED), '|') WITHIN GROUP (ORDER BY LADA, SERIE)) FROM cfg.PLAN_NUMERACION);
 EXEC pru.sp_igual N'TEL CYBER: plan de numeración de CAT_PNM (serie con ceros, MOVIL gana, inválidos fuera)',
-     N'3|477-023-FIJO|55-1111-MOVIL|81-0050-MOVIL',
-     (SELECT CONCAT(COUNT(*), '|', STRING_AGG(CONCAT(LADA, '-', SERIE, '-', TIPORED), '|') WITHIN GROUP (ORDER BY LADA, SERIE)) FROM cfg.PLAN_NUMERACION);
+     N'3|477-023-FIJO|55-1111-MOVIL|81-0050-MOVIL', @o;
+SET @o = (SELECT CONCAT(STRING_AGG(CONCAT(CUENTA, '|', TELEFONO), ',') WITHIN GROUP (ORDER BY CUENTA), NULLIF(CONCAT(' (', @err, ')'), ' ()')) FROM cfg.TEL_QUEJA_CYBER)
+       + ISNULL((SELECT TOP (1) CONCAT(' [', LEFT(MENSAJE, 300), ']') FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'TELEFONOS CYBER' AND ESTATUS = 'AVISO'), '');
 EXEC pru.sp_igual N'TEL CYBER: quejas del grupo 1 por el servidor vinculado (últimos 10 dígitos de telo y telpho)',
-     N'486-200|5511112222,486-201|5533334444',
-     (SELECT CONCAT(STRING_AGG(CONCAT(CUENTA, '|', TELEFONO), ',') WITHIN GROUP (ORDER BY CUENTA), NULLIF(CONCAT(' (', @err, ')'), ' ()'),
-                    (SELECT TOP (1) CONCAT(' [', LEFT(MENSAJE, 300), ']') FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'TELEFONOS CYBER' AND ESTATUS = 'AVISO'))
-      FROM cfg.TEL_QUEJA_CYBER);
+     N'486-200|5511112222,486-201|5533334444', @o;
 /* Sin servidor vinculado ni tabla: avisa y conserva lo cargado */
 UPDATE cfg.PARAMETRO SET VALOR = 'NO_EXISTE' WHERE CLIENTE = '486' AND CLAVE = 'TELBAJ_LINKED_SERVER';
 UPDATE cfg.PARAMETRO SET VALOR = @base + N'.pru.NO_EXISTE' WHERE CLIENTE = '486' AND CLAVE = 'PNM_TABLA';
 EXEC ops.sp_telefonos_refrescar_cyber @id;
-EXEC pru.sp_igual N'TEL CYBER: sin fuentes avisa y conserva quejas y plan',
-     N'2|3|2',
-     CONCAT((SELECT COUNT(*) FROM cfg.TEL_QUEJA_CYBER), '|', (SELECT COUNT(*) FROM cfg.PLAN_NUMERACION), '|',
-            (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'TELEFONOS CYBER' AND ESTATUS = 'AVISO' AND (MENSAJE LIKE N'%NO_EXISTE%'))));
+SET @o = CONCAT((SELECT COUNT(*) FROM cfg.TEL_QUEJA_CYBER), '|', (SELECT COUNT(*) FROM cfg.PLAN_NUMERACION), '|',
+                (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'TELEFONOS CYBER' AND ESTATUS = 'AVISO' AND MENSAJE LIKE N'%NO_EXISTE%'));
+EXEC pru.sp_igual N'TEL CYBER: sin fuentes avisa y conserva quejas y plan', N'2|3|2', @o;
 EXEC ops.sp_corrida_finalizar @id, 'OK', N'Prueba de teléfonos de CYBER';
 IF EXISTS (SELECT 1 FROM sys.servers WHERE name = 'LOOP_PRUEBA') EXEC sp_dropserver 'LOOP_PRUEBA', 'droplogins';
 GO
