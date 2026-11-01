@@ -244,45 +244,76 @@ END;
 GO
 
 /* ---------------------------------------------------------------------
-   Exclusiones (blacklist_486.prg y las demás listas): archivo CSV con
-   encabezado y el valor en la primera columna (para TELEFONO, el teléfono).
+   Exclusiones (blacklist_486.prg y las demás listas): archivo CSV con encabezado.
+   TELEFONO (lista negra): columnas TELEFONO (o TEL), OS, FECHA y STATUS.
+     STATUS 'X'   -> se excluye (alta si no estaba)
+     STATUS vacío -> no se excluye (si estaba activo, se desactiva)
+     Sin columna STATUS, todo el archivo cuenta como 'X'. Solo teléfonos de 10 dígitos.
+     OS es el requerimiento; si el archivo no lo trae se usa @req.
+   Otros tipos: el valor es la primera columna.
    --------------------------------------------------------------------- */
 CREATE OR ALTER PROCEDURE cfg.sp_exclusion_cargar
     @cliente   VARCHAR(10)   = '486',
     @tipo      VARCHAR(20)   = 'TELEFONO',
     @archivo   NVARCHAR(500),
-    @req       VARCHAR(40),
+    @req       VARCHAR(40)   = NULL,
     @solicita  NVARCHAR(100),
     @codepage  VARCHAR(10)   = 'ACP'
 AS
 BEGIN
     SET NOCOUNT ON;
     IF @tipo NOT IN ('CUENTA', 'TELEFONO', 'DIRECCION', 'CORREO') THROW 50620, '@tipo debe ser CUENTA, TELEFONO, DIRECCION o CORREO.', 1;
-    IF NULLIF(LTRIM(@req), '') IS NULL OR NULLIF(LTRIM(@solicita), '') IS NULL THROW 50621, 'Indica el requerimiento y quién lo solicita.', 1;
-    CREATE TABLE #e (L NVARCHAR(1000));
-    DECLARE @sql NVARCHAR(MAX) = N'BULK INSERT #e FROM ' + QUOTENAME(@archivo, '''')
-        + N' WITH (FIRSTROW = 2, ROWTERMINATOR = ''0x0a'', FIELDTERMINATOR = ''\t\t\t'''
-        + CASE WHEN NULLIF(@codepage, '') IS NOT NULL THEN N', CODEPAGE = ' + QUOTENAME(@codepage, '''') ELSE N'' END + N');';
-    EXEC (@sql);
+    IF NULLIF(LTRIM(@solicita), '') IS NULL THROW 50621, 'Indica el requerimiento y quién lo solicita.', 1;
+    DECLARE @n INT, @sql NVARCHAR(MAX), @col SYSNAME, @tiene_os BIT, @tiene_fecha BIT, @tiene_status BIT;
 
-    /* Teléfonos (lista negra): solo 10 dígitos exactos; espacios y guiones se quitan, lo demás se rechaza */
-    SELECT v.VALOR, CASE WHEN @tipo = 'TELEFONO' AND LEN(v.VALOR) <> 10 THEN 0 ELSE 1 END AS VALIDO
-    INTO #c
-    FROM #e
-    CROSS APPLY (SELECT LTRIM(RTRIM(REPLACE(REPLACE(LEFT(L, CHARINDEX(N',', L + N',') - 1), NCHAR(13), N''), N'"', N''))) AS V0) a
-    CROSS APPLY (SELECT CASE WHEN @tipo = 'TELEFONO' THEN cfg.fn_solo_digitos(a.V0)
-                             WHEN @tipo = 'CORREO' THEN LOWER(a.V0) ELSE a.V0 END AS VALOR) v
-    WHERE NULLIF(v.VALOR, N'') IS NOT NULL;
-    SELECT DISTINCT VALOR INTO #x FROM #c WHERE VALIDO = 1;
+    EXEC ops.sp_mig_leer 'EXC_CARGA', @archivo, @codepage, @n OUTPUT;
+    IF @n < 0 THROW 50623, 'No se encontró el archivo.', 1;
+    BEGIN TRY
+        SET @col = CASE WHEN @tipo = 'TELEFONO' AND COL_LENGTH('stg.MIG_EXC_CARGA', 'TELEFONO') IS NOT NULL THEN N'TELEFONO'
+                        WHEN @tipo = 'TELEFONO' AND COL_LENGTH('stg.MIG_EXC_CARGA', 'TEL') IS NOT NULL THEN N'TEL'
+                        ELSE (SELECT name FROM sys.columns WHERE object_id = OBJECT_ID('stg.MIG_EXC_CARGA') AND column_id = 2) END;
+        SET @tiene_os     = CASE WHEN @tipo = 'TELEFONO' AND COL_LENGTH('stg.MIG_EXC_CARGA', 'OS') IS NOT NULL THEN 1 ELSE 0 END;
+        SET @tiene_fecha  = CASE WHEN @tipo = 'TELEFONO' AND COL_LENGTH('stg.MIG_EXC_CARGA', 'FECHA') IS NOT NULL THEN 1 ELSE 0 END;
+        SET @tiene_status = CASE WHEN @tipo = 'TELEFONO' AND COL_LENGTH('stg.MIG_EXC_CARGA', 'STATUS') IS NOT NULL THEN 1 ELSE 0 END;
+        IF @tiene_os = 0 AND NULLIF(LTRIM(@req), '') IS NULL THROW 50621, 'Indica el requerimiento y quién lo solicita.', 1;
 
-    DECLARE @leidos INT = (SELECT COUNT(*) FROM #e), @nuevos INT;
-    INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO, REQ)
-    SELECT @cliente, @tipo, x.VALOR, CONCAT(N'Solicita: ', @solicita), @req
+        CREATE TABLE #c (FILA INT, VALOR NVARCHAR(200), OS VARCHAR(40), FE DATE, EXCLUYE BIT, VALIDO BIT);
+        SET @sql = N'INSERT INTO #c (FILA, VALOR, OS, FE, EXCLUYE, VALIDO) SELECT FILA, v.VALOR, '
+                 + CASE WHEN @tiene_os = 1 THEN N'LEFT(cfg.fn_texto(OS), 40)' ELSE N'NULL' END + N', '
+                 + CASE WHEN @tiene_fecha = 1 THEN N'COALESCE(TRY_CONVERT(DATE, cfg.fn_texto(FECHA), 112), TRY_CONVERT(DATE, cfg.fn_texto(FECHA), 23), TRY_CONVERT(DATE, cfg.fn_texto(FECHA), 103))' ELSE N'NULL' END + N', '
+                 + CASE WHEN @tiene_status = 1 THEN N'CASE WHEN UPPER(cfg.fn_texto(STATUS)) = ''X'' THEN 1 ELSE 0 END' ELSE N'1' END + N', '
+                 + N'CASE WHEN @tipo = ''TELEFONO'' AND LEN(v.VALOR) <> 10 THEN 0 ELSE 1 END '
+                 + N'FROM stg.MIG_EXC_CARGA CROSS APPLY (SELECT CASE WHEN @tipo = ''TELEFONO'' THEN cfg.fn_solo_digitos(cfg.fn_texto(' + QUOTENAME(@col) + N')) '
+                 + N'WHEN @tipo = ''CORREO'' THEN LOWER(cfg.fn_texto(' + QUOTENAME(@col) + N')) ELSE cfg.fn_texto(' + QUOTENAME(@col) + N') END AS VALOR) v '
+                 + N'WHERE NULLIF(v.VALOR, N'''') IS NOT NULL;';
+        EXEC sp_executesql @sql, N'@tipo VARCHAR(20)', @tipo = @tipo;
+    END TRY
+    BEGIN CATCH
+        DROP TABLE IF EXISTS stg.MIG_EXC_CARGA;
+        THROW;
+    END CATCH;
+    DROP TABLE IF EXISTS stg.MIG_EXC_CARGA;
+
+    /* Si un valor se repite en el archivo, gana el último renglón */
+    SELECT VALOR, OS, FE, EXCLUYE INTO #x
+    FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY VALOR ORDER BY FILA DESC) AS RN FROM #c WHERE VALIDO = 1) z WHERE RN = 1;
+
+    DECLARE @nuevos INT, @desactivados INT;
+    UPDATE e SET ACTIVO = 0
+    FROM cfg.EXCLUSION e JOIN #x x ON x.VALOR = e.VALOR AND x.EXCLUYE = 0
+    WHERE e.CLIENTE = @cliente AND e.TIPO = @tipo AND e.VALOR2 IS NULL AND e.ACTIVO = 1;
+    SET @desactivados = @@ROWCOUNT;
+
+    INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO, REQ, FE_ALTA, ORIGEN)
+    SELECT @cliente, @tipo, x.VALOR, CONCAT(N'Solicita: ', @solicita), ISNULL(x.OS, @req), ISNULL(CAST(x.FE AS DATETIME2(0)), SYSDATETIME()), 'CARGA'
     FROM #x x
-    WHERE NOT EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = @cliente AND e.TIPO = @tipo AND e.VALOR = x.VALOR AND e.VALOR2 IS NULL AND e.ACTIVO = 1);
+    WHERE x.EXCLUYE = 1
+      AND NOT EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = @cliente AND e.TIPO = @tipo AND e.VALOR = x.VALOR AND e.VALOR2 IS NULL AND e.ACTIVO = 1);
     SET @nuevos = @@ROWCOUNT;
-    SELECT @tipo AS TIPO, @leidos AS LEIDOS, (SELECT COUNT(*) FROM #x) AS VALIDOS, @nuevos AS NUEVOS, (SELECT COUNT(*) FROM #x) - @nuevos AS YA_EXISTIAN,
-           (SELECT COUNT(*) FROM #c WHERE VALIDO = 0) AS NO_SON_10_DIGITOS;
+
+    SELECT @tipo AS TIPO, @n AS LEIDOS, (SELECT COUNT(*) FROM #x WHERE EXCLUYE = 1) AS VALIDOS, @nuevos AS NUEVOS,
+           (SELECT COUNT(*) FROM #x WHERE EXCLUYE = 1) - @nuevos AS YA_EXISTIAN,
+           (SELECT COUNT(*) FROM #c WHERE VALIDO = 0) AS NO_SON_10_DIGITOS, @desactivados AS DESACTIVADOS;
 END;
 GO
 
@@ -294,8 +325,8 @@ BEGIN
     SET NOCOUNT ON;
     IF EXISTS (SELECT 1 FROM cfg.EXCLUSION WHERE CLIENTE = @cliente AND TIPO = @tipo AND VALOR = @valor AND ISNULL(VALOR2, N'') = ISNULL(@valor2, N'') AND ACTIVO = 1)
         RETURN;
-    INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO, REQ)
-    VALUES (@cliente, @tipo, @valor, @valor2, CONCAT(N'Solicita: ', @solicita), @req);
+    INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO, REQ, ORIGEN)
+    VALUES (@cliente, @tipo, @valor, @valor2, CONCAT(N'Solicita: ', @solicita), @req, 'ALTA');
 END;
 GO
 

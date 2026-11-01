@@ -135,6 +135,9 @@ def main(destino):
     # Lista negra (blacklist_486.prg)
     escribir(destino / "exclusiones" / "BLACKLIST.csv", ["TEL"], [{"TEL": "55 1234 5678"}, {"TEL": "5512345678"}, {"TEL": ""},
         {"TEL": "52 55 1234 5678"}, {"TEL": "12345"}])   # solo 10 dígitos; los otros dos se rechazan
+    escribir(destino / "exclusiones" / "BLACKLIST_STATUS.csv", ["TELEFONO", "OS", "FECHA", "STATUS"], [
+        {"TELEFONO": "5512345678", "OS": "OS-50", "FECHA": "20261101", "STATUS": ""},       # estatus vacío: deja de excluirse
+        {"TELEFONO": "5598765432", "OS": "OS-51", "FECHA": "20261101", "STATUS": "X"}])
     # Migración: CSV como los deja COPY TO … TYPE CSV de FoxPro (EXPORTAR_MIGRACION.prg):
     # encabezado en minúsculas, texto entre comillas sin espacios al final, fechas AAAAMMDD.
     mig = destino / "migracion"
@@ -144,7 +147,10 @@ def main(destino):
         ["       102", "486", "NVA", "REPETIDA", "20000002", "486-102", "TDC", dt.date(2026, 10, 3), 0, ""],   # cuenta repetida: se omite
     ])
     vfp(mig / "TAB7.csv", ["folio"], [["        95"], ["       150"]])
-    vfp(mig / "HISTORIA.csv", ["folio", "cuenta"], [["       160", "20000007"], ["        90", "20000009"]])
+    vfp(mig / "HISTORIA.csv", ["folio", "cuenta", "riesgo", "fe_asig"], [
+        ["       160", "20000007", "R7", dt.date(2024, 5, 1)], ["        90", "20000009", "R9", dt.date(2019, 1, 1)],
+        ["       150", "20000009", "R9B", dt.date(2023, 3, 1)],        # misma cuenta, folio más reciente: gana este
+        ["       100", "20000001", "R1", dt.date(2026, 10, 1)]])      # activa en el DAT: no se duplica
     vfp(mig / "PAGTOT.csv", ["ide", "grupo", "cuenta", "fe_pag", "mont", "segmento", "agen", "fe_reg", "tran"], [
         ["500", "1", "20000001", "10022026", "000000001000.00", "pbank", "SERTEC", "10032026", "PAGO"],
         ["500", "1", "20000001", "10022026", "000000001000.00", "pbank", "SERTEC", "10032026", "PAGO"],
@@ -152,10 +158,9 @@ def main(destino):
     ])
     vfp(mig / "TOP.csv", ["cuenta2", "etiqueta"], [["486-100", "REE"], ["486-999", "REE"]])
     vfp(mig / "EXC486.csv", ["cuenta"], [["20000008"]])
-    vfp(mig / "BLACKLIST.csv", ["tel"], [["55 0000 0000"], ["551234"]])                  # el de 6 dígitos se omite
-    vfp(mig / "TELBAJ.csv", ["cuenta", "tel"], [["486-100", "5511111111"], ["307-55", "5522222222"]])
-    vfp(mig / "LADA.csv", ["cp", "lada"], [["06600", "55"], ["37236", "477"]])
-    vfp(mig / "PNC.csv", ["lada", "serie", "n_ini", "n_fin", "tipored"], [["55", "1234", 0, 9999, "MOVIL"], ["477", "714", 0, 4999, "FIJO"]])
+    vfp(mig / "BLACKLIST.csv", ["telefono", "os", "fecha", "status"], [
+        ["55 0000 0000", "OS-1", dt.date(2026, 1, 1), "X"], ["551234", "OS-9", dt.date(2026, 1, 1), "X"],   # el de 6 dígitos se omite
+        ["5511110000", "OS-2", dt.date(2026, 2, 1), ""]])                                                    # estatus vacío: no excluye
     print("datos de prueba en", destino)
 
 

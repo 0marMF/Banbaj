@@ -569,13 +569,21 @@ DELETE FROM cfg.ETIQUETA WHERE TIPO = 'ETI486';
 GO
 
 /* Lista negra (blacklist_486.prg) */
-DECLARE @r TABLE (TIPO VARCHAR(20), LEIDOS INT, VALIDOS INT, NUEVOS INT, YA_EXISTIAN INT, NO_10 INT);
+DECLARE @r TABLE (TIPO VARCHAR(20), LEIDOS INT, VALIDOS INT, NUEVOS INT, YA_EXISTIAN INT, NO_10 INT, DESACTIVADOS INT);
 INSERT INTO @r EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'/datos/exclusiones/BLACKLIST.csv', @req = 'REQ PRUEBA', @solicita = N'Operación', @codepage = '';
 INSERT INTO @r EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'/datos/exclusiones/BLACKLIST.csv', @req = 'REQ PRUEBA', @solicita = N'Operación', @codepage = '';
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'EXCLUSION: lista negra solo 10 dígitos, con REQ y sin duplicar' AS p, N'1:1:2,1:0:2|REQ PRUEBA' AS e,
              CONCAT((SELECT STRING_AGG(CONCAT(VALIDOS, ':', NUEVOS, ':', NO_10), ',') WITHIN GROUP (ORDER BY NUEVOS DESC) FROM @r), '|',
                     (SELECT REQ FROM cfg.EXCLUSION WHERE TIPO = 'TELEFONO' AND VALOR = '5512345678')) AS o) x;
+/* Con TELEFONO, OS, FECHA y STATUS: vacío deja de excluir, X da de alta con su OS y fecha */
+DELETE FROM @r;
+INSERT INTO @r EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'/datos/exclusiones/BLACKLIST_STATUS.csv', @solicita = N'Operación', @codepage = '';
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'EXCLUSION: lista negra con STATUS (vacío desactiva, X da de alta con OS y fecha)' AS p, N'1:1:1|0|OS-51:2026-11-01:CARGA' AS e,
+             CONCAT((SELECT CONCAT(VALIDOS, ':', NUEVOS, ':', DESACTIVADOS) FROM @r), '|',
+                    (SELECT COUNT(*) FROM cfg.EXCLUSION WHERE TIPO = 'TELEFONO' AND VALOR = '5512345678' AND ACTIVO = 1), '|',
+                    (SELECT CONCAT(REQ, ':', CAST(FE_ALTA AS DATE), ':', ORIGEN) FROM cfg.EXCLUSION WHERE TIPO = 'TELEFONO' AND VALOR = '5598765432' AND ACTIVO = 1)) AS o) x;
 GO
 
 /* Blanqueo de status (status.prg) sobre la asignación 2 (día 2: sí toca). Lo que baja de CYBER llega a stg.CYBER_STATUS */

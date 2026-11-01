@@ -5,7 +5,7 @@
 
    1. En FoxPro, exportar cada DBF a CSV con cyber/486/EXPORTAR_MIGRACION.prg
       (deja C:\MIGRA486\<FUENTE>.csv: DAT, TAB7, HISTORIA, PAGTOT, ETI, DM1, TOP,
-      STATUS, EXC486, DIRMAL, EMAILMALO, BLACKLIST, TELBAJ, LADA, PNC).
+      STATUS, EXC486, DIRMAL, EMAILMALO, BLACKLIST), solo con los campos que se usan.
       La carpeta debe ser visible para el servicio de SQL Server.
    2. Revisar (no escribe nada):   EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\';
    3. Cargar:                      EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;
@@ -15,13 +15,17 @@
 
    Destinos (en una sola transacción; si algo falla no queda nada a medias):
      DAT          DAT.csv                              -> dat.DAT_486
-     HISTORIA     DAT.csv (activas)                    -> dat.HISTORIA_FOLIO   (PURGA y DEVOL no se migran)
+     HISTORIA     DAT.csv (activas) + HISTORIA.csv (último folio de cada cuenta que ya no
+                  está en el DAT, como baja: sirve para reasignar con el mismo folio y
+                  para ubicar pagos de cuentas retiradas)  -> dat.HISTORIA_FOLIO   (PURGA y DEVOL no se migran)
      CONSECUTIVO  máximo folio de TAB7, DAT e HISTORIA -> dat.FOLIO_CONSECUTIVO
      PAGOS        PAGTOT.csv (CUENTA, FE_PAG, MONT)    -> dat.PAGO_ARRIBADO
      ETIQUETAS    ETI, DM1, TOP, STATUS                -> cfg.ETIQUETA
-     EXCLUSIONES  EXC486, DIRMAL, EMAILMALO, BLACKLIST (10 dígitos), TELBAJ -> cfg.EXCLUSION
-     LADA         LADA.csv                             -> cfg.LADA
-     PNC          PNC.csv                              -> cfg.PLAN_NUMERACION
+     EXCLUSIONES  EXC486, DIRMAL, EMAILMALO, BLACKLIST -> cfg.EXCLUSION
+                  BLACKLIST: TELEFONO (o TEL, 10 dígitos), OS, FECHA, STATUS. STATUS 'X' excluye,
+                  vacío no; si el archivo no trae STATUS, todo cuenta como 'X'.
+   Ya no se migran (01/11): TELBAJ y PNC se leen de CYBER en cada asignación
+   (ops.sp_telefonos_refrescar_cyber) y LADA no la usa ningún proceso.
    ===================================================================== */
 SET NOCOUNT ON;
 GO
@@ -103,7 +107,7 @@ BEGIN
     IF RIGHT(@carpeta, 1) NOT IN (N'\', N'/') SET @carpeta += CASE WHEN @carpeta LIKE N'/%' THEN N'/' ELSE N'\' END;
 
     DECLARE @dest TABLE (D VARCHAR(20) PRIMARY KEY);
-    INSERT INTO @dest SELECT value FROM STRING_SPLIT('DAT,HISTORIA,CONSECUTIVO,PAGOS,ETIQUETAS,EXCLUSIONES,LADA,PNC', ',')
+    INSERT INTO @dest SELECT value FROM STRING_SPLIT('DAT,HISTORIA,CONSECUTIVO,PAGOS,ETIQUETAS,EXCLUSIONES', ',')
     WHERE @solo IS NULL OR value IN (SELECT UPPER(LTRIM(RTRIM(s.value))) FROM STRING_SPLIT(@solo, ',') s);
     CREATE TABLE #aviso (ID INT IDENTITY(1,1), TEXTO NVARCHAR(1000));
     CREATE TABLE #fuente (FUENTE SYSNAME PRIMARY KEY, FILAS INT);
@@ -111,7 +115,7 @@ BEGIN
     BEGIN TRY
     /* 1. Leer los CSV */
     DECLARE cf CURSOR LOCAL FAST_FORWARD FOR
-        SELECT value FROM STRING_SPLIT('DAT,TAB7,HISTORIA,PAGTOT,ETI,DM1,TOP,STATUS,EXC486,DIRMAL,EMAILMALO,BLACKLIST,TELBAJ,LADA,PNC', ',');
+        SELECT value FROM STRING_SPLIT('DAT,TAB7,HISTORIA,PAGTOT,ETI,DM1,TOP,STATUS,EXC486,DIRMAL,EMAILMALO,BLACKLIST', ',');
     OPEN cf; FETCH NEXT FROM cf INTO @f;
     WHILE @@FETCH_STATUS = 0
     BEGIN
@@ -131,9 +135,8 @@ BEGIN
     CREATE TABLE #d_pag (CLIENTE VARCHAR(10), CUENTA VARCHAR(25), FE_PAG DATE, IMPORTE DECIMAL(15,2), FE_REG DATE, ID_CORRIDA INT, ORIGEN VARCHAR(10));
     CREATE TABLE #d_eti (CLIENTE VARCHAR(10), TIPO VARCHAR(20), LLAVE VARCHAR(30), VALOR NVARCHAR(100));
     CREATE TABLE #eti_tipos (TIPO VARCHAR(20));
-    CREATE TABLE #d_exc (CLIENTE VARCHAR(10), TIPO VARCHAR(20), VALOR NVARCHAR(200), VALOR2 NVARCHAR(200), MOTIVO NVARCHAR(200), REQ VARCHAR(40));
-    CREATE TABLE #d_lada (CP CHAR(5), LADA VARCHAR(5));
-    CREATE TABLE #d_pnc (LADA VARCHAR(3), SERIE VARCHAR(4), N_INI INT, N_FIN INT, TIPORED VARCHAR(10));
+    CREATE TABLE #d_exc (CLIENTE VARCHAR(10), TIPO VARCHAR(20), VALOR NVARCHAR(200), VALOR2 NVARCHAR(200), MOTIVO NVARCHAR(200), REQ VARCHAR(40),
+                         ACTIVO BIT NOT NULL DEFAULT 1, FE_ALTA DATETIME2(0) NULL);
     CREATE TABLE #cuentas (C NVARCHAR(100) PRIMARY KEY);
 
     -- DAT
@@ -173,6 +176,34 @@ BEGIN
         SELECT @cliente, d.CUENTA, TRY_CONVERT(INT, d.FOLIO), ISNULL(d.CUENTA2, CONCAT(@cliente, '-', TRY_CONVERT(INT, d.FOLIO))), d.SEGMENTO2, d.RIESGO,
                CASE WHEN d.SUB_CTE IN ('NVA', 'REA') THEN d.SUB_CTE ELSE 'NVA' END, 'A', ISNULL(d.FE_ASIG, '19000101'), NULL, NULL
         FROM #d_dat d WHERE TRY_CONVERT(INT, d.FOLIO) IS NOT NULL;
+    END;
+
+    -- HISTORIA.csv: último folio de cada cuenta que ya no está activa en el DAT (baja)
+    IF EXISTS (SELECT 1 FROM @hay WHERE F = 'HISTORIA')
+    BEGIN
+        SET @falta = ops.fn_mig_faltan('HISTORIA', N'CUENTA, FOLIO');
+        IF @falta IS NOT NULL BEGIN SET @msg = CONCAT(N'HISTORIA.csv: faltan las columnas ', @falta); THROW 50907, @msg, 1; END;
+        DECLARE @h_fecha SYSNAME = CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'FE_ASIG') IS NOT NULL THEN N'FE_ASIG'
+                                        WHEN COL_LENGTH('stg.MIG_HISTORIA', 'FECHA') IS NOT NULL THEN N'FECHA' END;
+        DECLARE @h_fec_expr NVARCHAR(400) = CASE WHEN @h_fecha IS NULL THEN N'CAST(NULL AS DATE)'
+            ELSE N'COALESCE(TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_fecha) + N'), 112), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_fecha) + N'), 23), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_fecha) + N'), 101))' END;
+        SET @sql = N';WITH h AS (
+                SELECT LEFT(cfg.fn_texto(CUENTA), 20) AS CUENTA, TRY_CONVERT(INT, cfg.fn_texto(FOLIO)) AS FOLIO,
+                       ' + CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'CUENTA2') IS NOT NULL THEN N'LEFT(cfg.fn_texto(CUENTA2), 28)' ELSE N'CAST(NULL AS VARCHAR(28))' END + N' AS CUENTA2,
+                       ' + CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'SEGMENTO2') IS NOT NULL THEN N'LEFT(cfg.fn_texto(SEGMENTO2), 20)' ELSE N'CAST(NULL AS VARCHAR(20))' END + N' AS SEGMENTO2,
+                       ' + CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'RIESGO') IS NOT NULL THEN N'LEFT(cfg.fn_texto(RIESGO), 35)' ELSE N'CAST(NULL AS VARCHAR(35))' END + N' AS RIESGO,
+                       ' + CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'SUB_CTE') IS NOT NULL THEN N'cfg.fn_texto(SUB_CTE)' ELSE N'CAST(NULL AS NVARCHAR(3))' END + N' AS SUB_CTE,
+                       ' + @h_fec_expr + N' AS FE, FILA
+                FROM stg.MIG_HISTORIA),
+            u AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY CUENTA ORDER BY FE DESC, FILA DESC) AS RN FROM h WHERE CUENTA IS NOT NULL AND FOLIO > 0)
+            INSERT INTO #d_hist (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA)
+            SELECT @cliente, u.CUENTA, u.FOLIO, ISNULL(u.CUENTA2, CONCAT(@cliente, ''-'', u.FOLIO)), u.SEGMENTO2, u.RIESGO,
+                   CASE WHEN u.SUB_CTE IN (''NVA'', ''REA'') THEN u.SUB_CTE ELSE ''NVA'' END, ''B'', ISNULL(u.FE, ''19000101''), NULL, ''MIGRACION (historia.dbf)''
+            FROM u WHERE u.RN = 1 AND NOT EXISTS (SELECT 1 FROM #d_hist a WHERE a.CUENTA = u.CUENTA);';
+        EXEC sp_executesql @sql, N'@cliente VARCHAR(10)', @cliente = @cliente;
+        SET @n = @@ROWCOUNT;
+        INSERT INTO #aviso (TEXTO) SELECT CONCAT(N'HISTORIA: ', @n, N' cuentas que ya no están en el DAT quedan como baja con su último folio (de ', FILAS, N' renglones)') FROM #fuente WHERE FUENTE = 'HISTORIA';
+        IF @h_fecha IS NULL INSERT INTO #aviso (TEXTO) VALUES (N'HISTORIA: sin FE_ASIG ni FECHA; cuando una cuenta tiene varios folios se toma el último renglón del archivo');
     END;
 
     -- CONSECUTIVO: máximo de TAB7, DAT e HISTORIA.csv
@@ -249,8 +280,10 @@ BEGIN
         ('EXC486', 'CUENTA', 'CUENTA', NULL, N'Exclusión de cuentas (exc486)', NULL),
         ('DIRMAL', 'DIRECCION', 'CUENTA', 'DIRECC1', N'Dirección mala (dirmal)', 'VALOR'),
         ('EMAILMALO', 'CORREO', 'EMAIL', 'CUENTA', N'Correo malo (EMAILMALO)', 'VALOR2'),
-        ('BLACKLIST', 'TELEFONO', 'TEL', NULL, N'Lista negra de teléfonos (REQ 2024-095288)', NULL),
-        ('TELBAJ', 'TELEFONO', 'TEL', 'CUENTA', N'Teléfono dado de baja para la cuenta (TELBAJ_G1)', 'VALOR2');
+        ('BLACKLIST', 'TELEFONO', 'TEL', NULL, N'Lista negra de teléfonos (blacklist_486)', NULL);
+    /* BLACKLIST: el teléfono puede venir como TELEFONO o TEL */
+    IF COL_LENGTH('stg.MIG_BLACKLIST', 'TEL') IS NULL AND COL_LENGTH('stg.MIG_BLACKLIST', 'TELEFONO') IS NOT NULL
+        UPDATE @ex SET CV = 'TELEFONO' WHERE FUENTE = 'BLACKLIST';
     DECLARE @fx SYSNAME, @cv SYSNAME, @cv2 SYSNAME, @mot NVARCHAR(200), @filtro VARCHAR(10), @antes INT;
     DECLARE cx CURSOR LOCAL FAST_FORWARD FOR SELECT e.FUENTE, e.TIPO, e.CV, e.CV2, e.MOTIVO, e.FILTRO FROM @ex e JOIN @hay h ON h.F = e.FUENTE;
     OPEN cx; FETCH NEXT FROM cx INTO @fx, @tipo, @cv, @cv2, @mot, @filtro;
@@ -259,15 +292,25 @@ BEGIN
         SET @falta = ops.fn_mig_faltan(@fx, @cv + ISNULL(N', ' + @cv2, N''));
         IF @falta IS NOT NULL BEGIN SET @msg = CONCAT(@fx, N'.csv: faltan las columnas ', @falta); THROW 50904, @msg, 1; END;
         SET @antes = (SELECT COUNT(*) FROM #d_exc);
+        IF @fx = 'BLACKLIST'
+            /* TELEFONO, OS (requerimiento), FECHA y STATUS: 'X' excluye, vacío no. Sin columna STATUS, todo es 'X'. */
+            SET @sql = N';WITH x AS (SELECT cfg.fn_solo_digitos(cfg.fn_texto(' + QUOTENAME(@cv) + N')) AS V, '
+                     + CASE WHEN COL_LENGTH('stg.MIG_BLACKLIST', 'OS') IS NOT NULL THEN N'LEFT(cfg.fn_texto(OS), 40)' ELSE N'CAST(NULL AS VARCHAR(40))' END + N' AS OS, '
+                     + CASE WHEN COL_LENGTH('stg.MIG_BLACKLIST', 'FECHA') IS NOT NULL
+                            THEN N'COALESCE(TRY_CONVERT(DATE, cfg.fn_texto(FECHA), 112), TRY_CONVERT(DATE, cfg.fn_texto(FECHA), 23), TRY_CONVERT(DATE, cfg.fn_texto(FECHA), 103))'
+                            ELSE N'CAST(NULL AS DATE)' END + N' AS FE, '
+                     + CASE WHEN COL_LENGTH('stg.MIG_BLACKLIST', 'STATUS') IS NOT NULL THEN N'CASE WHEN UPPER(cfg.fn_texto(STATUS)) = ''X'' THEN 1 ELSE 0 END' ELSE N'1' END + N' AS ACT, '
+                     + N'ROW_NUMBER() OVER (PARTITION BY cfg.fn_solo_digitos(cfg.fn_texto(' + QUOTENAME(@cv) + N')) ORDER BY FILA DESC) AS RN FROM stg.MIG_BLACKLIST) '
+                     + N'INSERT INTO #d_exc (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO, REQ, ACTIVO, FE_ALTA) '
+                     + N'SELECT @cliente, @tipo, V, NULL, @mot, OS, ACT, FE FROM x WHERE RN = 1 AND LEN(V) = 10;';
+        ELSE
         SET @sql = N';WITH x AS (SELECT '
-                 + CASE WHEN @fx = 'BLACKLIST' THEN N'cfg.fn_solo_digitos(cfg.fn_texto(' + QUOTENAME(@cv) + N'))'
-                        WHEN @tipo = 'CORREO' THEN N'LOWER(cfg.fn_texto(' + QUOTENAME(@cv) + N'))'
+                 + CASE WHEN @tipo = 'CORREO' THEN N'LOWER(cfg.fn_texto(' + QUOTENAME(@cv) + N'))'
                         ELSE N'cfg.fn_texto(' + QUOTENAME(@cv) + N')' END + N' AS V, '
                  + CASE WHEN @cv2 IS NULL THEN N'CAST(NULL AS NVARCHAR(200))' ELSE N'cfg.fn_texto(' + QUOTENAME(@cv2) + N')' END + N' AS V2 '
                  + N'FROM stg.' + QUOTENAME('MIG_' + @fx) + N') '
                  + N'INSERT INTO #d_exc (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO, REQ) '
-                 + N'SELECT DISTINCT @cliente, @tipo, LEFT(V, 200), LEFT(V2, 200), @mot, @mig FROM x WHERE V IS NOT NULL'
-                 + CASE WHEN @fx = 'BLACKLIST' THEN N' AND LEN(V) = 10' ELSE N'' END
+                 + N'SELECT DISTINCT @cliente, @tipo, LEFT(V, 200), LEFT(V2, 200), @mot, NULL FROM x WHERE V IS NOT NULL'
                  + CASE @filtro WHEN 'VALOR' THEN N' AND (V LIKE @cliente + ''-%'' OR V IN (SELECT C FROM #cuentas))'
                                 WHEN 'VALOR2' THEN N' AND (V2 LIKE @cliente + ''-%'' OR V2 IN (SELECT C FROM #cuentas))' ELSE N'' END + N';';
         EXEC sp_executesql @sql, N'@cliente VARCHAR(10), @tipo VARCHAR(20), @mot NVARCHAR(200), @mig VARCHAR(40)', @cliente = @cliente, @tipo = @tipo, @mot = @mot, @mig = @mig;
@@ -275,45 +318,28 @@ BEGIN
         INSERT INTO #aviso (TEXTO) VALUES (CONCAT(@fx, N': ', (SELECT COUNT(*) FROM #d_exc) - @antes, N' de ', @n, N' registros aplican al ', @cliente));
         IF @fx = 'BLACKLIST'
         BEGIN
-            SET @sql = N'SELECT @n = COUNT(*) FROM stg.MIG_BLACKLIST WHERE cfg.fn_texto(TEL) IS NOT NULL AND LEN(cfg.fn_solo_digitos(cfg.fn_texto(TEL))) <> 10;';
+            SET @sql = N'SELECT @n = COUNT(*) FROM stg.MIG_BLACKLIST WHERE cfg.fn_texto(' + QUOTENAME(@cv) + N') IS NOT NULL AND LEN(cfg.fn_solo_digitos(cfg.fn_texto(' + QUOTENAME(@cv) + N'))) <> 10;';
             EXEC sp_executesql @sql, N'@n INT OUTPUT', @n = @n OUTPUT;
             IF @n > 0 INSERT INTO #aviso (TEXTO) VALUES (CONCAT(N'BLACKLIST: ', @n, N' teléfonos omitidos por no tener 10 dígitos'));
+            INSERT INTO #aviso (TEXTO)
+            SELECT CONCAT(N'BLACKLIST: ', SUM(CASE WHEN ACTIVO = 1 THEN 1 ELSE 0 END), N' con estatus X (se excluyen) y ', SUM(CASE WHEN ACTIVO = 0 THEN 1 ELSE 0 END),
+                          N' con estatus vacío (no se excluyen)', CASE WHEN COL_LENGTH('stg.MIG_BLACKLIST', 'STATUS') IS NULL THEN N'; el archivo no trae STATUS: todos cuentan como X' ELSE N'' END)
+            FROM #d_exc WHERE TIPO = 'TELEFONO' AND VALOR2 IS NULL;
         END;
         FETCH NEXT FROM cx INTO @fx, @tipo, @cv, @cv2, @mot, @filtro;
     END;
     CLOSE cx; DEALLOCATE cx;
-
-    -- LADA y PNC (si se repite, gana el último)
-    IF EXISTS (SELECT 1 FROM @hay WHERE F = 'LADA')
-    BEGIN
-        IF ops.fn_mig_faltan('LADA', N'CP, LADA') IS NOT NULL THROW 50905, 'LADA.csv: faltan las columnas CP y/o LADA.', 1;
-        EXEC (N'INSERT INTO #d_lada (CP, LADA) SELECT CP, LADA FROM (SELECT RIGHT(''00000'' + cfg.fn_texto(CP), 5) AS CP, LEFT(cfg.fn_texto(LADA), 5) AS LADA, '
-            + N'ROW_NUMBER() OVER (PARTITION BY RIGHT(''00000'' + cfg.fn_texto(CP), 5) ORDER BY FILA DESC) AS RN FROM stg.MIG_LADA '
-            + N'WHERE cfg.fn_texto(CP) IS NOT NULL AND cfg.fn_texto(LADA) IS NOT NULL) x WHERE RN = 1;');
-    END;
-    IF EXISTS (SELECT 1 FROM @hay WHERE F = 'PNC')
-    BEGIN
-        IF ops.fn_mig_faltan('PNC', N'LADA, SERIE, N_INI, N_FIN, TIPORED') IS NOT NULL THROW 50906, 'PNC.csv: faltan columnas (LADA, SERIE, N_INI, N_FIN, TIPORED).', 1;
-        EXEC (N'INSERT INTO #d_pnc (LADA, SERIE, N_INI, N_FIN, TIPORED) SELECT LADA, SERIE, N_INI, N_FIN, TIPORED FROM ('
-            + N'SELECT LEFT(cfg.fn_texto(LADA), 3) AS LADA, LEFT(cfg.fn_texto(SERIE), 4) AS SERIE, TRY_CONVERT(INT, TRY_CONVERT(DECIMAL(18,2), cfg.fn_texto(N_INI))) AS N_INI, '
-            + N'TRY_CONVERT(INT, TRY_CONVERT(DECIMAL(18,2), cfg.fn_texto(N_FIN))) AS N_FIN, LEFT(cfg.fn_texto(TIPORED), 10) AS TIPORED, '
-            + N'ROW_NUMBER() OVER (PARTITION BY cfg.fn_texto(LADA), cfg.fn_texto(SERIE), TRY_CONVERT(INT, TRY_CONVERT(DECIMAL(18,2), cfg.fn_texto(N_INI))) ORDER BY FILA DESC) AS RN '
-            + N'FROM stg.MIG_PNC WHERE cfg.fn_texto(LADA) IS NOT NULL AND cfg.fn_texto(SERIE) IS NOT NULL AND TRY_CONVERT(DECIMAL(18,2), cfg.fn_texto(N_INI)) IS NOT NULL) x '
-            + N'WHERE RN = 1 AND N_FIN IS NOT NULL AND TIPORED IS NOT NULL;');
-    END;
 
     /* 3. Resumen */
     CREATE TABLE #res (ORDEN INT, DESTINO VARCHAR(20), TABLA SYSNAME, FILAS INT, FUENTES NVARCHAR(200));
     INSERT INTO #res
     SELECT o, d, t, n, s FROM (VALUES
         (1, 'DAT', 'dat.DAT_486', (SELECT COUNT(*) FROM #d_dat), N'DAT'),
-        (2, 'HISTORIA', 'dat.HISTORIA_FOLIO', (SELECT COUNT(*) FROM #d_hist), N'DAT'),
+        (2, 'HISTORIA', 'dat.HISTORIA_FOLIO', (SELECT COUNT(*) FROM #d_hist), N'DAT, HISTORIA'),
         (3, 'CONSECUTIVO', 'dat.FOLIO_CONSECUTIVO', (SELECT COUNT(*) FROM #d_cons), N'TAB7, DAT, HISTORIA'),
         (4, 'PAGOS', 'dat.PAGO_ARRIBADO', (SELECT COUNT(*) FROM #d_pag), N'PAGTOT'),
         (5, 'ETIQUETAS', 'cfg.ETIQUETA', (SELECT COUNT(*) FROM #d_eti), N'ETI, DM1, TOP, STATUS'),
-        (6, 'EXCLUSIONES', 'cfg.EXCLUSION', (SELECT COUNT(*) FROM #d_exc), N'EXC486, DIRMAL, EMAILMALO, BLACKLIST, TELBAJ'),
-        (7, 'LADA', 'cfg.LADA', (SELECT COUNT(*) FROM #d_lada), N'LADA'),
-        (8, 'PNC', 'cfg.PLAN_NUMERACION', (SELECT COUNT(*) FROM #d_pnc), N'PNC')) v(o, d, t, n, s)
+        (6, 'EXCLUSIONES', 'cfg.EXCLUSION', (SELECT COUNT(*) FROM #d_exc), N'EXC486, DIRMAL, EMAILMALO, BLACKLIST')) v(o, d, t, n, s)
     WHERE d IN (SELECT D FROM @dest);
     INSERT INTO #aviso (TEXTO) SELECT CONCAT(FUENTE, N'.csv no se encontró en ', @carpeta) FROM #fuente WHERE FILAS < 0;
 
@@ -334,7 +360,7 @@ BEGIN
             DELETE FROM dat.DAT_486;
             INSERT INTO dat.DAT_486 SELECT * FROM #d_dat;
         END;
-        IF EXISTS (SELECT 1 FROM @dest WHERE D = 'HISTORIA') AND EXISTS (SELECT 1 FROM @hay WHERE F = 'DAT')
+        IF EXISTS (SELECT 1 FROM @dest WHERE D = 'HISTORIA') AND EXISTS (SELECT 1 FROM @hay WHERE F IN ('DAT', 'HISTORIA'))
         BEGIN
             IF @reemplazar = 0 AND EXISTS (SELECT 1 FROM dat.HISTORIA_FOLIO WHERE CLIENTE = @cliente) THROW 50911, 'dat.HISTORIA_FOLIO ya tiene registros; usa @reemplazar = 1. No se cargó nada.', 1;
             DELETE FROM dat.HISTORIA_FOLIO WHERE CLIENTE = @cliente;
@@ -359,20 +385,9 @@ BEGIN
         END;
         IF EXISTS (SELECT 1 FROM @dest WHERE D = 'EXCLUSIONES') AND EXISTS (SELECT 1 FROM @hay h JOIN @ex e ON e.FUENTE = h.F)
         BEGIN
-            DELETE FROM cfg.EXCLUSION WHERE CLIENTE = @cliente AND REQ = @mig;
-            INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO, REQ) SELECT CLIENTE, TIPO, VALOR, VALOR2, MOTIVO, REQ FROM #d_exc;
-        END;
-        IF EXISTS (SELECT 1 FROM @dest WHERE D = 'LADA') AND EXISTS (SELECT 1 FROM @hay WHERE F = 'LADA')
-        BEGIN
-            IF @reemplazar = 0 AND EXISTS (SELECT 1 FROM cfg.LADA) THROW 50913, 'cfg.LADA ya tiene registros; usa @reemplazar = 1. No se cargó nada.', 1;
-            DELETE FROM cfg.LADA;
-            INSERT INTO cfg.LADA (CP, LADA) SELECT CP, LADA FROM #d_lada;
-        END;
-        IF EXISTS (SELECT 1 FROM @dest WHERE D = 'PNC') AND EXISTS (SELECT 1 FROM @hay WHERE F = 'PNC')
-        BEGIN
-            IF @reemplazar = 0 AND EXISTS (SELECT 1 FROM cfg.PLAN_NUMERACION) THROW 50914, 'cfg.PLAN_NUMERACION ya tiene registros; usa @reemplazar = 1. No se cargó nada.', 1;
-            DELETE FROM cfg.PLAN_NUMERACION;
-            INSERT INTO cfg.PLAN_NUMERACION (LADA, SERIE, N_INI, N_FIN, TIPORED) SELECT LADA, SERIE, N_INI, N_FIN, TIPORED FROM #d_pnc;
+            DELETE FROM cfg.EXCLUSION WHERE CLIENTE = @cliente AND (ORIGEN = @mig OR (ORIGEN IS NULL AND REQ = @mig));
+            INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO, REQ, ACTIVO, FE_ALTA, ORIGEN)
+            SELECT CLIENTE, TIPO, VALOR, VALOR2, MOTIVO, REQ, ACTIVO, ISNULL(FE_ALTA, SYSDATETIME()), @mig FROM #d_exc;
         END;
         COMMIT TRANSACTION;
         SELECT DESTINO, TABLA, FILAS AS FILAS_CARGADAS FROM #res ORDER BY ORDEN;
@@ -384,7 +399,7 @@ BEGIN
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
         DECLARE @drop_e NVARCHAR(MAX) = (SELECT STRING_AGG(CAST(N'DROP TABLE IF EXISTS stg.' + QUOTENAME(N'MIG_' + value) + N';' AS NVARCHAR(MAX)), N' ')
-                                         FROM STRING_SPLIT('DAT,TAB7,HISTORIA,PAGTOT,ETI,DM1,TOP,STATUS,EXC486,DIRMAL,EMAILMALO,BLACKLIST,TELBAJ,LADA,PNC', ','));
+                                         FROM STRING_SPLIT('DAT,TAB7,HISTORIA,PAGTOT,ETI,DM1,TOP,STATUS,EXC486,DIRMAL,EMAILMALO,BLACKLIST', ','));
         EXEC (@drop_e);
         THROW;
     END CATCH;
