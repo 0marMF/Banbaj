@@ -70,6 +70,7 @@ BEGIN
         EXEC ops.sp_homologar          @id_corrida, 'stg.LAYOUT_486';
         EXEC ops.sp_asig_devolucion    @id_corrida, @forzar_devolucion;
         EXEC ops.sp_asig_existentes    @id_corrida;                    -- existentes: teléfonos tal como llegan
+        EXEC ops.sp_telefonos_refrescar_cyber @id_corrida;             -- quejas (telbaj) y plan de numeración vigentes de CYBER
         EXEC ops.sp_asig_normalizar_telefonos @id_corrida;             -- nuevas y reasignadas: op9.prg (AREA + TELEFONO)
         EXEC ops.sp_validar            @id_corrida, 'PRE_ALTA';
         EXEC ops.sp_asig_alta          @id_corrida;

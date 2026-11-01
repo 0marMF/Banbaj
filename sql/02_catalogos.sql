@@ -240,3 +240,13 @@ CREATE TABLE cfg.PLAN_NUMERACION (
     CONSTRAINT PK_PLAN_NUMERACION PRIMARY KEY (LADA, SERIE, N_INI)
 );
 GO
+/* Teléfonos dados de baja (quejas) leídos de CYBER en cada asignación (telbaj, telbaj1, TENOVA1 del grupo).
+   Se reemplaza completa cada vez que la lectura sale bien; si falla se conserva la última. */
+IF OBJECT_ID('cfg.TEL_QUEJA_CYBER') IS NULL
+CREATE TABLE cfg.TEL_QUEJA_CYBER (
+    CUENTA    VARCHAR(30) NOT NULL,
+    TELEFONO  VARCHAR(10) NOT NULL,
+    FE_CARGA  DATETIME2(0) NOT NULL CONSTRAINT DF_TEL_QUEJA_CYBER_FE DEFAULT SYSDATETIME(),
+    CONSTRAINT PK_TEL_QUEJA_CYBER PRIMARY KEY (CUENTA, TELEFONO)
+);
+GO

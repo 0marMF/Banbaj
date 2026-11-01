@@ -47,7 +47,8 @@ INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO) VALUES ('486', 'CUENTA'
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'TELEFONO', '5533333333', '486-104', 'Prueba de queja (TELBAJ)');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'CORREO', 'malo@correo.com', '20000009', 'Prueba de EMAILMALO');
 INSERT INTO cfg.PLAN_NUMERACION (LADA, SERIE, N_INI, N_FIN, TIPORED)
-VALUES ('55', '1111', 0, 9999, 'MOVIL'), ('477', '123', 4000, 4999, 'MOVIL'), ('477', '123', 0, 3999, 'FIJO'), ('477', '700', 0, 9999, 'FIJO');
+VALUES ('55', '1111', 0, 9999, 'MOVIL'), ('477', '123', 4000, 4999, 'MOVIL'), ('477', '123', 0, 3999, 'FIJO'), ('477', '700', 0, 9999, 'FIJO'),
+       ('55', '9999', 0, 9999, 'FIJO'), ('55', '7777', 0, 9999, 'FIJO'), ('55', '4444', 0, 9999, 'FIJO');
 
 INSERT INTO dat.DAT_486 (FOLIO, CLIENTE, SUB_CTE, NOMBRE1, CUENTA, CUENTA2, RIESGO, DES_PROD, SEGMENTO2, TIPO, SDO_ACT, SDO_VDO,
                          PAG_MIN, SALDO1, SALDO2, SALDO3, TEL1, ETIQUETA1, PVS, TRAMO, SEG, DIRECC1, DIRECC2, DIRECC3, DIRECC4, ESTADO,
@@ -69,6 +70,8 @@ VALUES
 
 /* Teléfonos de prueba en TEL14..TEL16 (no se tocan al actualizar existentes) */
 UPDATE dat.DAT_486 SET TEL14 = '4771234567', TEL15 = '477-700-1234', TEL16 = '4777140350' WHERE CUENTA = '1111XAXX010101000';
+/* G4_025_TELEFONOS (01/11): número basura y teléfono fuera del plan de numeración se descartan */
+UPDATE dat.DAT_486 SET TEL12 = '5555555555', TEL13 = '4778889999' WHERE CUENTA = '1111XAXX010101000';
 UPDATE dat.DAT_486 SET TEL14 = '55-4444-5555', TEL15 = '044 551111 1111', TEL16 = '12345' WHERE CUENTA = '20000003';
 
 INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA)
@@ -249,8 +252,8 @@ FROM (SELECT N'TEL: SCBTEL 7 líneas de 137 con fecha y gestor' AS p, N'7|0|1102
                     (SELECT SUBSTRING(LINEA, 82, 8) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBTEL' AND NUM = 1), '|',
                     (SELECT SUBSTRING(LINEA, 99, 4) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBTEL' AND NUM = 1)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'TEL: bitácora (quejas TELBAJ) y scripts de CYBER (vaciar remesa y procedimiento)' AS p, N'1|TRUNCATE TABLE RCVRY.JSP_TAB_TEL_REMESA_486;|EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;' AS e,
-             CONCAT((SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'TELEFONOS' AND MENSAJE LIKE N'%quejas (TELBAJ): 1 %'), '|',
+FROM (SELECT N'TEL: bitácora (quejas TELBAJ, fuera del plan) y scripts de CYBER (vaciar remesa y procedimiento)' AS p, N'1|TRUNCATE TABLE RCVRY.JSP_TAB_TEL_REMESA_486;|EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;' AS e,
+             CONCAT((SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'TELEFONOS' AND MENSAJE LIKE N'%quejas (TELBAJ): 1 · sin plan de numeración: 1 %'), '|',
                     (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'TEL_BORRA' AND NUM = 1), '|',
                     (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'TEL_ACTUALIZA' AND NUM = 1)) AS o) x;
 
@@ -823,6 +826,52 @@ FROM (SELECT N'CYBER: consultas por servidor vinculado (BAJ.sql, STATUS.SQL) y a
                     (SELECT COUNT(*) FROM @m WHERE CONSULTA = 'STATUS' AND ORACLE LIKE N'%DMSTATUS is null%'), '|',
                     (SELECT COUNT(*) FROM @m WHERE CONSULTA = 'PAGOS' AND SQL_SERVER LIKE N'%''''2026-11-03''''%'), '|', @err) AS o) x;
 DELETE FROM cfg.CAPTURA_CREDENCIAL WHERE SISTEMA = 'CYBER_ORACLE';
+GO
+
+/* ---------------------------------------------------------------------
+   TELÉFONOS DE CYBER (como G4_025_TELEFONOS): plan de numeración de la misma
+   instancia y quejas por servidor vinculado (en la prueba, uno que apunta a sí mismo)
+   --------------------------------------------------------------------- */
+DROP TABLE IF EXISTS pru.CAT_PNM;
+CREATE TABLE pru.CAT_PNM (LADA INT, SERIE INT, NUMINI INT, NUMFIN INT, TIPORED VARCHAR(10));
+INSERT INTO pru.CAT_PNM VALUES (55, 1111, 0, 9999, 'MOVIL'), (55, 1111, 0, 9999, 'FIJO'), (477, 23, 0, 9999, 'fijo'), (81, 50, 0, 4999, 'MOVIL'), (99, 1, 0, 1, 'OTRO');
+DROP TABLE IF EXISTS pru.telbaj;
+CREATE TABLE pru.telbaj (grupo VARCHAR(2), cuenta VARCHAR(30), telo VARCHAR(20), telpho VARCHAR(20));
+INSERT INTO pru.telbaj VALUES ('1', '486-200', '525511112222', ''), ('1', '486-201', '', '5533334444'), ('4', '025-1', '5599998888', ''),
+                              ('1', 'X486', '5500000001', ''), ('1', '486-202', '123', '');
+DECLARE @pnm_ant INT = (SELECT COUNT(*) FROM cfg.PLAN_NUMERACION), @base SYSNAME = DB_NAME(), @err NVARCHAR(4000) = N'';
+DECLARE @id INT;
+EXEC ops.sp_corrida_iniciar '486', 'ETI', '2026-11-04', NULL, @id OUTPUT;
+UPDATE cfg.PARAMETRO SET VALOR = @base + N'.pru.CAT_PNM' WHERE CLIENTE = '486' AND CLAVE = 'PNM_TABLA';
+UPDATE cfg.PARAMETRO SET VALOR = 'LOOP_PRUEBA' WHERE CLIENTE = '486' AND CLAVE = 'TELBAJ_LINKED_SERVER';
+UPDATE cfg.PARAMETRO SET VALOR = @base + N'.pru.telbaj' WHERE CLIENTE = '486' AND CLAVE = 'TELBAJ_TABLAS';
+BEGIN TRY
+    IF EXISTS (SELECT 1 FROM sys.servers WHERE name = 'LOOP_PRUEBA') EXEC sp_dropserver 'LOOP_PRUEBA', 'droplogins';
+    EXEC sp_addlinkedserver @server = N'LOOP_PRUEBA', @srvproduct = N'', @provider = N'MSOLEDBSQL', @datasrc = N'localhost',
+         @provstr = N'Encrypt=Optional;TrustServerCertificate=Yes';
+    EXEC sp_serveroption 'LOOP_PRUEBA', 'data access', 'true';
+    EXEC sp_addlinkedsrvlogin @rmtsrvname = N'LOOP_PRUEBA', @useself = N'TRUE';
+END TRY
+BEGIN CATCH SET @err = ERROR_MESSAGE(); END CATCH;
+EXEC ops.sp_telefonos_refrescar_cyber @id;
+EXEC pru.sp_igual N'TEL CYBER: plan de numeración de CAT_PNM (serie con ceros, MOVIL gana, inválidos fuera)',
+     N'3|477-023-FIJO|55-1111-MOVIL|81-0050-MOVIL',
+     (SELECT CONCAT(COUNT(*), '|', STRING_AGG(CONCAT(LADA, '-', SERIE, '-', TIPORED), '|') WITHIN GROUP (ORDER BY LADA, SERIE)) FROM cfg.PLAN_NUMERACION);
+EXEC pru.sp_igual N'TEL CYBER: quejas del grupo 1 por el servidor vinculado (últimos 10 dígitos de telo y telpho)',
+     N'486-200|5511112222,486-201|5533334444',
+     (SELECT CONCAT(STRING_AGG(CONCAT(CUENTA, '|', TELEFONO), ',') WITHIN GROUP (ORDER BY CUENTA), NULLIF(CONCAT(' (', @err, ')'), ' ()'),
+                    (SELECT TOP (1) CONCAT(' [', LEFT(MENSAJE, 300), ']') FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'TELEFONOS CYBER' AND ESTATUS = 'AVISO'))
+      FROM cfg.TEL_QUEJA_CYBER);
+/* Sin servidor vinculado ni tabla: avisa y conserva lo cargado */
+UPDATE cfg.PARAMETRO SET VALOR = 'NO_EXISTE' WHERE CLIENTE = '486' AND CLAVE = 'TELBAJ_LINKED_SERVER';
+UPDATE cfg.PARAMETRO SET VALOR = @base + N'.pru.NO_EXISTE' WHERE CLIENTE = '486' AND CLAVE = 'PNM_TABLA';
+EXEC ops.sp_telefonos_refrescar_cyber @id;
+EXEC pru.sp_igual N'TEL CYBER: sin fuentes avisa y conserva quejas y plan',
+     N'2|3|2',
+     CONCAT((SELECT COUNT(*) FROM cfg.TEL_QUEJA_CYBER), '|', (SELECT COUNT(*) FROM cfg.PLAN_NUMERACION), '|',
+            (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'TELEFONOS CYBER' AND ESTATUS = 'AVISO' AND (MENSAJE LIKE N'%NO_EXISTE%'))));
+EXEC ops.sp_corrida_finalizar @id, 'OK', N'Prueba de teléfonos de CYBER';
+IF EXISTS (SELECT 1 FROM sys.servers WHERE name = 'LOOP_PRUEBA') EXEC sp_dropserver 'LOOP_PRUEBA', 'droplogins';
 GO
 
 /* ---------------------------------------------------------------------
