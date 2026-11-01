@@ -153,9 +153,10 @@ GO
                                  ha corrido hoy -> ops.sp_actualizacion_486
                               2. si la actualización de hoy terminó OK, llegó la
                                  base maestra y no ha corrido -> ops.sp_asignacion_486
-                              No repite lo que ya corrió (OK, ERROR o CANCELADA):
-                              un error se corrige y se vuelve a correr a mano, o
-                              se revierte y el job lo toma de nuevo.
+                              No repite lo que ya corrió (OK, ERROR o CANCELADA).
+                              Si una corrida falla, el DAT regresa solo a como
+                              estaba (ops.sp_retroceso_automatico); se corrige la
+                              causa y se vuelve a correr a mano.
    ===================================================================== */
 CREATE OR ALTER PROCEDURE ops.sp_archivos_presentes
     @cliente VARCHAR(10),
@@ -222,7 +223,7 @@ BEGIN
             EXEC ops.sp_actualizacion_486 @fecha = @fecha, @hora_llegada = @hora, @id_corrida = @id OUTPUT;
         END TRY
         BEGIN CATCH
-            SELECT 'ACTUALIZACION CON ERROR' AS RESULTADO, ERROR_MESSAGE() AS DETALLE;   -- ya se avisó por correo
+            SELECT 'ACTUALIZACION CON ERROR' AS RESULTADO, ERROR_MESSAGE() AS DETALLE;   -- el detalle queda en ops.CORRIDA y ops.BITACORA; el DAT ya se revirtió solo
             RETURN;
         END CATCH;
     END;
