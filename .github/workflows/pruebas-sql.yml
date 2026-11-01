@@ -90,7 +90,7 @@ jobs:
           q ci_consulta "$CO" "UPDATE cfg.PARAMETRO SET VALOR = VALOR WHERE 1 = 0;" > /dev/null && r=no || r=si; chk $r "consulta no puede escribir"
           q ci_consulta "$CO" "SELECT COUNT(*) FROM cfg.CREDENCIAL;" > /dev/null && r=no || r=si; chk $r "consulta no ve cfg.CREDENCIAL"
           q ci_operador "$OP" "SELECT COUNT(*) FROM cfg.CREDENCIAL;" > /dev/null && r=no || r=si; chk $r "operador no ve cfg.CREDENCIAL"
-          out=$(q ci_operador "$OP" "DECLARE @u NVARCHAR(128), @c NVARCHAR(256); EXEC cfg.sp_credencial_leer 'X', @u OUTPUT, @c OUTPUT;"); echo "$out" | grep -qi "denied\|denegado" && r=si || { r=no; echo "$out" | head -3 | tee -a resultado.txt; }; chk $r "operador no puede leer credenciales"
+          out=$(q ci_operador "$OP" "DECLARE @u NVARCHAR(128), @c NVARCHAR(256); EXEC cfg.sp_credencial_leer 'X', @u OUTPUT, @c OUTPUT;" || true); echo "$out" | grep -qi "denied\|denegado" && r=si || { r=no; echo "$out" | head -3 | tee -a resultado.txt; }; chk $r "operador no puede leer credenciales"
           q ci_operador "$OP" "EXEC ops.sp_diario_486 @fecha = '2026-11-07';" > /dev/null && r=si || r=no; chk $r "operador corre sp_diario_486"
           echo "ACCESOS: $ok de $tot OK" | tee -a resultado.txt
           [ "$ok" = "$tot" ]
