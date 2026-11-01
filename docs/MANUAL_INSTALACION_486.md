@@ -221,22 +221,27 @@ Se hace **una sola vez**, justo antes de la primera corrida en SQL Server. Trae 
 
 ### Qué se lleva y a dónde
 
-| CSV (DBF de origen) | Destino en SQL Server |
-| --- | --- |
-| DAT | `dat.DAT_486` |
-| HISTORIA | `dat.HISTORIA_FOLIO` (solo activas) |
-| TAB7 | consecutivo de folios |
-| PAGTOT | `dat.PAGO_ARRIBADO` (origen PAGTOT) |
-| ETI, DM1, TOP, STATUS | etiquetas del DAT |
-| EXC486, DIRMAL, EMAILMALO, BLACKLIST, TELBAJ | exclusiones (la lista negra solo con teléfonos de 10 dígitos) |
-| LADA | `cfg.LADA` |
-| PNC | `cfg.PLAN_NUMERACION` |
+| CSV (DBF de origen) | Campos que se usan | Destino en SQL Server |
+| --- | --- | --- |
+| DAT | todos los que existen en `dat.DAT_486` (los demás se ignoran) | `dat.DAT_486` y el periodo vigente en `dat.HISTORIA_FOLIO` |
+| HISTORIA | CUENTA, FOLIO, CUENTA2, RIESGO, SEGMENTO2, SUB\_CTE; fechas de asignación (FE\_ASIG), reasignación (FE\_REA) y retiro (FE\_BAJA / FE\_RET); saldos, correos, teléfonos y dirección | `dat.HISTORIA_FOLIO`: cada asignación anterior como baja; los datos van en `DATOS_BAJA` (JSON) |
+| TAB7 | FOLIO | consecutivo de folios |
+| PAGTOT | CUENTA, MONT, FE\_PAG, FE\_REG | `dat.PAGO_ARRIBADO` (origen PAGTOT) |
+| ETI, DM1 | CUENTA, ETIQUETA | etiquetas (DMP2, DMP1 del SCBSDOS) |
+| TOP | CUENTA2, ETIQUETA | etiqueta U1EXT2 |
+| STATUS | CUENTA, ESTATUS | etiqueta U1USO4 |
+| EXC486 | CUENTA | exclusión de cuentas |
+| DIRMAL | CUENTA, DIRECC1 | direcciones malas |
+| EMAILMALO | EMAIL, CUENTA | correos malos |
+| BLACKLIST | TELEFONO (o TEL), OS, FECHA, STATUS | lista negra: OS = requerimiento; STATUS X excluye, vacío no; sin STATUS en el archivo, todo cuenta como X |
+
+Ya no se migran: **TELBAJ** y **PNC** (se leen de CYBER en cada asignación), **LADA** (ningún proceso la usa), PURGA y DEVOL. El programa de FoxPro exporta solo los campos de esta tabla; si alguno no existe en el DBF lo avisa al final.
 
 ### Paso 1. Exportar desde FoxPro
 
 1. Detener los procesos del 486 en FoxPro para que nadie escriba en los DBF.
 2. Revisar las rutas de los DBF en `cyber/486/EXPORTAR_MIGRACION.prg`. Vienen de los .prg actuales; si algo cambió, ajustar `laF[n, 2]`.
-3. Correr `DO EXPORTAR_MIGRACION.prg` en Visual FoxPro. Escribe 15 CSV en `C:\MIGRA486\` sin los registros borrados y muestra cuántos registros salió de cada uno.
+3. Correr `DO EXPORTAR_MIGRACION.prg` en Visual FoxPro. Escribe 12 CSV en `C:\MIGRA486\` sin los registros borrados y muestra cuántos registros salió de cada uno.
 4. Si FoxPro corre en otro equipo, copiar la carpeta al servidor de SQL Server (o a una ruta UNC que la cuenta del servicio pueda leer). `BULK INSERT` lee las rutas desde el servidor, no desde la PC de quien ejecuta.
 
 ### Paso 2. Revisar sin escribir
@@ -266,7 +271,7 @@ EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;
 SELECT COUNT(*) FROM dat.DAT_486;                                   -- = registros de DAT.DBF
 SELECT COUNT(*) FROM dat.HISTORIA_FOLIO WHERE CLIENTE = '486';
 SELECT COUNT(*) FROM dat.PAGO_ARRIBADO WHERE CLIENTE = '486' AND ORIGEN = 'PAGTOT';
-SELECT TIPO, COUNT(*) FROM cfg.EXCLUSION WHERE CLIENTE = '486' AND REQ = 'MIGRACION DBF' GROUP BY TIPO;
+SELECT TIPO, ACTIVO, COUNT(*) FROM cfg.EXCLUSION WHERE CLIENTE = '486' AND ORIGEN = 'MIGRACION DBF' GROUP BY TIPO, ACTIVO;
 ```
 
 Revisar a ojo unas cuantas cuentas conocidas: saldo, folio, etiqueta y teléfono deben coincidir con FoxPro.

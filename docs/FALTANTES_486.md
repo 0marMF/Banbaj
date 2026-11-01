@@ -47,11 +47,11 @@ Se cargan con `ops.sp_migrar_486` desde CSV exportados con FoxPro (`cyber/486/EX
 | Tabla DBF | Ruta en los .prg | Destino | Campos que supuse | Confirmar |
 | --- | --- | --- | --- | --- |
 | PURGA | `O:\HISTORIA\GPO1\486\` | — | **No se migra** (decisión): las bajas se registran desde la migración | — |
-| historia | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` | Recibida: 1.8 M filas (una por cada asignación desde 2016), folio máx. 179,688 | Lista |
+| historia | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` | Cada asignación anterior como baja (01/11): CUENTA, FOLIO, CUENTA2, RIESGO, SEGMENTO2, SUB_CTE, FE_ASIG, FE_REA, FE_BAJA/FE_RET + saldos, correos, teléfonos y dirección en DATOS_BAJA | [ ] confirmar nombres de las fechas |
 | DEVOL | `O:\HISTORIA\GPO1\486\` | — | **No se migra** (decisión) | — |
-| PAGTOT | `O:\PRG\GPO1\486\PAGOS\` | `dat.PAGO_ARRIBADO` (tabla fija) | Recibida: 543 mil pagos. Solo se guardan CUENTA + FE_PAG + importe (lo que usa la validación); 12,865 renglones viejos con FE_PAG incompleta no pueden coincidir y se omiten | Lista |
+| PAGTOT | `O:\PRG\GPO1\486\PAGOS\` | `dat.PAGO_ARRIBADO` (tabla fija) | Solo CUENTA, MONT, FE_PAG, FE_REG (01/11). 12,865 renglones viejos con FE_PAG incompleta se omiten | Lista |
 | TELSAN | `O:\PRG\MEXGPO1\ASI486\` | `ops.TELEFONO` (se arma en cada asignación) | Recibida: la regla nueva reproduce sus 15,353 teléfonos; no se migra | Lista |
-| TAB7 | `O:\DAT\GPO1\486\` | `dat.FOLIO_CONSECUTIVO` | FOLIO, CLIENTE, FE_CAPT, TIME | [ ] |
+| TAB7 | `O:\DAT\GPO1\486\` | `dat.FOLIO_CONSECUTIVO` | Solo FOLIO | [ ] |
 | eti486 | `O:\PRG\MEXGPO1\ASI486\` | — | Ya no se usa | — |
 | eti | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (ETI) | CUENTA, ETIQUETA | [ ] |
 | dm1 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (DM1) | CUENTA, ETIQUETA | [ ] |
@@ -60,10 +60,10 @@ Se cargan con `ops.sp_migrar_486` desde CSV exportados con FoxPro (`cyber/486/EX
 | exc486 | `O:\PRG\GPO1\486\` | `cfg.EXCLUSION` (CUENTA) | CUENTA | [ ] |
 | dirmal | `O:\ASIGNA\` | `cfg.EXCLUSION` (DIRECCION) | CUENTA, DIRECC1 | [ ] |
 | EMAILMALO | `O:\ASIGNA\` | `cfg.EXCLUSION` (CORREO) | CUENTA, EMAIL | [ ] |
-| blacklist_486 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.EXCLUSION` (TELEFONO) | TEL, solo 10 dígitos (los demás se omiten) | Lista |
-| TELBAJ_G1 | `\\192.168.50.108\T\CYBER_SISTEMAS\CYBER\TELEFONOS\` | `cfg.EXCLUSION` (TELEFONO por cuenta) | CUENTA, TEL | [ ] |
-| LADA | `O:\PRG\MEXGPO1\ASI486\` | `cfg.LADA` | CP, LADA | [ ] |
-| PNC | `\\192.168.50.108\T\CYBER_SISTEMAS\CYBER\PNM\` | `cfg.PLAN_NUMERACION` | Ya revisada (repo): LADA, SERIE, N_INI, N_FIN, TIPORED | Lista |
+| blacklist_486 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.EXCLUSION` (TELEFONO) | TELEFONO (o TEL, 10 dígitos), OS → REQ, FECHA → FE_ALTA, STATUS: X excluye, vacío no; el DBF no trae STATUS: todo cuenta como X (01/11) | Lista |
+| TELBAJ_G1 | `\\192.168.50.108\T\CYBER_SISTEMAS\CYBER\TELEFONOS\` | — | **Ya no se migra** (01/11): se lee de CYBER (telbaj grupo 1) en cada asignación | — |
+| LADA | `O:\PRG\MEXGPO1\ASI486\` | — | **Ya no se migra** (01/11): ningún proceso la usa | — |
+| PNC | `\\192.168.50.108\T\CYBER_SISTEMAS\CYBER\PNM\` | — | **Ya no se migra** (01/11): se lee de `CYBER.dbo.CAT_PNM` en cada asignación | — |
 | DAT | `O:\DAT\GPO1\486\` | `dat.DAT_486` | Ya revisada (repo): 70 campos, 6,800 cuentas | Lista |
 
 ## 3. Tablas y archivos compartidos con otros procesos
