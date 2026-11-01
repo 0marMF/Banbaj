@@ -65,6 +65,36 @@ jobs:
           docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d BanbajMig -I -b -f 65001 -W -s " | " \
             -i /tmp/tests/prueba_migracion.sql 2>&1 | tee -a resultado.txt
 
+      - name: Prueba de accesos remotos (sql/instalacion/04, con usuarios SQL)
+        if: always()
+        run: |
+          set -o pipefail
+          echo "== sql/instalacion/04_accesos_remotos.sql" | tee -a resultado.txt
+          OP="Op$(openssl rand -hex 10)!7x"; CO="Co$(openssl rand -hex 10)!7x"
+          echo "::add-mask::$OP"; echo "::add-mask::$CO"
+          python3 - "$OP" "$CO" <<'EOF'
+          import re, sys
+          s = open('sql/instalacion/04_accesos_remotos.sql', encoding='utf-8').read()
+          s = re.sub(r"INSERT INTO @accesos \(LOGIN, NIVEL, CLAVE\) VALUES.*?;\n",
+                     "INSERT INTO @accesos (LOGIN, NIVEL, CLAVE) VALUES (N'ci_operador', 'OPERADOR', N'%s'), (N'ci_consulta', 'CONSULTA', N'%s');\n" % (sys.argv[1], sys.argv[2]),
+                     s, count=1, flags=re.S)
+          open('/tmp/04_ci.sql', 'w', encoding='utf-8').write(s)
+          EOF
+          docker cp /tmp/04_ci.sql sql:/tmp/04_ci.sql
+          docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -I -b -f 65001 -i /tmp/04_ci.sql 2>&1 | tee -a resultado.txt
+          docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -I -b -f 65001 -i /tmp/04_ci.sql 2>&1 | tee -a resultado.txt   # se puede repetir
+          q() { docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U "$1" -P "$2" -d Banbaj -I -b -h -1 -W -Q "SET NOCOUNT ON; $3" 2>&1; }
+          ok=0; tot=0
+          chk() { tot=$((tot+1)); if [ "$1" = "si" ]; then ok=$((ok+1)); echo "OK  $2" | tee -a resultado.txt; else echo "FALLA  $2" | tee -a resultado.txt; fi; }
+          q ci_consulta "$CO" "SELECT COUNT(*) FROM ops.CORRIDA;" > /dev/null && r=si || r=no; chk $r "consulta lee ops.CORRIDA"
+          q ci_consulta "$CO" "UPDATE cfg.PARAMETRO SET VALOR = VALOR WHERE 1 = 0;" > /dev/null && r=no || r=si; chk $r "consulta no puede escribir"
+          q ci_consulta "$CO" "SELECT COUNT(*) FROM cfg.CREDENCIAL;" > /dev/null && r=no || r=si; chk $r "consulta no ve cfg.CREDENCIAL"
+          q ci_operador "$OP" "SELECT COUNT(*) FROM cfg.CREDENCIAL;" > /dev/null && r=no || r=si; chk $r "operador no ve cfg.CREDENCIAL"
+          q ci_operador "$OP" "DECLARE @u NVARCHAR(128), @c NVARCHAR(256); EXEC cfg.sp_credencial_leer 'X', @u OUTPUT, @c OUTPUT;" | grep -qi "denied\|denegado" && r=si || r=no; chk $r "operador no puede leer credenciales"
+          q ci_operador "$OP" "EXEC ops.sp_diario_486 @fecha = '2026-11-07';" > /dev/null && r=si || r=no; chk $r "operador corre sp_diario_486"
+          echo "ACCESOS: $ok de $tot OK" | tee -a resultado.txt
+          [ "$ok" = "$tot" ]
+
       - name: Publicar resultado en la rama ci-resultados
         if: always()
         run: |
