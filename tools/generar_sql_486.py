@@ -15,7 +15,8 @@ import openpyxl
 
 RAIZ = Path(__file__).resolve().parent.parent
 CLIENTE = "486"
-RUTA_ENTRADA = "Q:\\CYBER\\C_486\\{AAAA}\\{MES}\\{DD}\\"   # carpeta del día (cfg.fn_ruta): Q:\CYBER\C_486\2026\octubre\28\
+RUTA_Q = "\\\\192.168.50.13\\q"   # unidad Q: (01/11); el servicio de SQL Server no ve unidades mapeadas
+RUTA_ENTRADA = RUTA_Q + "\\CYBER\\C_486\\{AAAA}\\{MES}\\{DD}\\"   # carpeta del día (cfg.fn_ruta): Q:\CYBER\C_486\2026\octubre\28\
 PERFIL_DBMAIL = "asig.486.cdmx"             # perfil de Database Mail (confirmado 30/10)
 
 
@@ -436,7 +437,7 @@ PARAMETROS = [
      "ETIQUETAS486.xlsx: nombre en el DAT de Operación = columna de nuestro DAT (ETIQUETA6/TOP va con cfg.sp_etiqueta_cargar)"),
     ("RUTA_SALIDA", "C:\\BANBAJ\\486\\SALIDA\\", "ops.sp_exportar_salidas: carpeta de los archivos planos (se crea <AAAAMMDD>_corrida<ID>)"),
     ("RETROCESO_AUTOMATICO", "1", "1 = si una corrida falla, el DAT, histórico, folios y base maestra regresan solos a como estaban (ops.sp_retroceso_automatico); 0 = se dejan para revisar a mano"),
-    ("RUTA_MIS", "Q:\\MIS\\SERTEC98\\CLIENTES\\486\\", "ops.sp_exportar_salidas deja aquí también DAT486_<fecha>.csv (antes prog15.prg copiaba el DAT). Usar la ruta UNC de Q: (el servicio de SQL Server no ve unidades mapeadas)"),
+    ("RUTA_MIS", RUTA_Q + "\\MIS\\SERTEC98\\CLIENTES\\486\\", "ops.sp_exportar_salidas deja aquí también DAT486_<fecha>.csv (antes prog15.prg copiaba el DAT). Q: = \\\\192.168.50.13\\q"),
     ("CARPETA_ZIP", "C:\\", "ops.sp_exportar_salidas: carpeta del ZIP de retiros (C:\\RETIROS_PAG_486_<fecha><hora>.zip, como saldos.prg)"),
     ("RUTA_7ZIP", "C:\\Program Files\\7-Zip\\7z.exe", "7-Zip instalado en el servidor de SQL Server (ZIP con contraseña de retiros)"),
     ("CYBER_LINKED_SERVER", "CYBER", "Servidor vinculado a Oracle (cfg.sp_cyber_conectar / ops.sp_bajar_cyber)"),

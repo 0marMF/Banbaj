@@ -6,18 +6,15 @@
    (no lo subas al repositorio con las contraseñas escritas).
    ===================================================================== */
 SET NOCOUNT ON;
-DECLARE @ruta_q        NVARCHAR(400) = N'<<\\servidor\recurso>>',          -- ruta UNC de la unidad Q: (sin diagonal final)
-        @oracle        NVARCHAR(400) = N'<<host:1521/servicio>>',          -- Oracle de CYBER
+DECLARE @oracle        NVARCHAR(400) = N'<<host:1521/servicio>>',          -- Oracle de CYBER
         @usuario_ora   NVARCHAR(128) = N'<<usuario Oracle>>',
         @clave_ora     NVARCHAR(256) = N'<<contraseña Oracle>>',
         @clave_zip     NVARCHAR(256) = N'<<contraseña ZIP, ej. *Bajio{MM}{AAAA}>>';
 
-IF CONCAT(@ruta_q, @oracle, @usuario_ora, @clave_ora, @clave_zip) LIKE N'%<<%'
+IF CONCAT(@oracle, @usuario_ora, @clave_ora, @clave_zip) LIKE N'%<<%'
     THROW 50999, 'Faltan valores <<…>> por reemplazar en este script.', 1;
 
-/* Rutas: la unidad Q: no existe para el servicio de SQL Server; se usa la ruta UNC */
-UPDATE cfg.ARCHIVO SET RUTA = REPLACE(RUTA, N'Q:', @ruta_q) WHERE CLIENTE = '486' AND RUTA LIKE N'Q:%';
-UPDATE cfg.PARAMETRO SET VALOR = REPLACE(VALOR, N'Q:', @ruta_q) WHERE CLIENTE = '486' AND CLAVE = 'RUTA_MIS';
+/* La unidad Q: ya viene en la semilla como \\192.168.50.13\q (cfg.ARCHIVO.RUTA y RUTA_MIS) */
 UPDATE cfg.PARAMETRO SET VALOR = @oracle WHERE CLIENTE = '486' AND CLAVE = 'CYBER_ORACLE_ORIGEN';
 
 /* Credenciales (se cifran al guardarse) */

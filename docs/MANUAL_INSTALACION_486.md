@@ -30,17 +30,17 @@ Todo se instala en un solo servidor Windows con SQL Server. Los archivos de sali
 | Cliente de Oracle de 64 bits con el proveedor OLE DB `OraOLEDB.Oracle`, con "Allow inprocess" activado en SSMS (Server Objects → Linked Servers → Providers) | Consultar CYBER (status, correos, teléfonos, pagos) | Administrador |
 | 7-Zip en `C:\Program Files\7-Zip\7z.exe` | ZIP con contraseña de retiros | Administrador |
 | Servidor SMTP alcanzable (hoy los .prg usan `192.168.50.7`, puerto 25) | Database Mail | Infraestructura |
-| Ruta UNC de la unidad `Q:` (ej. `\\servidor\recurso`) | Leer `Q:\CYBER\C_486\aaaa\mes\dd\` y escribir en `Q:\MIS\SERTEC98\CLIENTES\486\` | Infraestructura |
+| Acceso a la unidad `Q:` = `\\192.168.50.13\q` | Leer `Q:\CYBER\C_486\aaaa\mes\dd\` y escribir en `Q:\MIS\SERTEC98\CLIENTES\486\` | Infraestructura |
 | Usuario y contraseña de Oracle (CYBER) | Servidor vinculado | Dueño de CYBER |
 | Visual FoxPro en una máquina con acceso a `O:\` | Solo para exportar los DBF una vez (migración) | Asignaciones |
 
 **Permisos de la cuenta del servicio de SQL Server:**
 
-- Lectura en `\\<servidor Q:>\CYBER\C_486\` (archivos del banco).
-- Escritura en `C:\BANBAJ\486\SALIDA\` (archivos planos y scripts), en `C:\` (ZIP de retiros) y en `\\<servidor Q:>\MIS\SERTEC98\CLIENTES\486\` (copia del DAT para MIS).
+- Lectura en `\\192.168.50.13\q\CYBER\C_486\` (archivos del banco).
+- Escritura en `C:\BANBAJ\486\SALIDA\` (archivos planos y scripts), en `C:\` (ZIP de retiros) y en `\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\` (copia del DAT para MIS).
 - Lectura en la carpeta de la migración (`C:\MIGRA486\`), solo el día de la migración.
 
-La cuenta del servicio no ve unidades mapeadas como `Q:`: por eso las rutas se configuran con la ruta UNC (sección de configuración).
+La cuenta del servicio no ve unidades mapeadas como `Q:`: por eso las rutas ya vienen configuradas con la ruta UNC `\\192.168.50.13\q`.
 
 ## Instalación de la base
 
@@ -66,7 +66,7 @@ SELECT CODIGO, LISTA, PERFIL_DBMAIL FROM mail.PLANTILLA;           -- 8 plantill
 SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486';     -- parámetros del 486
 ```
 
-**Ojo al volver a correr la semilla:** `90_semilla_486.sql` reescribe catálogos y parámetros. Las rutas UNC y la dirección de Oracle regresan a sus valores de fábrica (`Q:\…` y vacío), así que después hay que volver a correr las primeras líneas de `sql/instalacion/03_parametros_y_credenciales.sql`. Las credenciales, el DAT y el histórico no se tocan.
+**Ojo al volver a correr la semilla:** `90_semilla_486.sql` reescribe catálogos y parámetros. La dirección de Oracle regresa a vacío, así que después hay que volver a correr la línea de `CYBER_ORACLE_ORIGEN` de `sql/instalacion/03_parametros_y_credenciales.sql`. Las rutas de `Q:` ya vienen en la semilla. Las credenciales, el DAT y el histórico no se tocan.
 
 ## Configuración del servidor
 
@@ -88,13 +88,11 @@ Crea el job **Banbaj 486 diario** en el Agente de SQL Server. Corre un solo paso
 
 ### 3. Rutas, Oracle y credenciales (`03_parametros_y_credenciales.sql`)
 
-1. Copiar el script fuera del repo y reemplazar los cinco valores `<<…>>`:
-   - ruta UNC de la unidad Q:
+1. Copiar el script fuera del repo y reemplazar los cuatro valores `<<…>>`:
    - origen de Oracle de CYBER (`host:1521/servicio`)
    - usuario y contraseña de Oracle
    - contraseña del ZIP; acepta `{MM}` y `{AAAA}` para el mes y el año
 2. Correrlo en la base Banbaj. Hace lo siguiente:
-   - Cambia `Q:` por la ruta UNC en `cfg.ARCHIVO` y en `RUTA_MIS`. El servicio de SQL Server no ve unidades mapeadas.
    - Guarda las credenciales cifradas.
    - Crea el servidor vinculado `[CYBER]` y prueba una bajada de STATUS.
 3. Borrar la copia editada. Nunca se sube al repo.
@@ -113,7 +111,7 @@ SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clav
 | RUTA\_SALIDA | C:\\BANBAJ\\486\\SALIDA\\ | Dónde se escriben los planos y scripts |
 | CARPETA\_ZIP | C:\\ | Dónde queda el ZIP de retiros |
 | RUTA\_7ZIP | C:\\Program Files\\7-Zip\\7z.exe | Ejecutable de 7-Zip |
-| RUTA\_MIS | Q:\\MIS\\SERTEC98\\CLIENTES\\486\\ | Copia del DAT para MIS |
+| RUTA\_MIS | \\\\192.168.50.13\\q\\MIS\\SERTEC98\\CLIENTES\\486\\ | Copia del DAT para MIS |
 | CYBER\_LINKED\_SERVER | CYBER | Nombre del servidor vinculado |
 | CYBER\_ORACLE\_ORIGEN | (vacío) | Lo llena el script 03 |
 | RETROCESO\_AUTOMATICO | 1 | 0 para apagarlo |
@@ -150,7 +148,7 @@ La cuenta del servicio de SQL Server necesita lectura en esas tablas y un mapeo 
 
 En SSMS: Objetos de servidor → Servidores vinculados → Proveedores → **OraOLEDB.Oracle** → Propiedades → marcar **Permitir en proceso** (*Allow inprocess*). Sin esto la bajada falla con un error de acceso al proveedor.
 
-> **Si se vuelve a correr `90_semilla_486.sql`**, la ruta UNC y el origen de Oracle regresan a `Q:` y vacío. Hay que volver a correr las tres líneas de rutas del script 03. Las credenciales no se pierden.
+> **Si se vuelve a correr `90_semilla_486.sql`**, el origen de Oracle regresa a vacío. Hay que volver a correr la línea de `CYBER_ORACLE_ORIGEN` del script 03. Las rutas de `Q:` y las credenciales no se pierden.
 
 ### Conexión desde otras computadoras
 
@@ -465,7 +463,8 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 - [ ] `01_configurar_servidor.sql`: OLE, xp\_cmdshell, Database Mail y correo de prueba recibido
 - [ ] 7-Zip instalado en el servidor y `RUTA_7ZIP` correcta
 - [ ] Cliente de Oracle y proveedor OraOLEDB instalados, con *Allow inprocess*
-- [ ] `03_parametros_y_credenciales.sql`: rutas UNC, origen de Oracle, credenciales y prueba de STATUS OK
+- [ ] `03_parametros_y_credenciales.sql`: origen de Oracle, credenciales y prueba de STATUS OK
+- [ ] La cuenta del servicio de SQL Server llega a `\\192.168.50.13\q`
 - [ ] La cuenta del servicio de SQL Server puede leer las carpetas de entrada y escribir en la salida, en MIS y en C:\\
 - [ ] Migración hecha y conteos cuadrados con FoxPro
 - [ ] `C:\MIGRA486` borrado
