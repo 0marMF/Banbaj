@@ -121,6 +121,31 @@ SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clav
 
 Cambiar uno: `UPDATE cfg.PARAMETRO SET VALOR = N'…' WHERE CLIENTE = '486' AND CLAVE = '…';`
 
+### Teléfonos: quejas y plan de numeración de CYBER
+
+En cada asignación, antes de armar los teléfonos, `ops.sp_telefonos_refrescar_cyber` trae lo vigente de CYBER, igual que `G4_025_TELEFONOS`:
+
+- **Quejas:** lee `telbaj`, `telbaj1` y `TENOVA1` del grupo 1 por el servidor vinculado `[192.168.50.53]` y toma los últimos 10 dígitos de `telo` y `telpho`. Se guardan en `cfg.TEL_QUEJA_CYBER` y se quitan de esa cuenta, además de las quejas migradas.
+- **Plan de numeración:** reemplaza `cfg.PLAN_NUMERACION` con `CYBER.dbo.CAT_PNM` de la misma instancia.
+
+Si el servidor vinculado o la tabla no están disponibles, deja un aviso en la bitácora (paso `TELEFONOS CYBER`) y sigue con la última lectura.
+
+Reglas desde el 01/11:
+
+- El teléfono que no está en ningún rango del plan se descarta (antes salía como fijo).
+- Además de 1000000000, 9999999999 y 0999999999, nunca se mandan 1111111111, 4444444444, 5555555555 ni 5000000000.
+
+| Parámetro | Valor de fábrica |
+| --- | --- |
+| TELBAJ\_LINKED\_SERVER | 192.168.50.53 |
+| TELBAJ\_GRUPO | 1 |
+| TELBAJ\_TABLAS | cyber.dbo.telbaj,cyber.dbo.telbaj1,tenova.dbo.TENOVA1 |
+| PNM\_TABLA | CYBER.dbo.CAT\_PNM |
+| TEL\_EXIGIR\_PNM | 1 (0 = como telbnx.prg, fuera del plan sale como fijo) |
+| TEL\_INVALIDOS | lista de números que nunca se mandan |
+
+La cuenta del servicio de SQL Server necesita lectura en esas tablas y un mapeo de inicio de sesión en el servidor vinculado. Si en la primera corrida el aviso dice que no pudo leer, revisar eso.
+
 ### Proveedor de Oracle
 
 En SSMS: Objetos de servidor → Servidores vinculados → Proveedores → **OraOLEDB.Oracle** → Propiedades → marcar **Permitir en proceso** (*Allow inprocess*). Sin esto la bajada falla con un error de acceso al proveedor.
@@ -262,6 +287,7 @@ Cada 30 minutos el job llama `ops.sp_diario_486`. Esto es lo que hace:
    - los scripts de CYBER ACT\_SALDOS, ACT\_VENCIDO, ACT\_PAGMIN y ACT\_PVS\_REE (este último marca PVS/REE en `RCVRY.uda1` y sustituye al SCBSDOS de la actualización)
 3. **Asignación (ASIG):** solo después de una ACT en OK y si llegó la base. Corre `ops.sp_asignacion_486`:
    - Manda el correo **INICIO\_ASIG\_486** a Operación.
+   - Trae de CYBER las quejas (telbaj del grupo 1) y el plan de numeración vigente.
    - Homologa, valida, asigna folios y aplica exclusiones.
    - Genera SCBSDOS, SCBTEL, sub\_mst, sub\_mail, gescar y la copia del DAT para MIS.
    - Si hay validaciones, manda sus avisos: saldo ≤0 en Consumo, pagos negativos (al equipo de asignaciones) o números cortados por Excel en la base maestra.

@@ -121,7 +121,7 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 - GARAN y ETIQUETA de la base maestra se quedan.
 - Se arriban todos los pagos: DAT, histórico de cuentas retiradas o, si no aparece, el crédito tal como llegó.
 - Aviso de pagos negativos: queda en la lista actual hasta que se actualice `mail.DESTINATARIO`.
-- TELBAJ, plan de numeración y etiquetas los actualiza CYBER; por ahora se usa lo migrado.
+- TELBAJ y plan de numeración: se leen de CYBER en cada asignación (servidor vinculado `[192.168.50.53]` y `CYBER.dbo.CAT_PNM`, como `G4_025_TELEFONOS`). Etiquetas: por ahora se usa lo migrado.
 - Scripts sin uso quedan fuera.
 - Base maestra completa: solo la última de cada segmento (se reemplaza al llegar otra); la historia por cuenta queda en `dat.HISTORIA_FOLIO`.
 
