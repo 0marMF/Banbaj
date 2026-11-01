@@ -1,6 +1,6 @@
 # Manual de migración e instalación Banbaj 486
 
-Versión del 31/10/2026
+Versión del 01/11/2026
 
 ## Qué es Banbaj 486
 

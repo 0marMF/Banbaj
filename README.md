@@ -2,9 +2,12 @@
 
 Levantamiento de requerimientos de los procesos de **asignación** y **actualización** del cliente 486, como base para migrarlos a SQL Server con catálogos y stored procedures.
 
-## Instalación y operación
+## Documentación (Word)
 
-Manual completo (requisitos, instalación de la base, configuración del servidor, migración desde FoxPro, operación diaria, respaldo y retroceso, salida a producción): [`docs/MANUAL_INSTALACION_486.md`](docs/MANUAL_INSTALACION_486.md). Scripts en [`sql/`](sql/LEEME.md).
+- [`docs/Como funciona Banbaj 486.docx`](docs/) — cómo funciona por dentro: flujo diario, actualización, asignación, retiro, teléfonos, exclusiones, salidas, correos, respaldo, tablas y procedimientos.
+- [`docs/Manual de migracion, instalacion y operacion Banbaj 486.docx`](docs/) — requisitos, instalación de la base, configuración del servidor, migración desde FoxPro, operación diaria, respaldo y retroceso, salida a producción.
+
+Al abrirlos, Word pide actualizar los campos: di que sí para que se llene el índice. Los `.md` de `docs/` son la fuente; los `.docx` se regeneran con `tools/generar_docs_word.sh`.
 
 ## Contenido
 
