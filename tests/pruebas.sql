@@ -258,6 +258,40 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'TEL: renglón del día 
        CASE WHEN SENTENCIA LIKE N'INSERT INTO RCVRY.JSP_VALIDADOR_TELEFONOS (CLIENTE, FECHA, TOTAL_TELS) SELECT ''486'', SYSDATE, 7 FROM DUAL WHERE NOT EXISTS%' THEN 1 ELSE 0 END, SENTENCIA
 FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'TEL_BORRA' AND NUM = 2;
 
+/* Arribo automático a CYBER (02/11): bloques PL/SQL, remesas sin sqlldr y detección de SCBSDOS / SCBTEL subidos */
+DECLARE @pl TABLE (SCRIPT VARCHAR(40), BLOQUE INT, PLSQL NVARCHAR(MAX));
+INSERT INTO @pl EXEC ops.sp_arribar_cyber @id, 'TELEFONOS', @solo_mostrar = 1;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ARRIBO TEL: TRUNCATE con EXECUTE IMMEDIATE, remesa con INSERT y procedimiento en bloque PL/SQL' AS p, N'1|1|1|7|1' AS e,
+             CONCAT((SELECT COUNT(*) FROM @pl WHERE SCRIPT = 'TEL_BORRA' AND PLSQL LIKE N'BEGIN EXECUTE IMMEDIATE ''TRUNCATE TABLE RCVRY.JSP_TAB_TEL_REMESA_486''; INSERT INTO RCVRY.JSP_VALIDADOR_TELEFONOS%COMMIT; END;'), '|',
+                    (SELECT COUNT(*) FROM @pl WHERE SCRIPT = 'TEL_REMESA' AND PLSQL LIKE N'%INSERT INTO RCVRY.JSP_TAB_TEL_REMESA_486 (CUENTA,AREA,TELEFONO,TIPOTEL) VALUES (''486-100'', ''01477'', ''7001234'', ''4'');%'), '|',
+                    (SELECT COUNT(*) FROM @pl WHERE SCRIPT = 'TEL_ACTUALIZA' AND PLSQL = N'BEGIN RCVRY.JSP_TELEFONOS_REMESA_486; COMMIT; END;'), '|',
+                    (SELECT COUNT(*) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'TEL_REMESA'), '|',
+                    (SELECT COUNT(*) FROM @pl WHERE PLSQL LIKE N'%exit%' OR PLSQL LIKE N'%EXIT%')  + 1) AS o) x;
+DELETE FROM @pl;
+INSERT INTO @pl EXEC ops.sp_arribar_cyber @id, 'CORREOS', @solo_mostrar = 1;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ARRIBO CORREOS: bandera, remesa y JSP_CORREOS_486 en orden' AS p, N'MAIL_ACTIVA_BANDERA,MAIL_BORRA,MAIL_REMESA,MAIL_ACTUALIZA,MAIL_INACTIVA_BANDERA|1' AS e,
+             CONCAT((SELECT STRING_AGG(SCRIPT, ',') WITHIN GROUP (ORDER BY O) FROM (SELECT DISTINCT SCRIPT, CASE SCRIPT WHEN 'MAIL_ACTIVA_BANDERA' THEN 1 WHEN 'MAIL_BORRA' THEN 2 WHEN 'MAIL_REMESA' THEN 3 WHEN 'MAIL_ACTUALIZA' THEN 4 ELSE 5 END AS O FROM @pl WHERE SCRIPT <> 'MAIL_INSERTA_NUEVOS') z), '|',
+                    (SELECT COUNT(*) FROM @pl WHERE SCRIPT = 'MAIL_ACTUALIZA' AND PLSQL = N'BEGIN RCVRY.JSP_CORREOS_486; COMMIT; END;')) AS o) x;
+
+DECLARE @ar NVARCHAR(400), @ars NVARCHAR(2000) = N'';
+TRUNCATE TABLE stg.CYBER_DELQMST_ACT; TRUNCATE TABLE stg.CYBER_PHONE_G1;
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- nada subido
+INSERT INTO stg.CYBER_DELQMST_ACT (CUENTA) SELECT CUENTA2 FROM dat.HISTORIA_FOLIO WHERE ID_CORRIDA_ALTA = @id;
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- SCBSDOS subido: correos (sin servidor vinculado -> ERROR)
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- correos ya intentados; teléfonos esperando
+INSERT INTO stg.CYBER_PHONE_G1 (CUENTA, AREA, TELEFONO) SELECT CUENTA2, AREA, TELEFONO FROM ops.TELEFONO WHERE ID_CORRIDA = @id;
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- SCBTEL subido: teléfonos
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar;           -- ya no repite
+TRUNCATE TABLE stg.CYBER_DELQMST_ACT; TRUNCATE TABLE stg.CYBER_PHONE_G1;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ARRIBO AUTO: espera, detecta SCBSDOS (altas en DELQMST) y SCBTEL (teléfonos de altas en PHONE_G1), una vez cada uno' AS p,
+             N'ESPERANDO ARRIBO,CORREOS ERROR,ESPERANDO ARRIBO,TELEFONOS ERROR,ARRIBO AUTOMATICO TERMINADO|1|1' AS e,
+             CONCAT(@ars, '|',
+                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO CORREOS' AND ESTATUS = 'ERROR'), '|',
+                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO TELEFONOS' AND ESTATUS = 'ERROR')) AS o) x;
+
 /* op9.prg: las cuentas nuevas guardan sus teléfonos como AREA + TELEFONO; las existentes, como llegan */
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'TEL DAT: nueva normalizada (op9), existente tal como llega' AS p, N'0454771234567|5599999999' AS e,

@@ -239,6 +239,13 @@ BEGIN
     IF EXISTS (SELECT 1 FROM ops.CORRIDA WHERE CLIENTE = '486' AND PROCESO = 'ASIG' AND FECHA_PROCESO = @fecha AND ESTATUS <> 'REVERTIDA')
     BEGIN
         SELECT 'DIA COMPLETO' AS RESULTADO;
+        /* 3. Arribo automático de correos y teléfonos en cuanto el operador sube SCBSDOS y SCBTEL (decisión 02/11) */
+        BEGIN TRY
+            EXEC ops.sp_arribo_automatico @fecha = @fecha;
+        END TRY
+        BEGIN CATCH
+            SELECT 'ARRIBO AUTOMATICO CON ERROR' AS ARRIBO, ERROR_MESSAGE() AS DETALLE;
+        END CATCH;
         RETURN;
     END;
     EXEC ops.sp_archivos_presentes '486', 'ASIG', @fecha, @n OUTPUT;
