@@ -292,7 +292,7 @@ BEGIN
         END CATCH;
     END;
 
-    SET @resultado = CASE WHEN @res = N'' THEN N'ESPERANDO ARRIBO' ELSE LEFT(@res, LEN(@res) - 1) END;
+    SET @resultado = CASE WHEN @res = N'' THEN N'ESPERANDO ARRIBO' ELSE RTRIM(LEFT(@res, LEN(@res) - 1)) END;
     SELECT @resultado AS ARRIBO, @id AS CORRIDA,
            CONCAT(ISNULL(@altas_cyber, 0), N' de ', @altas) AS ALTAS_EN_CYBER, CONCAT(ISNULL(@tels_cyber, 0), N' de ', @tels) AS TELEFONOS_EN_PHONE_G1;
 END;
