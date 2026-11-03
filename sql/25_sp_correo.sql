@@ -165,6 +165,28 @@ BEGIN
 END;
 GO
 
+/* Tabla HTML a partir de un arreglo JSON de objetos (una columna por llave), con los valores escapados.
+   La usan el correo de hallazgos y el de archivos listos. */
+CREATE OR ALTER FUNCTION mail.fn_tabla_html (@tabla_json NVARCHAR(MAX))
+RETURNS NVARCHAR(MAX)
+AS
+BEGIN
+    DECLARE @th NVARCHAR(MAX), @tr NVARCHAR(MAX);
+    IF ISJSON(@tabla_json) = 0 OR LEFT(LTRIM(@tabla_json), 1) <> N'[' RETURN N'';
+    SELECT @th = STRING_AGG(CAST(N'<th style="border:1px solid #999;padding:4px 8px;background:#e8eef7;text-align:left">'
+                 + REPLACE(REPLACE(REPLACE([key], N'&', N'&amp;'), N'<', N'&lt;'), N'>', N'&gt;') + N'</th>' AS NVARCHAR(MAX)), N'')
+    FROM OPENJSON(JSON_QUERY(@tabla_json, '$[0]'));
+    SELECT @tr = STRING_AGG(CAST(N'<tr>' + c.TD + N'</tr>' AS NVARCHAR(MAX)), N'') WITHIN GROUP (ORDER BY CAST(r.[key] AS INT))
+    FROM OPENJSON(@tabla_json) r
+    CROSS APPLY (SELECT STRING_AGG(CAST(N'<td style="border:1px solid #999;padding:4px 8px">'
+                     + REPLACE(REPLACE(REPLACE(ISNULL(v.[value], N''), N'&', N'&amp;'), N'<', N'&lt;'), N'>', N'&gt;') + N'</td>' AS NVARCHAR(MAX)), N'') AS TD
+                 FROM OPENJSON(r.[value]) v) c
+    WHERE r.[type] = 5;
+    IF @th IS NULL RETURN N'';
+    RETURN N'<table style="border-collapse:collapse;font-family:Arial;font-size:12px;margin:8px 0"><tr>' + @th + N'</tr>' + ISNULL(@tr, N'') + N'</table>';
+END;
+GO
+
 /* Correo de hallazgos (decisión 02/11): avisa al equipo de asignaciones (plantilla HALLAZGO_486,
    lista ASIGNACIONES_486) lo que Banbaj encontró y no pudo resolver solo: un retiro que supera el
    tope y se vuelve manual, un arribo a CYBER o un cierre de retiro que falló.
@@ -181,7 +203,7 @@ CREATE OR ALTER PROCEDURE mail.sp_hallazgo
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @cliente VARCHAR(10), @proceso VARCHAR(10), @tabla NVARCHAR(MAX) = N'', @th NVARCHAR(MAX), @tr NVARCHAR(MAX),
+    DECLARE @cliente VARCHAR(10), @proceso VARCHAR(10), @tabla NVARCHAR(MAX) = N'',
             @json NVARCHAR(MAX), @clave NVARCHAR(400) = LEFT(CONCAT(@tipo, N': ', @detalle), 400);
     SELECT @cliente = CLIENTE, @proceso = PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
     SET @cliente = ISNULL(@cliente, '486');
@@ -189,20 +211,7 @@ BEGIN
     IF @solo_prueba = 0 AND EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'HALLAZGO' AND MENSAJE = @clave)
         RETURN 0;
 
-    IF ISJSON(@tabla_json) = 1 AND LEFT(LTRIM(@tabla_json), 1) = N'['
-    BEGIN
-        SELECT @th = STRING_AGG(CAST(N'<th style="border:1px solid #999;padding:4px 8px;background:#e8eef7;text-align:left">'
-                     + REPLACE(REPLACE(REPLACE([key], N'&', N'&amp;'), N'<', N'&lt;'), N'>', N'&gt;') + N'</th>' AS NVARCHAR(MAX)), N'')
-        FROM OPENJSON(JSON_QUERY(@tabla_json, '$[0]'));
-        SELECT @tr = STRING_AGG(CAST(N'<tr>' + c.TD + N'</tr>' AS NVARCHAR(MAX)), N'') WITHIN GROUP (ORDER BY CAST(r.[key] AS INT))
-        FROM OPENJSON(@tabla_json) r
-        CROSS APPLY (SELECT STRING_AGG(CAST(N'<td style="border:1px solid #999;padding:4px 8px">'
-                         + REPLACE(REPLACE(REPLACE(ISNULL(v.[value], N''), N'&', N'&amp;'), N'<', N'&lt;'), N'>', N'&gt;') + N'</td>' AS NVARCHAR(MAX)), N'') AS TD
-                     FROM OPENJSON(r.[value]) v) c
-        WHERE r.[type] = 5;
-        IF @th IS NOT NULL
-            SET @tabla = N'<table style="border-collapse:collapse;font-family:Arial;font-size:12px;margin:8px 0"><tr>' + @th + N'</tr>' + ISNULL(@tr, N'') + N'</table>';
-    END;
+    SET @tabla = mail.fn_tabla_html(@tabla_json);
 
     SET @json = (SELECT @tipo AS TIPO, @detalle AS DETALLE, ISNULL(@accion, N'Revisar la bitácora de la corrida.') AS ACCION,
                         ISNULL(@proceso, N'') AS PROCESO, @tabla AS HTML_TABLA

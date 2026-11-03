@@ -362,6 +362,18 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'HALLAZGO: va a asignaci
        LEFT(CONCAT(PARA, ' | ', ASUNTO), 4000)
 FROM @hz;
 
+/* Aviso de archivos listos para arribar: a asignaciones, con los planos que se suben (no las remesas) y qué sigue */
+DELETE FROM @hz;
+INSERT INTO @hz EXEC ops.sp_aviso_archivos @id, @solo_prueba = 1;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'AVISO ARCHIVOS: a asignaciones con carpeta, SCBSDOS/SCBTEL/gescar (sin remesas) y qué sigue',
+       CASE WHEN PARA LIKE N'%asig.486.cdmx@sertec.com.mx%' AND ISNULL(PARA, N'') + ISNULL(CC, N'') + ISNULL(CCO, N'') NOT LIKE N'%aem.%'
+                 AND ASUNTO LIKE N'Banbaj 486: archivos listos para arribar (ASIG, corrida%'
+                 AND CUERPO LIKE N'%_corrida%' AND CUERPO LIKE N'%>SCBSDOS.TXT</td>%' AND CUERPO LIKE N'%>SCBTEL.TXT</td>%'
+                 AND CUERPO LIKE N'%>SCBACTH_486.TXT</td>%' AND CUERPO NOT LIKE N'%sub[_]mst%'
+                 AND CUERPO LIKE N'%Subir primero SCBSDOS y SCBTEL%' AND CUERPO LIKE N'%Hubo retiro%' THEN 1 ELSE 0 END,
+       LEFT(CONCAT(ASUNTO, ' | ', CUERPO), 4000)
+FROM @hz;
+
 /* op9.prg: las cuentas nuevas guardan sus teléfonos como AREA + TELEFONO; las existentes, como llegan */
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'TEL DAT: nueva normalizada (op9), existente tal como llega' AS p, N'0454771234567|5599999999' AS e,

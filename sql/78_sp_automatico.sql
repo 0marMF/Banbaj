@@ -34,6 +34,7 @@ BEGIN
         EXEC ops.sp_exportar_salidas @id_corrida, @solo = @solo;
         SET @msg = CONCAT(N'Archivos escritos', ISNULL(N' (' + @solo + N')', N''));
         EXEC ops.sp_log @id_corrida, 'EXPORTAR AUTOMATICO', 'OK', NULL, @msg;
+        EXEC ops.sp_aviso_archivos @id_corrida, @solo;     -- aviso a asignaciones: ya pueden arribar
     END TRY
     BEGIN CATCH
         SET @msg = ERROR_MESSAGE();
@@ -301,5 +302,63 @@ BEGIN
         SET @msg = ERROR_MESSAGE();
         EXEC ops.sp_log @id_corrida, 'CONFIRMACION AUTOMATICA', 'ERROR', NULL, @msg;
     END CATCH;
+END;
+GO
+
+/* Aviso de archivos listos para arribar (decisión 03/11): en cuanto se escriben los planos que el equipo de
+   asignaciones sube a CYBER con el cargador (ARCHIVOS_ARRIBO), les llega ARCHIVOS_LISTOS_486 con la carpeta,
+   cada archivo con sus líneas y qué sigue. Lo llaman ops.sp_exportar_auto, ops.sp_retiro_cerrar y el arribo
+   de teléfonos (SCBACTH_SINTEL). El mismo grupo de archivos no se avisa dos veces en la corrida.
+   A mano: EXEC ops.sp_aviso_archivos <corrida>; */
+CREATE OR ALTER PROCEDURE ops.sp_aviso_archivos
+    @id_corrida  INT,
+    @solo        NVARCHAR(400) = NULL,   -- solo estos archivos (ej. GESCAR_SINTEL)
+    @solo_prueba BIT = 0
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @cliente VARCHAR(10), @proceso VARCHAR(10), @fecha DATE, @carpeta NVARCHAR(400), @lista NVARCHAR(400),
+            @tabla NVARCHAR(MAX), @sigue NVARCHAR(2000), @json NVARCHAR(MAX), @clave NVARCHAR(400);
+    SELECT @cliente = CLIENTE, @proceso = PROCESO, @fecha = FECHA_PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
+    IF @cliente IS NULL THROW 50774, 'La corrida no existe.', 1;
+    IF @solo_prueba = 0 AND ISNULL(cfg.fn_param(@cliente, 'AVISO_ARCHIVOS'), '0') <> '1' RETURN;
+
+    SELECT a.ARCHIVO, a.ORDEN,
+           REPLACE(REPLACE(ISNULL(a.NOMBRE, a.ARCHIVO + N'.TXT'), N'{AAAAMMDD}', CONVERT(CHAR(8), @fecha, 112)),
+                   N'{MMDDAAAA}', REPLACE(CONVERT(CHAR(10), @fecha, 101), '/', '')) AS NOMBRE,
+           (SELECT COUNT(*) FROM ops.SALIDA_LINEA l WHERE l.ID_CORRIDA = @id_corrida AND l.ARCHIVO = a.ARCHIVO) AS LINEAS,
+           ISNULL(a.DESCRIPCION, N'') AS DESCRIPCION
+    INTO #a
+    FROM cfg.SALIDA_ARCHIVO a
+    WHERE a.CLIENTE = @cliente
+      AND a.ARCHIVO IN (SELECT UPPER(LTRIM(RTRIM(value))) FROM STRING_SPLIT(ISNULL(cfg.fn_param(@cliente, 'ARCHIVOS_ARRIBO'), N''), N','))
+      AND (@solo IS NULL OR a.ARCHIVO IN (SELECT UPPER(LTRIM(RTRIM(value))) FROM STRING_SPLIT(@solo, N',')))
+      AND EXISTS (SELECT 1 FROM ops.SALIDA_LINEA l WHERE l.ID_CORRIDA = @id_corrida AND l.ARCHIVO = a.ARCHIVO);
+    IF NOT EXISTS (SELECT 1 FROM #a) RETURN;
+
+    SET @lista = (SELECT STRING_AGG(NOMBRE, N', ') WITHIN GROUP (ORDER BY ORDEN) FROM #a);
+    SET @clave = LEFT(CONCAT(N'Archivos listos para arribar: ', @lista), 400);
+    IF @solo_prueba = 0 AND EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'AVISO ARCHIVOS' AND MENSAJE = @clave) RETURN;
+
+    SET @carpeta = ISNULL(cfg.fn_param(@cliente, 'RUTA_SALIDA'), N'C:\BANBAJ\486\SALIDA\');
+    IF RIGHT(@carpeta, 1) <> N'\' SET @carpeta += N'\';
+    SET @carpeta = CONCAT(@carpeta, CONVERT(CHAR(8), @fecha, 112), N'_corrida', @id_corrida, N'\');
+    SET @tabla = mail.fn_tabla_html((SELECT NOMBRE AS [Archivo], CAST(LINEAS AS NVARCHAR(12)) AS [Líneas], DESCRIPCION AS [Qué es]
+                                     FROM #a ORDER BY ORDEN FOR JSON PATH));
+    SET @sigue = CASE
+        WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO IN ('SCBSDOS', 'SCBTEL'))
+            THEN N'Subir primero SCBSDOS y SCBTEL con el cargador de CYBER y después los gescar. En cuanto suben, el job arriba solo correos y teléfonos, genera SCBACTH_SINTEL.TXT (llega otro aviso) y manda la confirmación de la asignación.'
+        WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'SCBPAG')
+            THEN N'Subir SCBPAG con el cargador de CYBER. Los saldos, vencido, pago mínimo y PVS/REE ya se ejecutan solos; si a la hora límite algún pago no aparece en CYBER, llega un hallazgo.'
+        WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'GESCAR_SINTEL')
+            THEN N'Subir SCBACTH_SINTEL.TXT (gescar de cuentas sin teléfono) con el cargador de CYBER.'
+        ELSE N'Subir estos archivos con el cargador de CYBER.' END
+        + CASE WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'GESCAR_RETIRO')
+               THEN N' Hubo retiro: subir también SCBACTH_486.TXT; el retiro en CYBER y la copia de la devolución ya se hicieron solos.' ELSE N'' END;
+
+    SET @json = (SELECT @proceso AS PROCESO, @carpeta AS CARPETA, @lista AS ARCHIVOS, @sigue AS SIGUE, @tabla AS HTML_TABLA
+                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
+    IF @solo_prueba = 0 EXEC ops.sp_log @id_corrida, 'AVISO ARCHIVOS', 'OK', NULL, @clave;
+    EXEC mail.sp_enviar @plantilla = 'ARCHIVOS_LISTOS_486', @id_corrida = @id_corrida, @valores = @json, @solo_prueba = @solo_prueba;
 END;
 GO

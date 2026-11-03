@@ -174,6 +174,7 @@ BEGIN
                 BEGIN TRY
                     EXEC ops.sp_exportar_salidas @id_corrida, @solo = 'GESCAR_SINTEL';
                     SET @msg += N' · SCBACTH_SINTEL.TXT escrito en la carpeta de la corrida';
+                    EXEC ops.sp_aviso_archivos @id_corrida, @solo = 'GESCAR_SINTEL';
                 END TRY
                 BEGIN CATCH
                     SET @msg += CONCAT(N' · no se pudo escribir SCBACTH_SINTEL.TXT: ', ERROR_MESSAGE());

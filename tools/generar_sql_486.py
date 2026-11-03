@@ -426,6 +426,8 @@ PARAMETROS = [
     ("RETIRO_TOPE_PCT_ASIG", "50", "En la asignación, si la devolución de un segmento supera este % de sus cuentas en el DAT, el retiro queda manual y se manda HALLAZGO_486"),
     ("RETIRO_TOPE_PCT_ACT", "50", "En la actualización, si la devolución de un segmento supera este % de sus cuentas en el DAT, el retiro queda manual y se manda HALLAZGO_486"),
     ("RUTA_DEVOLUCION_CYBER", "\\\\192.168.50.1\\Cyber_00\\dev\\", "Carpeta donde CYBER toma el archivo de devolución MX_G1MCT_DVBJIG_* (antes se copiaba a mano); vacío = no se copia"),
+    ("AVISO_ARCHIVOS", "1", "1 = en cuanto se escriben los planos que se suben a CYBER se manda ARCHIVOS_LISTOS_486 al equipo de asignaciones (ops.sp_aviso_archivos)"),
+    ("ARCHIVOS_ARRIBO", "SCBSDOS,SCBSDOS_ETI,SCBTEL,GESCAR_NVA,GESCAR_REA,GESCAR_SINTEL,GESCAR_RETIRO,SCBPAG", "Archivos planos que el equipo de asignaciones sube con el cargador de CYBER (van en el aviso de archivos listos)"),
     ("EXPORTAR_AUTOMATICO", "1", "1 = cada corrida escribe sus archivos y scripts al terminar OK (ops.sp_exportar_salidas); 0 = a mano"),
     ("ACT_CYBER_AUTOMATICO", "1", "1 = al terminar la actualización se ejecutan en CYBER ACT_SALDOS, ACT_VENCIDO, ACT_PAGMIN y ACT_PVS_REE (ops.sp_act_cyber); 0 = a mano en Oracle"),
     ("BLANQUEO_AUTOMATICO", "1", "1 = el blanqueo de status (días DIAS_BLANQUEO_STATUS) se baja, se arma y se ejecuta en CYBER en cuanto subió el SCBSDOS (ops.sp_blanqueo_automatico); 0 = a mano"),
@@ -657,6 +659,11 @@ PLANTILLAS = [
      "Banbaj encontró algo que necesita revisión del equipo de asignaciones.",
      "<p><b>{{TIPO}}</b></p><p>{{DETALLE}}</p>{{HTML_TABLA}}<p><b>Qué hacer:</b> {{ACCION}}</p>"
      "<p>Proceso {{PROCESO}} · corrida {{ID_CORRIDA}} del {{FECHA_PROCESO}}</p>", "High"),
+    # Aviso de archivos listos para arribar (decisión 03/11): solo al equipo de asignaciones (ops.sp_aviso_archivos)
+    ("ARCHIVOS_LISTOS_486", "ASIGNACIONES_486", "Banbaj 486: archivos listos para arribar ({{PROCESO}}, corrida {{ID_CORRIDA}}) {{FECHA}}",
+     "Ya están los archivos planos para arribar a CYBER.",
+     "<p>Carpeta: <b>{{CARPETA}}</b></p>{{HTML_TABLA}}<p><b>Qué sigue:</b> {{SIGUE}}</p>"
+     "<p>Proceso {{PROCESO}} · corrida {{ID_CORRIDA}} del {{FECHA_PROCESO}}</p>", "Normal"),
     ("MAESTRA_NUMEROS_EXCEL_486", "ASIGNACIONES_486", "Asignación 486 detenida: base maestra con números cortados por Excel {{FECHA}}",
      "La base maestra se guardó como CSV con cuentas en notación científica (ej. 1.23457E+15). Formatea esas columnas como Texto en Excel, vuelve a guardar el CSV y corre de nuevo.",
      "<p>Registros: {{REGISTROS}}</p>", "High"),

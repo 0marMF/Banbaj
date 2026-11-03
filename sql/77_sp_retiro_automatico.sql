@@ -117,6 +117,7 @@ BEGIN
     BEGIN TRY
         EXEC ops.sp_exportar_salidas @id_corrida, @zip = 'RETIROS', @enviar_zip = 1;
         EXEC ops.sp_log @id_corrida, 'RETIRO ARCHIVOS', 'OK', NULL, N'Archivos escritos, ZIP y correo de devolución enviados';
+        EXEC ops.sp_aviso_archivos @id_corrida;            -- aviso a asignaciones: ya pueden arribar
         SET @ok_a = 1;
     END TRY
     BEGIN CATCH
