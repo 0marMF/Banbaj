@@ -121,6 +121,11 @@ SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clav
 | CYBER\_COLUMNA\_DOMICILIO | DMADDR1 | Columna de `DELQMST` con el domicilio del SCBSDOS; sirve para detectar el SCBSDOS aunque no haya cuentas nuevas (vacío = no se compara) |
 | RETIRO\_AUTOMATICO | 1 | Las devoluciones se aplican solas y se cierran (archivos, ZIP, correo, CYBER) si no superan el tope (0 = manual) |
 | RETIRO\_TOPE\_PCT\_ASIG / \_ACT | 50 / 50 | Si la devolución de un segmento supera este % de sus cuentas en el DAT, el retiro queda manual y se avisa a asignaciones |
+| EXPORTAR\_AUTOMATICO | 1 | Cada corrida escribe sus archivos al terminar |
+| ACT\_CYBER\_AUTOMATICO | 1 | La actualización ejecuta sus scripts en CYBER |
+| BLANQUEO\_AUTOMATICO | 1 | Blanqueo de status (días 1 a 10) sin intervención |
+| CONFIRMACION\_AUTOMATICA | 1 | Marca el fin del arribo y manda CONFIRMACION\_ASIG\_486 |
+| CUADRE\_AUTOMATICO / CUADRE\_PAGOS\_HORA\_LIMITE | 1 / 17:00 | Cuadre de pagos contra CYBER; a esa hora avisa lo que no subió |
 | RUTA\_DEVOLUCION\_CYBER | \\\\192.168.50.1\\Cyber\_00\\dev\\ | Carpeta donde CYBER toma `MX_G1MCT_DVBJIG_*` (vacío = no se copia) |
 | CYBER\_REMESA\_TEL\_COLUMNAS | CUENTA,AREA,TELEFONO,TIPOTEL | Columnas de `RCVRY.JSP_TAB_TEL_REMESA_486` (como el `.CTL` de sqlldr) |
 | CYBER\_REMESA\_MAIL\_COLUMNAS | CUENTA,CORREO | Columnas de `RCVRY.JSP_TAB_MAIL_REMESA_486` |
@@ -165,7 +170,9 @@ El usuario de Oracle de la credencial `CYBER_ORACLE` necesita, en el esquema `RC
 | `JSP_VALIDADOR_TELEFONOS` | `INSERT` |
 | `RPT_LOG_CYBER_REG` | `UPDATE` (bandera 416) |
 | `JSP_TELEFONOS_REMESA_486`, `JSP_CORREOS_486` | `EXECUTE` |
-| `DELQMST` | `SELECT` (detectar el arribo) y `UPDATE` (retiro: `dmstatus = 'R'`) |
+| `DELQMST` | `SELECT` (detectar el arribo, status) y `UPDATE` (retiro, saldos, vencido, blanqueo) |
+| `UDA1` | `UPDATE` (pago mínimo, PVS y REE) |
+| `PMTFIL` | `SELECT` (cuadre de pagos) |
 | `PHONE_G1`, `PHONE` | `SELECT` (detectar el arribo y bajar los teléfonos) |
 
 Antes de la primera corrida, probar sin escribir con `EXEC ops.sp_arribar_cyber <corrida>, 'TELEFONOS', @solo_mostrar = 1;`.
@@ -314,7 +321,9 @@ Cada 30 minutos el job llama `ops.sp_diario_486`. Esto es lo que hace:
 1. **Fin de semana:** no hace nada.
 2. **Actualización (ACT):** si ya están los archivos de saldos del día, corre `ops.sp_actualizacion_486`. Genera:
    - el plano SCBPAG
-   - los scripts de CYBER ACT\_SALDOS, ACT\_VENCIDO, ACT\_PAGMIN y ACT\_PVS\_REE (este último marca PVS/REE en `RCVRY.uda1` y sustituye al SCBSDOS de la actualización)
+   - los scripts de CYBER ACT\_SALDOS, ACT\_VENCIDO, ACT\_PAGMIN y ACT\_PVS\_REE (este último marca PVS/REE en `RCVRY.uda1` y sustituye al SCBSDOS de la actualización), que **ejecuta solo en CYBER** al terminar (`ops.sp_act_cyber`)
+   - escribe los archivos de la corrida en su carpeta (`ops.sp_exportar_auto`)
+   - en cada vuelta posterior cuadra los pagos del SCBPAG contra CYBER (`ops.sp_cuadre_automatico`); si a las 17:00 (`CUADRE_PAGOS_HORA_LIMITE`) falta alguno, manda la lista en el correo de hallazgos
 3. **Asignación (ASIG):** solo después de una ACT en OK y si llegó la base. Corre `ops.sp_asignacion_486`:
    - Manda el correo **INICIO\_ASIG\_486** a Operación.
    - Trae de CYBER las quejas (telbaj del grupo 1) y el plan de numeración vigente.
@@ -352,6 +361,8 @@ EXEC ops.sp_retiro_cerrar @id;                                            -- arc
 ```
 
 **3. Escribir los archivos**
+
+El job ya los escribe al terminar cada corrida (`EXPORTAR_AUTOMATICO`), y la asignación con retiro los escribe con el ZIP. A mano solo hace falta si llegó un hallazgo de que no se pudieron escribir, o para otra carpeta:
 
 ```sql
 EXEC ops.sp_exportar_salidas @id, @solo_mostrar = 1;                    -- ver qué se va a escribir
@@ -437,7 +448,7 @@ EXEC ops.sp_arribar_cyber @id, 'CORREOS', @solo_mostrar = 1;     -- ver los bloq
 EXEC ops.sp_arribar_cyber @id, 'CORREOS';                        -- o 'TELEFONOS'
 ```
 
-La actualización (SCBPAG y scripts `ACT_*`), el retiro y el blanqueo siguen siendo manuales. Marcar las horas para el seguimiento de tiempos:
+En la actualización el operador solo sube el SCBPAG: los scripts `ACT_*` los ejecuta el job en CYBER y el cuadre de pagos avisa solo si algo no subió. Del día 1 al 10 el **blanqueo de status** también es automático: corre en cuanto el arribo de correos confirma que subió el SCBSDOS. Al terminar OK correos y teléfonos, el job marca la hora de **fin del arribo** y manda **CONFIRMACION\_ASIG\_486**. Solicitud y autorización se siguen marcando a mano para el seguimiento de tiempos:
 
 ```sql
 EXEC ops.sp_marcar_arribo @id, 'SOLICITUD';
@@ -448,6 +459,8 @@ SELECT * FROM ops.v_TIEMPOS_CORRIDA WHERE ID_CORRIDA = @id;
 
 **5. Cerrar la asignación**
 
+El correo de cierre sale solo (`CONFIRMACION_AUTOMATICA`). A mano solo si el arribo se hizo manual:
+
 ```sql
 EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486';     -- correo de fin de asignación
 ```
@@ -456,18 +469,19 @@ EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486';     -- correo de fin de asignac
 
 | Necesidad | Qué correr |
 | --- | --- |
-| Retiro por solicitud del banco | `EXEC ops.sp_retiro_solicitud @archivo = N'…\cuentas.csv';` revisa. Agregar `@confirmar = 1` para aplicar. Luego exportar con `@zip = 'RETIROS', @enviar_zip = 1`. |
+| Retiro por solicitud del banco | `EXEC ops.sp_retiro_solicitud @archivo = N'…\cuentas.csv';` revisa. Agregar `@confirmar = 1` para aplicar; lo demás (archivos, ZIP y correo, CYBER, devolución) sale solo. |
 | Cambiar una etiqueta | `EXEC ops.sp_etiquetar_campo @campo = 'ETIQUETA1', @archivo = N'…\etiquetas.csv';` El CSV lleva FOLIO,ETIQUETA (o `@tipo_llave = 'CUENTA'`). Agregar `@confirmar = 1` para aplicar. Genera SCBSDOS. |
 | SCBSDOS fuera de proceso | `EXEC ops.sp_regenerar_scbsdos @motivo = N'…';` |
-| Blanqueo de STATUS (días 1 a 10) | `EXEC ops.sp_bajar_cyber 'STATUS', @id_corrida = @id;` |
+| Blanqueo de STATUS (días 1 a 10), si quedó en ERROR | `EXEC ops.sp_blanqueo_automatico @id, @forzar = 1;` |
+| Scripts de la actualización en CYBER, si quedaron en ERROR | `EXEC ops.sp_act_cyber @id;` (solo repite lo pendiente; `@solo_mostrar = 1` muestra qué falta) |
 | Arribar correos o teléfonos a mano (si el automático quedó en ERROR o está apagado) | `EXEC ops.sp_arribar_cyber @id, 'CORREOS';` o `'TELEFONOS'`. Con `@solo_mostrar = 1` solo muestra los bloques. |
 | Correos nuevos desde CYBER (solo arribo manual) | `EXEC ops.sp_bajar_cyber 'CORREOS', @id_corrida = @id;` |
 | Gescar de cuentas sin teléfono (solo arribo manual) | `EXEC ops.sp_bajar_cyber 'TELEFONOS', @id_corrida = @id;` |
-| Cuadre de pagos | `EXEC ops.sp_bajar_cyber 'PAGOS', @id_corrida = @id, @fecha = '…';` |
+| Cuadre de pagos a mano (lo hace solo el job) | `EXEC ops.sp_bajar_cyber 'PAGOS', @id_corrida = @id, @fecha = '…';` |
 | Lista negra o exclusiones | `EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'…', @req = '…', @solicita = N'…';` Los teléfonos deben tener 10 dígitos. |
 | Correr el día a mano | `EXEC ops.sp_diario_486 @fecha = '…', @forzar = 1;` o directamente `ops.sp_actualizacion_486` / `ops.sp_asignacion_486`. |
 
-Después de cualquier proceso que genera archivos, correr `ops.sp_exportar_salidas` con su corrida.
+Los procesos que generan archivos los escriben solos al terminar (también el etiquetado y el SCBSDOS fuera de proceso). Si `EXPORTAR_AUTOMATICO = 0`, correr `ops.sp_exportar_salidas` con su corrida.
 
 > Todos los procesos que cambian datos tienen modo de revisión (`@confirmar = 0` o `@solo_mostrar = 1`). Úsalo primero.
 
@@ -548,7 +562,7 @@ Reglas:
 
 Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre los mismos archivos. Solo FoxPro arriba a CYBER; Banbaj solo genera.
 
-1. Deshabilitar el job (`msdb.dbo.sp_update_job @job_name = N'Banbaj 486 diario', @enabled = 0`) y correr cada día a mano con `ops.sp_diario_486 @fecha = '…'`. Apagar el arribo y el retiro automáticos para que Banbaj no escriba en CYBER: `UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE IN ('ARRIBO_AUTOMATICO', 'RETIRO_AUTOMATICO');`.
+1. Deshabilitar el job (`msdb.dbo.sp_update_job @job_name = N'Banbaj 486 diario', @enabled = 0`) y correr cada día a mano con `ops.sp_diario_486 @fecha = '…'`. Apagar lo automático que escribe en CYBER o manda correos: `UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE IN ('ARRIBO_AUTOMATICO', 'RETIRO_AUTOMATICO', 'ACT_CYBER_AUTOMATICO', 'BLANQUEO_AUTOMATICO', 'CONFIRMACION_AUTOMATICA', 'CUADRE_AUTOMATICO');`.
 2. Para no mandar correos reales, cambiar las listas de `mail.DESTINATARIO` a un correo propio, o usar `@solo_prueba = 1` en `sp_avisar` y `sp_aviso_devolucion`.
 3. Escribir los archivos con `ops.sp_exportar_salidas` a una carpeta de pruebas (`@carpeta = N'C:\BANBAJ\PARALELO\'`).
 4. Comparar contra lo que generó FoxPro el mismo día:
@@ -574,7 +588,7 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 - [ ] La cuenta del servicio de SQL Server puede leer las carpetas de entrada y escribir en la salida, en MIS y en C:\\
 - [ ] Nuevas versiones instaladas en CYBER: `RCVRY.JSP_CORREOS_486` (`cyber/486/oracle/JSP_CORREOS_486.sql`: solo queda activo el domicilio de la última base maestra) y `RCVRY.JSP_TELEFONOS_REMESA_486` (`cyber/486/oracle/JSP_TELEFONOS_REMESA_486.sql`: optimizado, misma lógica)
 - [ ] Usuario de Oracle con los permisos del arribo automático (ver *Permisos en CYBER para el arribo automático*) y columnas de las remesas confirmadas contra los `.CTL`
-- [ ] Durante el paralelo, `ARRIBO_AUTOMATICO = 0` y `RETIRO_AUTOMATICO = 0` (solo FoxPro escribe en CYBER); al salir a producción, los dos en 1
+- [ ] Durante el paralelo, en 0 todo lo que escribe en CYBER o manda correos: `ARRIBO_AUTOMATICO`, `RETIRO_AUTOMATICO`, `ACT_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO`, `CONFIRMACION_AUTOMATICA` y `CUADRE_AUTOMATICO`; al salir a producción, todos en 1
 - [ ] La cuenta del servicio de SQL Server puede escribir en `\\192.168.50.1\Cyber_00\dev\` y el usuario de Oracle tiene `UPDATE` en `RCVRY.DELQMST` (retiro)
 - [ ] Lista `ASIGNACIONES_486` con los destinatarios reales del correo de hallazgos
 - [ ] Migración hecha y conteos cuadrados con FoxPro
@@ -607,6 +621,9 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 | `ARRIBO CORREOS` / `ARRIBO TELEFONOS` en ERROR (llega el correo de hallazgos) | Oracle rechazó un bloque (permisos, columnas, tabla bloqueada) | El mensaje trae el error de Oracle. Corregir y correr `EXEC ops.sp_arribar_cyber <id>, '<CORREOS\|TELEFONOS>';` |
 | El arribo se queda en `ESPERANDO ARRIBO` | No se ha subido el SCBSDOS o el SCBTEL, o llegó menos del `ARRIBO_MIN_PCT` de lo pendiente | `EXEC ops.sp_arribo_automatico;` muestra cuántas cuentas, domicilios y teléfonos pendientes ya están en CYBER. Revisar el cargador. Para darlo por subido: `EXEC ops.sp_marcar_arribo <id>, 'FIN';` |
 | Correo de hallazgos: retiro detenido por el tope | La devolución de un segmento supera el 50 % de sus cuentas | Revisar la base maestra o el archivo de saldos. Si es correcto: `EXEC ops.sp_retiro <id>; EXEC ops.sp_retiro_cerrar <id>;` |
+| Correo de hallazgos: actualización en CYBER con error | Oracle rechazó un script `ACT_*` | Corregir y `EXEC ops.sp_act_cyber <id>;` |
+| Correo de hallazgos: pagos que no subieron a CYBER | A la hora límite hay pagos del SCBPAG que no están en `PMTFIL` | Revisar si se subió el SCBPAG o si CYBER lo rechazó; la lista completa está en `ops.RECHAZO` (`CUADRE_PAGOS`) |
+| Correo de hallazgos: blanqueo o escritura de archivos con error | Falló bajar status, ejecutar el blanqueo o escribir en `RUTA_SALIDA` | Corregir y `EXEC ops.sp_blanqueo_automatico <id>, @forzar = 1;` o `EXEC ops.sp_exportar_salidas <id>;` |
 | Correo de hallazgos: retiro con pasos pendientes | Falló escribir archivos/ZIP/correo, el retiro en CYBER o la copia de la devolución | Corregir lo que dice la tabla y `EXEC ops.sp_retiro_cerrar <id>;` |
 | Error de proveedor OraOLEDB | Sin *Allow inprocess* o sin cliente de Oracle | Ver *Proveedor de Oracle* en la configuración |
 | No llegan correos | Falla de Database Mail | `SELECT * FROM msdb.dbo.sysmail_event_log ORDER BY log_date DESC;` y `sysmail_faileditems` |

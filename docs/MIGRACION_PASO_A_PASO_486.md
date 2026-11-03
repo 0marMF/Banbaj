@@ -151,7 +151,8 @@ SELECT FOLIO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA FROM dat.HISTORIA_
 3. Encender el job y el arribo y el retiro automáticos (durante el paralelo van en 0 para que solo FoxPro escriba en CYBER):
 
 ```sql
-UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE IN ('ARRIBO_AUTOMATICO', 'RETIRO_AUTOMATICO');
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486'
+   AND CLAVE IN ('ARRIBO_AUTOMATICO', 'RETIRO_AUTOMATICO', 'ACT_CYBER_AUTOMATICO', 'BLANQUEO_AUTOMATICO', 'CONFIRMACION_AUTOMATICA', 'CUADRE_AUTOMATICO');
 EXEC msdb.dbo.sp_update_job @job_name = N'Banbaj 486 diario', @enabled = 1;
 ```
 

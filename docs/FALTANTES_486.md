@@ -165,7 +165,7 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 
 - [x] Correos y teléfonos de la asignación sin sqlldr ni scripts a mano (`ops.sp_arribo_automatico`, `ops.sp_arribar_cyber`).
 - [x] `SCBACTH_SINTEL.TXT` se genera y se escribe solo al terminar los teléfonos.
-- [ ] Dar al usuario de Oracle los permisos: `TRUNCATE`/`INSERT` en las dos remesas, `INSERT` en `ADDRESS` y `JSP_VALIDADOR_TELEFONOS`, `UPDATE` en `RPT_LOG_CYBER_REG`, `EXECUTE` de `JSP_TELEFONOS_REMESA_486` y `JSP_CORREOS_486`, `SELECT` en `DELQMST`, `PHONE_G1` y `PHONE`.
+- [x] (Confirmado 02/11) El usuario de Oracle tiene los permisos: `TRUNCATE`/`INSERT` en las dos remesas, `INSERT` en `ADDRESS` y `JSP_VALIDADOR_TELEFONOS`, `UPDATE` en `RPT_LOG_CYBER_REG`, `EXECUTE` de `JSP_TELEFONOS_REMESA_486` y `JSP_CORREOS_486`, `SELECT` en `DELQMST`, `PHONE_G1` y `PHONE`.
 - [ ] Confirmar las columnas de las remesas contra `LOAD_TEL_REMESA.CTL` y `LOAD_MAIL_REMESA.CTL` (parámetros `CYBER_REMESA_TEL_COLUMNAS` y `CYBER_REMESA_MAIL_COLUMNAS`).
 - [ ] Probar en CYBER con `@solo_mostrar = 1` y luego una corrida real con el arribo automático encendido.
 - [ ] Opcional: estructura completa de `PHONE_G1` para insertar ahí directamente y dejar de subir el SCBTEL.
@@ -177,5 +177,16 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [x] Cierre del retiro sin intervención: archivos, ZIP y correo de devolución, `dmstatus = 'R'` en CYBER y copia de la devolución a `\\192.168.50.1\Cyber_00\dev\`.
 - [x] Correo de hallazgos (`HALLAZGO_486`) solo al equipo de asignaciones.
 - [ ] Confirmar que `DELQMST.DMADDR1` es el domicilio (parámetro `CYBER_COLUMNA_DOMICILIO`); si no, dejarlo vacío y la detección del SCBSDOS usa solo las cuentas.
-- [ ] Permiso de escritura de la cuenta del servicio de SQL Server en `\\192.168.50.1\Cyber_00\dev\` y `UPDATE` en `RCVRY.DELQMST` para el usuario de Oracle.
+- [x] (Confirmado 02/11) Permisos del usuario de Oracle.
+- [ ] Permiso de escritura de la cuenta del servicio de SQL Server en `\\192.168.50.1\Cyber_00\dev\`.
 - [ ] Estructura de `PHONE_G1` para usar también el sello de fecha y hora del SCBTEL (`FECHA_G`, `FECHA_A`) como señal.
+
+## 10. Más pasos automáticos (02/11)
+
+- [x] Los archivos se escriben solos al terminar cada corrida (`EXPORTAR_AUTOMATICO`).
+- [x] Los scripts `ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN` y `ACT_PVS_REE` se ejecutan solos en CYBER (`ACT_CYBER_AUTOMATICO`).
+- [x] Blanqueo de status automático en cuanto subió el SCBSDOS (`BLANQUEO_AUTOMATICO`).
+- [x] Hora de fin del arribo y `CONFIRMACION_ASIG_486` automáticos (`CONFIRMACION_AUTOMATICA`).
+- [x] Cuadre de pagos automático; solo avisa si algo no subió a la hora límite (`CUADRE_AUTOMATICO`, `CUADRE_PAGOS_HORA_LIMITE` = 17:00).
+- [ ] Confirmar la hora límite del cuadre con Operación (a qué hora ya debe estar arriba el SCBPAG).
+- [ ] Sigue a mano subir los archivos de ancho fijo (SCBSDOS, SCBTEL, SCBPAG, gescar). Se puede quitar si el cargador de CYBER toma archivos de una carpeta o con la estructura de `PHONE_G1` y de las tablas que llena el SCBSDOS.

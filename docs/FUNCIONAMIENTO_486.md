@@ -83,7 +83,21 @@ Con el día completo, en cada vuelta el job también llama `ops.sp_arribo_automa
 
 Lo pendiente se calcula con una foto que se toma al terminar la asignación, antes de que existan los TXT (`ops.sp_arribo_base`, tabla `ops.ARRIBO_PENDIENTE`). Por eso funciona aunque no haya cuentas nuevas; si no había nada pendiente, se arriba en la siguiente vuelta. Todo va por el servidor vinculado `[CYBER]` en bloques PL/SQL (`ops.sp_cyber_ejecutar`), con las mismas sentencias que quedan en `ops.CYBER_SCRIPT`: ya no se usa sqlldr. Cada proceso corre una vez por corrida y deja `ARRIBO CORREOS` / `ARRIBO TELEFONOS` en la bitácora. Si falla no se reintenta solo: llega el correo de hallazgos al equipo de asignaciones y se corre a mano con `ops.sp_arribar_cyber`. Si la remesa saliera vacía no se ejecuta el procedimiento de CYBER, para no inactivar todo el 486.
 
-El operador solo sube SCBSDOS, SCBTEL y los gescar. La actualización y el blanqueo siguen con arribo manual; el retiro es automático (ver *Retiro*).
+El operador solo sube SCBSDOS, SCBTEL y los gescar. Después del arribo de correos se hace solo el blanqueo de status (días 1 a 10), y al terminar OK correos y teléfonos se marca el fin del arribo y sale CONFIRMACION\_ASIG\_486. El retiro también es automático (ver *Retiro*).
+
+## Lo demás que hace el job solo (desde el 02/11)
+
+| Qué | Cuándo | Procedimiento |
+|---|---|---|
+| Escribir los archivos de la corrida | Al terminar OK cada corrida (asignación, actualización, retiro, etiquetado) | `ops.sp_exportar_auto` |
+| Ejecutar en CYBER `ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN` y `ACT_PVS_REE` | Al terminar OK la actualización | `ops.sp_act_cyber` |
+| Cuadrar los pagos del SCBPAG contra `PMTFIL` | En cada vuelta después de la actualización; termina cuando todo subió o a la hora límite (17:00) | `ops.sp_cuadre_automatico` |
+| Blanqueo de status (días 1 a 10) | En cuanto el arribo de correos confirma que subió el SCBSDOS | `ops.sp_blanqueo_automatico` |
+| Marcar el fin del arribo y mandar CONFIRMACION\_ASIG\_486 | Al terminar OK correos y teléfonos (y el blanqueo) | `ops.sp_confirmar_asignacion` |
+
+Cada uno corre una vez, deja su paso en la bitácora y, si falla, manda el correo de hallazgos al equipo de asignaciones. Se repiten a mano con el mismo procedimiento.
+
+**Lo que sigue a mano:** subir los archivos de ancho fijo a CYBER (SCBSDOS, SCBTEL, SCBPAG y gescar), marcar la solicitud y la autorización del arribo, revisar lo que llega en el correo de hallazgos (por ejemplo, un retiro que supera el tope), el retiro por solicitud del banco, el etiquetado y la carga de lista negra.
 
 Si una corrida falla, se revierte sola (ver *Respaldo y retroceso*) y el job no la vuelve a intentar ese día. Para reintentar se corre a mano.
 
@@ -163,6 +177,10 @@ El retiro por solicitud también se cierra solo al confirmarlo. Lo que ya se esc
 | Retiro detenido: supera el tope | La devolución de un segmento supera el 50 % de sus cuentas en el DAT |
 | Retiro con pasos pendientes | Falló escribir los archivos o el ZIP o el correo, el retiro en CYBER o la copia de la devolución |
 | Arribo de correos / teléfonos a CYBER con error | CYBER rechazó el arribo automático |
+| Actualización en CYBER con error | Oracle rechazó un script `ACT_*` |
+| Pagos que no subieron a CYBER | A la hora límite (17:00) hay pagos del SCBPAG que no están en CYBER |
+| Blanqueo de status con error | Falló bajar los status o ejecutar el blanqueo |
+| No se pudieron escribir los archivos | Falló escribir en `RUTA_SALIDA` |
 
 El correo dice qué pasó, trae una tabla con el detalle (por ejemplo, cada segmento con sus cuentas, las que se iban a retirar y el porcentaje) y la instrucción exacta para resolverlo. El mismo hallazgo no se repite en la misma corrida y queda registrado en la bitácora (paso `HALLAZGO`).
 
@@ -292,7 +310,7 @@ Se mandan con `mail.sp_enviar` usando plantillas de `mail.PLANTILLA` y listas de
 | ALERTA_SDO_ACT_CONS_486 | Consumo con saldo menor o igual a cero en la base | Operación |
 | PAGOS_NEGATIVOS_486 | Llegaron pagos negativos | Equipo de asignaciones |
 | MAESTRA_NUMEROS_EXCEL_486 | Excel cortó números en la base maestra | Equipo de asignaciones |
-| HALLAZGO_486 | Retiro que supera el tope, arribo o cierre de retiro con error (`mail.sp_hallazgo`) | Equipo de asignaciones |
+| HALLAZGO_486 | Retiro que supera el tope, pagos que no subieron y cualquier paso automático con error (`mail.sp_hallazgo`) | Equipo de asignaciones |
 
 # Respaldo y retroceso
 
@@ -330,6 +348,9 @@ Se mandan con `mail.sp_enviar` usando plantillas de `mail.PLANTILLA` y listas de
 | `ops.sp_diario_486` | Correr el día (lo hace el job) |
 | `ops.sp_actualizacion_486`, `ops.sp_asignacion_486` | Correr un proceso a mano |
 | `ops.sp_retiro` | Aplicar las devoluciones de una corrida (lo hace solo el retiro automático) |
+| `ops.sp_act_cyber` | Ejecutar en CYBER los scripts de la actualización (lo hace el job) |
+| `ops.sp_blanqueo_automatico` | Blanqueo de status (lo hace el job; `@forzar = 1` para repetir) |
+| `ops.sp_cuadre_automatico` | Cuadre de pagos contra CYBER (lo hace el job) |
 | `ops.sp_retiro_cerrar` | Archivos, ZIP y correo, retiro en CYBER y copia de la devolución; repite lo que falló |
 | `mail.sp_hallazgo` | Correo de hallazgos al equipo de asignaciones |
 | `ops.sp_retiro_solicitud` | Retiro por solicitud del banco |
@@ -367,6 +388,8 @@ Todos los que cambian datos tienen modo de revisión (`@confirmar = 0` o `@solo_
 | CYBER\_COLUMNA\_DOMICILIO | DMADDR1 | Domicilio en `DELQMST` para detectar el SCBSDOS |
 | RETIRO\_AUTOMATICO | 1 | Retiro automático (0 = manual) |
 | RETIRO\_TOPE\_PCT\_ASIG / \_ACT | 50 / 50 | Tope por segmento para aplicar el retiro solo |
+| EXPORTAR\_AUTOMATICO, ACT\_CYBER\_AUTOMATICO, BLANQUEO\_AUTOMATICO, CONFIRMACION\_AUTOMATICA, CUADRE\_AUTOMATICO | 1 | Pasos automáticos (0 = a mano) |
+| CUADRE\_PAGOS\_HORA\_LIMITE | 17:00 | Hora a la que el cuadre avisa lo que no subió |
 | RUTA\_DEVOLUCION\_CYBER | `\\192.168.50.1\Cyber_00\dev\` | Copia de la devolución para CYBER |
 | CYBER\_REMESA\_TEL\_COLUMNAS / \_MAIL\_COLUMNAS | CUENTA,AREA,TELEFONO,TIPOTEL / CUENTA,CORREO | Columnas de las remesas en CYBER |
 | CYBER\_SENTENCIAS\_POR\_BLOQUE | 200 | Tamaño de cada bloque PL/SQL |
