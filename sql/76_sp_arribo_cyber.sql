@@ -5,11 +5,11 @@
    (SCBSDOS, SCBTEL, gescar). Lo demás lo hace SQL Server por el servidor
    vinculado [CYBER], sin sqlldr ni scripts a mano:
 
-   Correos (en cuanto el SCBSDOS ya subió: las altas del día están activas en DELQMST)
+   Correos (en cuanto el SCBSDOS ya subió: lo que le faltaba a DELQMST al terminar la asignación ya llegó)
      1. Baja los correos que tiene CYBER e inserta los nuevos en ADDRESS.
      2. Bandera 416 encendida, vacía la remesa, la carga y ejecuta JSP_CORREOS_486.
      3. Apaga la bandera.
-   Teléfonos (en cuanto el SCBTEL ya subió: los teléfonos de las altas están en PHONE_G1)
+   Teléfonos (en cuanto el SCBTEL ya subió: los teléfonos que le faltaban a PHONE_G1 ya llegaron)
      1. Vacía la remesa (y crea el renglón del validador), la carga y ejecuta
         JSP_TELEFONOS_REMESA_486.
      2. Baja los teléfonos activos y genera el gescar de cuentas sin teléfono
@@ -18,7 +18,9 @@
    ops.sp_arribo_automatico lo llama el job (ops.sp_diario_486) cada 30 minutos
    cuando la asignación del día ya terminó. Cada proceso corre una sola vez por
    corrida; si falla, queda ERROR en la bitácora y no se reintenta solo:
-   se corrige y se corre a mano con EXEC ops.sp_arribar_cyber <corrida>, '<CORREOS|TELEFONOS>';
+   se avisa al equipo de asignaciones (HALLAZGO_486), se corrige y se corre a mano con
+   EXEC ops.sp_arribar_cyber <corrida>, '<CORREOS|TELEFONOS>';
+   La detección compara contra lo pendiente (ops.sp_arribo_base), así funciona aunque no haya cuentas nuevas.
    ===================================================================== */
 SET NOCOUNT ON;
 GO
@@ -190,11 +192,107 @@ BEGIN
 END;
 GO
 
+/* Baja de CYBER lo necesario para detectar el arribo: cuentas activas del 486 con su domicilio
+   (DELQMST) y teléfonos que dejó el arribo del SCBTEL (PHONE_G1). Va directo a tablas de paso. */
+CREATE OR ALTER PROCEDURE ops.sp_arribo_bajar
+    @cliente   VARCHAR(10) = '486',
+    @telefonos BIT = 1
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @srv SYSNAME = ISNULL(cfg.fn_param(@cliente, 'CYBER_LINKED_SERVER'), 'CYBER'),
+            @dom NVARCHAR(128) = NULLIF(LTRIM(RTRIM(cfg.fn_param(@cliente, 'CYBER_COLUMNA_DOMICILIO'))), N''),
+            @q NVARCHAR(MAX), @sql NVARCHAR(MAX), @msg NVARCHAR(400);
+    IF NOT EXISTS (SELECT 1 FROM sys.servers WHERE name = @srv)
+    BEGIN
+        SET @msg = CONCAT(N'No existe el servidor vinculado ', @srv, N'. Captura la credencial CYBER_ORACLE y corre EXEC cfg.sp_cyber_conectar;');
+        THROW 50823, @msg, 1;
+    END;
+    IF @dom LIKE N'%[^A-Za-z0-9_]%' THROW 50768, 'CYBER_COLUMNA_DOMICILIO inválida (solo el nombre de la columna de DELQMST).', 1;
+
+    TRUNCATE TABLE stg.CYBER_DELQMST_ACT;
+    SET @q = N'select DMACCT, ' + ISNULL(@dom, N'cast(null as varchar2(80))') + N' from RCVRY.delqmst where DMACCTG = ''1'' and DMCOMPANY = '''
+           + @cliente + N''' and DMSTATUS is null';
+    SET @sql = N'INSERT INTO stg.CYBER_DELQMST_ACT (CUENTA, DOMICILIO) EXEC (N''' + REPLACE(@q, N'''', N'''''') + N''') AT ' + QUOTENAME(@srv) + N';';
+    EXEC (@sql);
+    IF @telefonos = 1
+    BEGIN
+        TRUNCATE TABLE stg.CYBER_PHONE_G1;
+        SET @q = N'select PHACCT, PHAREACODE, PHPHONE from RCVRY.phone_g1 where PHACCTG = ''1'' and PHACCT like ''' + @cliente + N'-%''';
+        SET @sql = N'INSERT INTO stg.CYBER_PHONE_G1 (CUENTA, AREA, TELEFONO) EXEC (N''' + REPLACE(@q, N'''', N'''''') + N''') AT ' + QUOTENAME(@srv) + N';';
+        EXEC (@sql);
+    END;
+END;
+GO
+
+/* Foto de lo que le falta a CYBER al terminar la asignación, antes de que existan los archivos
+   (los TXT solo se escriben con ops.sp_exportar_salidas, así que el operador no pudo haber subido nada):
+     CUENTA     cuentas del SCBSDOS que no están activas en DELQMST (nuevas y reasignadas)
+     DOMICILIO  cuentas activas cuyo domicilio en CYBER es distinto al que manda el SCBSDOS (CYBER_COLUMNA_DOMICILIO)
+     TELEFONO   teléfonos del SCBTEL (de todas las cuentas) que no están en PHONE_G1
+   ops.sp_arribo_automatico da por subido cada archivo cuando ya llegó lo pendiente. */
+CREATE OR ALTER PROCEDURE ops.sp_arribo_base
+    @id_corrida INT,
+    @sin_bajar  BIT = 0              -- 1 = usa lo que ya está en las tablas de paso
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @cliente VARCHAR(10), @proceso VARCHAR(10), @o_cta INT, @w_cta INT, @o_dom INT, @w_dom INT,
+            @usa_dom BIT, @c INT, @d INT, @t INT, @msg NVARCHAR(400);
+    SELECT @cliente = CLIENTE, @proceso = PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
+    IF @proceso IS NULL OR @proceso <> 'ASIG' THROW 50763, 'Indica una corrida de asignación.', 1;
+    IF @sin_bajar = 0 EXEC ops.sp_arribo_bajar @cliente, 1;
+    SET @usa_dom = CASE WHEN NULLIF(LTRIM(RTRIM(cfg.fn_param(@cliente, 'CYBER_COLUMNA_DOMICILIO'))), N'') IS NULL THEN 0 ELSE 1 END;
+
+    /* Posición de CUENTA y DMADDR1 en el SCBSDOS: se compara exactamente lo que se manda */
+    SELECT @o_cta = (SELECT ISNULL(SUM(x.ANCHO), 0) FROM cfg.SALIDA x WHERE x.CLIENTE = @cliente AND x.ARCHIVO = 'SCBSDOS' AND x.ACTIVO = 1 AND x.ORDEN < s.ORDEN),
+           @w_cta = s.ANCHO
+    FROM cfg.SALIDA s WHERE s.CLIENTE = @cliente AND s.ARCHIVO = 'SCBSDOS' AND s.ACTIVO = 1 AND s.CAMPO = 'CUENTA';
+    SELECT @o_dom = (SELECT ISNULL(SUM(x.ANCHO), 0) FROM cfg.SALIDA x WHERE x.CLIENTE = @cliente AND x.ARCHIVO = 'SCBSDOS' AND x.ACTIVO = 1 AND x.ORDEN < s.ORDEN),
+           @w_dom = s.ANCHO
+    FROM cfg.SALIDA s WHERE s.CLIENTE = @cliente AND s.ARCHIVO = 'SCBSDOS' AND s.ACTIVO = 1 AND s.CAMPO = 'DMADDR1';
+    IF @w_cta IS NULL THROW 50769, 'El SCBSDOS no tiene el campo CUENTA en cfg.SALIDA.', 1;
+    IF @w_dom IS NULL SET @usa_dom = 0;
+
+    SELECT CUENTA, MAX(DOM) AS DOM INTO #l
+    FROM (SELECT LTRIM(RTRIM(SUBSTRING(LINEA, @o_cta + 1, @w_cta))) AS CUENTA,
+                 CASE WHEN @usa_dom = 1 THEN UPPER(LTRIM(RTRIM(SUBSTRING(LINEA, @o_dom + 1, @w_dom)))) END AS DOM
+          FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id_corrida AND ARCHIVO = 'SCBSDOS') z
+    WHERE CUENTA <> N'' GROUP BY CUENTA;
+    SELECT LTRIM(RTRIM(CUENTA)) AS CUENTA, MAX(UPPER(LTRIM(RTRIM(ISNULL(DOMICILIO, N''))))) AS DOM INTO #d
+    FROM stg.CYBER_DELQMST_ACT WHERE CUENTA IS NOT NULL GROUP BY LTRIM(RTRIM(CUENTA));
+    CREATE UNIQUE CLUSTERED INDEX IX ON #d (CUENTA);
+    SELECT DISTINCT LTRIM(RTRIM(CUENTA)) AS CUENTA, LTRIM(RTRIM(AREA)) AS AREA, LTRIM(RTRIM(TELEFONO)) AS TELEFONO INTO #g
+    FROM stg.CYBER_PHONE_G1 WHERE CUENTA IS NOT NULL;
+    CREATE CLUSTERED INDEX IX ON #g (CUENTA, AREA, TELEFONO);
+
+    DELETE FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id_corrida;
+    INSERT INTO ops.ARRIBO_PENDIENTE (ID_CORRIDA, TIPO, CUENTA, VALOR)
+    SELECT @id_corrida, CASE WHEN d.CUENTA IS NULL THEN 'CUENTA' ELSE 'DOMICILIO' END, l.CUENTA, l.DOM
+    FROM #l l LEFT JOIN #d d ON d.CUENTA = l.CUENTA
+    WHERE d.CUENTA IS NULL OR (@usa_dom = 1 AND ISNULL(l.DOM, N'') <> d.DOM);
+    INSERT INTO ops.ARRIBO_PENDIENTE (ID_CORRIDA, TIPO, CUENTA, AREA, TELEFONO)
+    SELECT DISTINCT @id_corrida, 'TELEFONO', t.CUENTA2, t.AREA, t.TELEFONO
+    FROM ops.TELEFONO t
+    WHERE t.ID_CORRIDA = @id_corrida
+      AND NOT EXISTS (SELECT 1 FROM #g g WHERE g.CUENTA = t.CUENTA2 AND g.AREA = t.AREA AND g.TELEFONO = t.TELEFONO);
+
+    SELECT @c = SUM(CASE WHEN TIPO = 'CUENTA' THEN 1 ELSE 0 END), @d = SUM(CASE WHEN TIPO = 'DOMICILIO' THEN 1 ELSE 0 END),
+           @t = SUM(CASE WHEN TIPO = 'TELEFONO' THEN 1 ELSE 0 END)
+    FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id_corrida;
+    SET @msg = CONCAT(N'Pendiente en CYBER: ', ISNULL(@c, 0), N' cuentas, ', ISNULL(@d, 0), N' domicilios, ', ISNULL(@t, 0), N' teléfonos');
+    EXEC ops.sp_log @id_corrida, 'ARRIBO BASE', 'OK', NULL, @msg;
+END;
+GO
+
 /* Detecta si el operador ya subió el SCBSDOS y el SCBTEL de la asignación del día y arriba lo que falte.
-   SCBSDOS subido = las altas (NVA y REA) de la corrida ya están activas en DELQMST.
-   SCBTEL subido  = los teléfonos de esas altas ya están en PHONE_G1 (son nuevos del día, no pueden venir de un arribo anterior).
-   Si la corrida no tuvo altas con teléfono, los teléfonos esperan a que se marque el fin del arribo
-   (EXEC ops.sp_marcar_arribo <corrida>, 'FIN') o se corren a mano. */
+   Se compara contra lo que estaba pendiente (ops.ARRIBO_PENDIENTE, foto de ops.sp_arribo_base), no contra
+   las altas, para que funcione aunque no haya cuentas nuevas:
+     SCBSDOS subido = al menos ARRIBO_MIN_PCT % de las cuentas y domicilios pendientes ya están en DELQMST.
+     SCBTEL subido  = al menos ARRIBO_MIN_PCT % de los teléfonos pendientes ya están en PHONE_G1, y las cuentas
+                      pendientes ya están activas (JSP_TELEFONOS_REMESA_486 solo trabaja cuentas activas).
+     Sin pendientes = CYBER ya tiene todo lo que necesita el procedimiento: se arriba en la siguiente vuelta.
+   EXEC ops.sp_marcar_arribo <corrida>, 'FIN' da todo por subido. */
 CREATE OR ALTER PROCEDURE ops.sp_arribo_automatico
     @fecha     DATE = NULL,
     @cliente   VARCHAR(10) = '486',
@@ -212,8 +310,9 @@ BEGIN
     END;
     DECLARE @id INT, @srv SYSNAME = ISNULL(cfg.fn_param(@cliente, 'CYBER_LINKED_SERVER'), 'CYBER'),
             @min DECIMAL(5,2) = ISNULL(TRY_CONVERT(DECIMAL(5,2), cfg.fn_param(@cliente, 'ARRIBO_MIN_PCT')), 95),
-            @altas INT, @altas_cyber INT, @tels INT, @tels_cyber INT, @hecho_c BIT, @hecho_t BIT, @fin BIT,
-            @listo_c BIT = 0, @listo_t BIT = 0, @q NVARCHAR(MAX), @sql NVARCHAR(MAX), @res NVARCHAR(400) = N'';
+            @p_c INT, @r_c INT, @p_d INT, @r_d INT, @p_t INT, @r_t INT, @ok_c BIT, @ok_d BIT, @ok_t BIT,
+            @hecho_c BIT, @hecho_t BIT, @fin BIT, @listo_c BIT = 0, @listo_t BIT = 0, @res NVARCHAR(400) = N'',
+            @err NVARCHAR(4000), @acc NVARCHAR(4000);
 
     SELECT TOP (1) @id = ID_CORRIDA FROM ops.CORRIDA
     WHERE CLIENTE = @cliente AND PROCESO = 'ASIG' AND FECHA_PROCESO = @fecha AND ESTATUS = 'OK'
@@ -242,34 +341,39 @@ BEGIN
             SELECT @resultado AS ARRIBO, @id AS CORRIDA;
             RETURN;
         END;
-        TRUNCATE TABLE stg.CYBER_DELQMST_ACT;
-        SET @q = N'select DMACCT from RCVRY.delqmst where DMACCTG = ''1'' and DMCOMPANY = ''' + @cliente + N''' and DMSTATUS is null';
-        SET @sql = N'INSERT INTO stg.CYBER_DELQMST_ACT (CUENTA) EXEC (N''' + REPLACE(@q, N'''', N'''''') + N''') AT ' + QUOTENAME(@srv) + N';';
-        EXEC (@sql);
-        IF @hecho_t = 0
-        BEGIN
-            TRUNCATE TABLE stg.CYBER_PHONE_G1;
-            SET @q = N'select PHACCT, PHAREACODE, PHPHONE from RCVRY.phone_g1 where PHACCTG = ''1'' and PHACCT like ''' + @cliente + N'-%''';
-            SET @sql = N'INSERT INTO stg.CYBER_PHONE_G1 (CUENTA, AREA, TELEFONO) EXEC (N''' + REPLACE(@q, N'''', N'''''') + N''') AT ' + QUOTENAME(@srv) + N';';
-            EXEC (@sql);
-        END;
+        EXEC ops.sp_arribo_bajar @cliente, 1;
     END;
 
-    SELECT @altas = COUNT(*), @altas_cyber = COUNT(x.CUENTA)
-    FROM dat.HISTORIA_FOLIO h
-    OUTER APPLY (SELECT TOP (1) c.CUENTA FROM stg.CYBER_DELQMST_ACT c WHERE LTRIM(RTRIM(c.CUENTA)) = h.CUENTA2) x
-    WHERE h.CLIENTE = @cliente AND h.ID_CORRIDA_ALTA = @id;
-    SELECT @tels = COUNT(*), @tels_cyber = COUNT(p.CUENTA)
-    FROM ops.TELEFONO t
-    OUTER APPLY (SELECT TOP (1) g.CUENTA FROM stg.CYBER_PHONE_G1 g
-                 WHERE LTRIM(RTRIM(g.CUENTA)) = t.CUENTA2 AND LTRIM(RTRIM(g.AREA)) = t.AREA AND LTRIM(RTRIM(g.TELEFONO)) = t.TELEFONO) p
-    WHERE t.ID_CORRIDA = @id AND t.CUENTA2 IN (SELECT CUENTA2 FROM dat.HISTORIA_FOLIO WHERE CLIENTE = @cliente AND ID_CORRIDA_ALTA = @id);
+    /* Sin foto (la asignación se corrió antes de esta versión o no alcanzó CYBER al terminar): se toma ahora
+       y se compara en la siguiente vuelta */
+    IF NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO BASE' AND ESTATUS = 'OK')
+        EXEC ops.sp_arribo_base @id, @sin_bajar = 1;
+
+    SELECT LTRIM(RTRIM(CUENTA)) AS CUENTA, MAX(UPPER(LTRIM(RTRIM(ISNULL(DOMICILIO, N''))))) AS DOM INTO #d
+    FROM stg.CYBER_DELQMST_ACT WHERE CUENTA IS NOT NULL GROUP BY LTRIM(RTRIM(CUENTA));
+    CREATE UNIQUE CLUSTERED INDEX IX ON #d (CUENTA);
+    SELECT DISTINCT LTRIM(RTRIM(CUENTA)) AS CUENTA, LTRIM(RTRIM(AREA)) AS AREA, LTRIM(RTRIM(TELEFONO)) AS TELEFONO INTO #g
+    FROM stg.CYBER_PHONE_G1 WHERE CUENTA IS NOT NULL;
+    CREATE CLUSTERED INDEX IX ON #g (CUENTA, AREA, TELEFONO);
+
+    SELECT @p_c = SUM(CASE WHEN p.TIPO = 'CUENTA' THEN 1 ELSE 0 END),
+           @r_c = SUM(CASE WHEN p.TIPO = 'CUENTA' AND d.CUENTA IS NOT NULL THEN 1 ELSE 0 END),
+           @p_d = SUM(CASE WHEN p.TIPO = 'DOMICILIO' THEN 1 ELSE 0 END),
+           @r_d = SUM(CASE WHEN p.TIPO = 'DOMICILIO' AND d.DOM = ISNULL(p.VALOR, N'') THEN 1 ELSE 0 END),
+           @p_t = SUM(CASE WHEN p.TIPO = 'TELEFONO' THEN 1 ELSE 0 END),
+           @r_t = SUM(CASE WHEN p.TIPO = 'TELEFONO' AND g.CUENTA IS NOT NULL THEN 1 ELSE 0 END)
+    FROM ops.ARRIBO_PENDIENTE p
+    LEFT JOIN #d d ON d.CUENTA = p.CUENTA
+    LEFT JOIN #g g ON p.TIPO = 'TELEFONO' AND g.CUENTA = p.CUENTA AND g.AREA = p.AREA AND g.TELEFONO = p.TELEFONO
+    WHERE p.ID_CORRIDA = @id;
+    SELECT @p_c = ISNULL(@p_c, 0), @r_c = ISNULL(@r_c, 0), @p_d = ISNULL(@p_d, 0), @r_d = ISNULL(@r_d, 0), @p_t = ISNULL(@p_t, 0), @r_t = ISNULL(@r_t, 0);
     SET @fin = CASE WHEN EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO FIN') THEN 1 ELSE 0 END;
 
-    SET @listo_t = CASE WHEN @tels > 0 AND 100.0 * ISNULL(@tels_cyber, 0) / @tels >= @min THEN 1
-                        WHEN @tels = 0 AND @fin = 1 THEN 1 ELSE 0 END;
-    SET @listo_c = CASE WHEN @altas > 0 AND 100.0 * ISNULL(@altas_cyber, 0) / @altas >= @min THEN 1
-                        WHEN @altas = 0 AND (@listo_t = 1 OR @fin = 1) THEN 1 ELSE 0 END;
+    SET @ok_c = CASE WHEN @p_c = 0 OR 100.0 * @r_c / @p_c >= @min THEN 1 ELSE 0 END;
+    SET @ok_d = CASE WHEN @p_d = 0 OR 100.0 * @r_d / @p_d >= @min THEN 1 ELSE 0 END;
+    SET @ok_t = CASE WHEN @p_t = 0 OR 100.0 * @r_t / @p_t >= @min THEN 1 ELSE 0 END;
+    SET @listo_c = CASE WHEN @fin = 1 OR (@ok_c = 1 AND @ok_d = 1) THEN 1 ELSE 0 END;
+    SET @listo_t = CASE WHEN @fin = 1 OR (@ok_t = 1 AND @ok_c = 1) THEN 1 ELSE 0 END;
 
     IF @listo_c = 1 AND @hecho_c = 0
     BEGIN
@@ -279,6 +383,9 @@ BEGIN
         END TRY
         BEGIN CATCH
             SET @res += N'CORREOS ERROR · ';
+            SET @err = ERROR_MESSAGE();
+            SET @acc = CONCAT(N'Corregir la causa y correr EXEC ops.sp_arribar_cyber ', @id, N', ''CORREOS''; (con @solo_mostrar = 1 se ven los bloques sin ejecutar). El job no lo reintenta solo.');
+            EXEC mail.sp_hallazgo @id, N'Arribo de correos a CYBER con error', @err, @acc;
         END CATCH;
     END;
     IF @listo_t = 1 AND @hecho_t = 0
@@ -289,11 +396,15 @@ BEGIN
         END TRY
         BEGIN CATCH
             SET @res += N'TELEFONOS ERROR · ';
+            SET @err = ERROR_MESSAGE();
+            SET @acc = CONCAT(N'Corregir la causa y correr EXEC ops.sp_arribar_cyber ', @id, N', ''TELEFONOS''; (con @solo_mostrar = 1 se ven los bloques sin ejecutar). El job no lo reintenta solo.');
+            EXEC mail.sp_hallazgo @id, N'Arribo de teléfonos a CYBER con error', @err, @acc;
         END CATCH;
     END;
 
     SET @resultado = CASE WHEN @res = N'' THEN N'ESPERANDO ARRIBO' ELSE RTRIM(LEFT(@res, LEN(@res) - 1)) END;
     SELECT @resultado AS ARRIBO, @id AS CORRIDA,
-           CONCAT(ISNULL(@altas_cyber, 0), N' de ', @altas) AS ALTAS_EN_CYBER, CONCAT(ISNULL(@tels_cyber, 0), N' de ', @tels) AS TELEFONOS_EN_PHONE_G1;
+           CONCAT(@r_c, N' de ', @p_c) AS CUENTAS_PENDIENTES_EN_CYBER, CONCAT(@r_d, N' de ', @p_d) AS DOMICILIOS_PENDIENTES_EN_CYBER,
+           CONCAT(@r_t, N' de ', @p_t) AS TELEFONOS_PENDIENTES_EN_PHONE_G1;
 END;
 GO

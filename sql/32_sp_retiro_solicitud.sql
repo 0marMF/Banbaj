@@ -149,6 +149,18 @@ BEGIN
         THROW;
     END CATCH;
 
+    /* Retiro automático (decisión 02/11): archivos, ZIP y correo, RETIRO en CYBER y copia de la devolución */
+    IF ISNULL(cfg.fn_param(@cliente, 'RETIRO_AUTOMATICO'), '0') = '1' AND @n > 0
+    BEGIN
+        BEGIN TRY
+            EXEC ops.sp_retiro_cerrar @id_corrida;
+        END TRY
+        BEGIN CATCH
+            SET @msg = ERROR_MESSAGE();
+            EXEC ops.sp_log @id_corrida, 'RETIRO CERRAR', 'ERROR', NULL, @msg;
+        END CATCH;
+    END;
+
     SELECT r.VALOR, r.TIPO, r.RESULTADO, h.CUENTA2, h.FOLIO
     FROM #r r
     LEFT JOIN dat.HISTORIA_FOLIO h ON h.CUENTA = r.CUENTA AND h.ID_CORRIDA_BAJA = @id_corrida AND r.RESULTADO = 'A RETIRAR'

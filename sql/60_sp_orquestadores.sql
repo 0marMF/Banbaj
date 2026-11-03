@@ -9,9 +9,14 @@
    Los archivos planos quedan en ops.SALIDA_LINEA y los scripts de CYBER en
    ops.CYBER_SCRIPT; se escriben con ops.sp_exportar_salidas y se arriban a mano.
 
-   @aplicar_retiro = 0 (default): las devoluciones quedan en ops.DEVOLUCION
-   para revisión y se aplican después con EXEC ops.sp_retiro @id_corrida.
-   Así se conserva la confirmación que hoy hace el operador.
+   @aplicar_retiro NULL (default): retiro automático (sql/77, decisión 02/11).
+   Con RETIRO_AUTOMATICO = 1 las devoluciones se aplican solas si ningún segmento
+   supera el tope (RETIRO_TOPE_PCT_ASIG / _ACT, 50 %); si lo supera quedan en
+   ops.DEVOLUCION para revisión y se avisa al equipo de asignaciones (HALLAZGO_486).
+   Al terminar OK, ops.sp_retiro_cerrar escribe archivos, ZIP y correo de
+   devolución, ejecuta RETIRO en CYBER y copia la devolución a CYBER.
+   @aplicar_retiro = 1 aplica sin tope; 0 deja todo para revisión
+   (se aplica después con EXEC ops.sp_retiro <id>; EXEC ops.sp_retiro_cerrar <id>;).
    ===================================================================== */
 SET NOCOUNT ON;
 GO
@@ -43,7 +48,7 @@ CREATE OR ALTER PROCEDURE ops.sp_asignacion_486
     @fecha             DATE    = NULL,
     @hora_llegada      TIME(0) = NULL,
     @forzar_devolucion BIT     = 0,
-    @aplicar_retiro    BIT     = 0,
+    @aplicar_retiro    BIT     = NULL,     -- NULL = automático (RETIRO_AUTOMATICO y tope); 1 = aplica; 0 = queda para revisión
     @id_corrida        INT     = NULL OUTPUT
 AS
 BEGIN
@@ -69,6 +74,8 @@ BEGIN
         EXEC ops.sp_asig_unir_layout   @id_corrida;
         EXEC ops.sp_homologar          @id_corrida, 'stg.LAYOUT_486';
         EXEC ops.sp_asig_devolucion    @id_corrida, @forzar_devolucion;
+        IF @aplicar_retiro IS NULL
+            EXEC ops.sp_retiro_decidir @id_corrida, @aplicar_retiro OUTPUT;   -- tope por segmento con el DAT antes de las altas
         EXEC ops.sp_asig_existentes    @id_corrida;                    -- existentes: teléfonos tal como llegan
         EXEC ops.sp_telefonos_refrescar_cyber @id_corrida;             -- quejas (telbaj) y plan de numeración vigentes de CYBER
         EXEC ops.sp_asig_normalizar_telefonos @id_corrida;             -- nuevas y reasignadas: op9.prg (AREA + TELEFONO)
@@ -82,7 +89,8 @@ BEGIN
 
         SET @msg = CONCAT(N'Archivos: ', @recibidos,
                           N' · devoluciones: ', (SELECT COUNT(*) FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id_corrida),
-                          CASE WHEN @aplicar_retiro = 0 THEN N' (pendientes de aplicar con ops.sp_retiro)' ELSE N'' END);
+                          CASE WHEN ISNULL(@aplicar_retiro, 0) = 0 AND EXISTS (SELECT 1 FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id_corrida AND PROCESADA = 0)
+                               THEN N' (pendientes de aplicar con ops.sp_retiro)' ELSE N'' END);
         EXEC ops.sp_corrida_finalizar @id_corrida, 'OK', @msg;
         /* Fin de asignación: se manda después de arribar a CYBER con EXEC ops.sp_avisar @id_corrida, 'CONFIRMACION_ASIG_486'
            Si hubo devolución: EXEC ops.sp_exportar_salidas @id_corrida, @zip = 'RETIROS', @enviar_zip = 1 (correo único de devolución) */
@@ -95,13 +103,42 @@ BEGIN
         EXEC ops.sp_retroceso_automatico @id_corrida;
         THROW;
     END CATCH;
+
+    /* Ya terminó OK: lo que sigue no cambia el estatus de la corrida si falla (queda en la bitácora) */
+    /* Foto de lo que le falta a CYBER para el arribo automático (antes de escribir archivos) */
+    IF ISNULL(cfg.fn_param('486', 'ARRIBO_AUTOMATICO'), '0') = '1'
+    BEGIN
+        IF EXISTS (SELECT 1 FROM sys.servers WHERE name = ISNULL(cfg.fn_param('486', 'CYBER_LINKED_SERVER'), 'CYBER'))
+        BEGIN
+            BEGIN TRY
+                EXEC ops.sp_arribo_base @id_corrida;
+            END TRY
+            BEGIN CATCH
+                SET @msg = CONCAT(N'No se pudo tomar la foto de CYBER; se toma en la primera vuelta del arribo: ', ERROR_MESSAGE());
+                EXEC ops.sp_log @id_corrida, 'ARRIBO BASE', 'AVISO', NULL, @msg;
+            END CATCH;
+        END
+        ELSE
+            EXEC ops.sp_log @id_corrida, 'ARRIBO BASE', 'AVISO', NULL, N'Sin servidor vinculado a CYBER: la foto se toma en la primera vuelta del arribo';
+    END;
+    /* Retiro automático: archivos, ZIP y correo, RETIRO en CYBER y copia de la devolución */
+    IF @aplicar_retiro = 1 AND ISNULL(cfg.fn_param('486', 'RETIRO_AUTOMATICO'), '0') = '1'
+    BEGIN
+        BEGIN TRY
+            EXEC ops.sp_retiro_cerrar @id_corrida;
+        END TRY
+        BEGIN CATCH
+            SET @msg = ERROR_MESSAGE();
+            EXEC ops.sp_log @id_corrida, 'RETIRO CERRAR', 'ERROR', NULL, @msg;
+        END CATCH;
+    END;
 END;
 GO
 
 CREATE OR ALTER PROCEDURE ops.sp_actualizacion_486
     @fecha          DATE    = NULL,
     @hora_llegada   TIME(0) = NULL,
-    @aplicar_retiro BIT     = 0,
+    @aplicar_retiro BIT     = NULL,        -- NULL = automático (RETIRO_AUTOMATICO y tope); 1 = aplica; 0 = queda para revisión
     @id_corrida     INT     = NULL OUTPUT
 AS
 BEGIN
@@ -116,6 +153,8 @@ BEGIN
         EXEC ops.sp_validar            @id_corrida, 'POST_CARGA';     -- pagos negativos (se excluyen y se avisa), pagos a T-1 (alerta)
         EXEC ops.sp_act_preparar       @id_corrida;
         EXEC ops.sp_validar            @id_corrida, 'RETIRO';         -- criterios de retiro -> ops.DEVOLUCION
+        IF @aplicar_retiro IS NULL
+            EXEC ops.sp_retiro_decidir @id_corrida, @aplicar_retiro OUTPUT;   -- tope por segmento
         EXEC ops.sp_act_aplicar        @id_corrida;
         EXEC ops.sp_act_pagos          @id_corrida;
         EXEC ops.sp_homologar          @id_corrida, 'dat.DAT_486';     -- estructura.prg: REE por segmento, tramo y tipo
@@ -126,7 +165,8 @@ BEGIN
 
         SET @msg = CONCAT(N'Archivos: ', @recibidos,
                           N' · devoluciones: ', (SELECT COUNT(*) FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id_corrida),
-                          CASE WHEN @aplicar_retiro = 0 THEN N' (pendientes de aplicar con ops.sp_retiro)' ELSE N'' END);
+                          CASE WHEN ISNULL(@aplicar_retiro, 0) = 0 AND EXISTS (SELECT 1 FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id_corrida AND PROCESADA = 0)
+                               THEN N' (pendientes de aplicar con ops.sp_retiro)' ELSE N'' END);
         EXEC ops.sp_corrida_finalizar @id_corrida, 'OK', @msg;
     END TRY
     BEGIN CATCH
@@ -137,6 +177,18 @@ BEGIN
         EXEC ops.sp_retroceso_automatico @id_corrida;
         THROW;
     END CATCH;
+
+    /* Retiro automático: archivos, ZIP y correo, RETIRO en CYBER y copia de la devolución */
+    IF @aplicar_retiro = 1 AND ISNULL(cfg.fn_param('486', 'RETIRO_AUTOMATICO'), '0') = '1'
+    BEGIN
+        BEGIN TRY
+            EXEC ops.sp_retiro_cerrar @id_corrida;
+        END TRY
+        BEGIN CATCH
+            SET @msg = ERROR_MESSAGE();
+            EXEC ops.sp_log @id_corrida, 'RETIRO CERRAR', 'ERROR', NULL, @msg;
+        END CATCH;
+    END;
 END;
 GO
 

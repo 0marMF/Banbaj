@@ -83,7 +83,8 @@ BEGIN
         BEGIN
             SET @asunto = REPLACE(@asunto, N'{{' + @k + N'}}', ISNULL(@v, N''));
             SET @cuerpo = REPLACE(@cuerpo, N'{{' + @k + N'}}',
-                          REPLACE(REPLACE(REPLACE(ISNULL(@v, N''), N'&', N'&amp;'), N'<', N'&lt;'), N'>', N'&gt;'));
+                          CASE WHEN @k LIKE N'HTML[_]%' THEN ISNULL(@v, N'')       -- HTML_*: ya viene armado y escapado (mail.sp_hallazgo)
+                               ELSE REPLACE(REPLACE(REPLACE(ISNULL(@v, N''), N'&', N'&amp;'), N'<', N'&lt;'), N'>', N'&gt;') END);
             FETCH NEXT FROM val INTO @k, @v;
         END;
         CLOSE val; DEALLOCATE val;
@@ -161,5 +162,53 @@ BEGIN
     WHERE LISTA = @lista AND EMAIL = LOWER(LTRIM(RTRIM(@email))) AND (@tipo IS NULL OR TIPO = @tipo);
     IF @@ROWCOUNT = 0
         THROW 50061, 'El correo no está en esa lista.', 1;
+END;
+GO
+
+/* Correo de hallazgos (decisión 02/11): avisa al equipo de asignaciones (plantilla HALLAZGO_486,
+   lista ASIGNACIONES_486) lo que Banbaj encontró y no pudo resolver solo: un retiro que supera el
+   tope y se vuelve manual, un arribo a CYBER o un cierre de retiro que falló.
+   El correo dice qué pasó, trae una tabla con el detalle (@tabla_json: arreglo de objetos, una
+   columna por llave) y qué hacer. El mismo hallazgo no se repite en la misma corrida.
+   Queda registro en ops.BITACORA (paso HALLAZGO). */
+CREATE OR ALTER PROCEDURE mail.sp_hallazgo
+    @id_corrida  INT,
+    @tipo        NVARCHAR(100),             -- título corto (va en el asunto)
+    @detalle     NVARCHAR(4000),            -- qué pasó
+    @accion      NVARCHAR(4000) = NULL,     -- qué hacer
+    @tabla_json  NVARCHAR(MAX)  = NULL,     -- [{"Segmento":"TDC","A retirar":"120"}, …]
+    @solo_prueba BIT            = 0
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @cliente VARCHAR(10), @proceso VARCHAR(10), @tabla NVARCHAR(MAX) = N'', @th NVARCHAR(MAX), @tr NVARCHAR(MAX),
+            @json NVARCHAR(MAX), @clave NVARCHAR(400) = LEFT(CONCAT(@tipo, N': ', @detalle), 400);
+    SELECT @cliente = CLIENTE, @proceso = PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
+    SET @cliente = ISNULL(@cliente, '486');
+
+    IF @solo_prueba = 0 AND EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'HALLAZGO' AND MENSAJE = @clave)
+        RETURN 0;
+
+    IF ISJSON(@tabla_json) = 1 AND LEFT(LTRIM(@tabla_json), 1) = N'['
+    BEGIN
+        SELECT @th = STRING_AGG(CAST(N'<th style="border:1px solid #999;padding:4px 8px;background:#e8eef7;text-align:left">'
+                     + REPLACE(REPLACE(REPLACE([key], N'&', N'&amp;'), N'<', N'&lt;'), N'>', N'&gt;') + N'</th>' AS NVARCHAR(MAX)), N'')
+        FROM OPENJSON(JSON_QUERY(@tabla_json, '$[0]'));
+        SELECT @tr = STRING_AGG(CAST(N'<tr>' + c.TD + N'</tr>' AS NVARCHAR(MAX)), N'') WITHIN GROUP (ORDER BY CAST(r.[key] AS INT))
+        FROM OPENJSON(@tabla_json) r
+        CROSS APPLY (SELECT STRING_AGG(CAST(N'<td style="border:1px solid #999;padding:4px 8px">'
+                         + REPLACE(REPLACE(REPLACE(ISNULL(v.[value], N''), N'&', N'&amp;'), N'<', N'&lt;'), N'>', N'&gt;') + N'</td>' AS NVARCHAR(MAX)), N'') AS TD
+                     FROM OPENJSON(r.[value]) v) c
+        WHERE r.[type] = 5;
+        IF @th IS NOT NULL
+            SET @tabla = N'<table style="border-collapse:collapse;font-family:Arial;font-size:12px;margin:8px 0"><tr>' + @th + N'</tr>' + ISNULL(@tr, N'') + N'</table>';
+    END;
+
+    SET @json = (SELECT @tipo AS TIPO, @detalle AS DETALLE, ISNULL(@accion, N'Revisar la bitácora de la corrida.') AS ACCION,
+                        ISNULL(@proceso, N'') AS PROCESO, @tabla AS HTML_TABLA
+                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
+    IF @solo_prueba = 0 EXEC ops.sp_log @id_corrida, 'HALLAZGO', 'AVISO', NULL, @clave;
+    EXEC mail.sp_enviar @plantilla = 'HALLAZGO_486', @id_corrida = @id_corrida, @valores = @json, @solo_prueba = @solo_prueba;
+    RETURN 0;
 END;
 GO

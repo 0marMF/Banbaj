@@ -116,7 +116,8 @@ CREATE OR ALTER PROCEDURE ops.sp_exportar_salidas
     @zip          NVARCHAR(100) = NULL,     -- archivos que van en el ZIP con contraseña (ej. RETIROS)
     @carpeta_zip  NVARCHAR(400) = NULL,     -- NULL = parámetro CARPETA_ZIP (C:\)
     @enviar_zip   BIT           = 0,        -- 1 = correo de devolución: Operación con el ZIP, AEM en copia oculta sin él
-    @solo_mostrar BIT           = 0
+    @solo_mostrar BIT           = 0,
+    @sin_subcarpeta BIT         = 0         -- 1 = escribe directo en @carpeta, sin <aaaammdd>_corrida<id>\ (copia de la devolución a CYBER)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -130,7 +131,7 @@ BEGIN
 
     SET @carpeta = ISNULL(NULLIF(@carpeta, N''), ISNULL(cfg.fn_param(@cliente, 'RUTA_SALIDA'), N'C:\BANBAJ\486\SALIDA\'));
     IF RIGHT(@carpeta, 1) <> N'\' SET @carpeta += N'\';
-    SET @destino = CONCAT(@carpeta, CONVERT(CHAR(8), @fecha, 112), N'_corrida', @id_corrida, N'\');
+    SET @destino = CASE WHEN @sin_subcarpeta = 1 THEN @carpeta ELSE CONCAT(@carpeta, CONVERT(CHAR(8), @fecha, 112), N'_corrida', @id_corrida, N'\') END;
     SET @carpeta_zip = ISNULL(NULLIF(@carpeta_zip, N''), ISNULL(cfg.fn_param(@cliente, 'CARPETA_ZIP'), N'C:\'));
     IF RIGHT(@carpeta_zip, 1) <> N'\' SET @carpeta_zip += N'\';
 

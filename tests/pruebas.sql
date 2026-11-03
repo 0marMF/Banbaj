@@ -43,6 +43,8 @@ UPDATE cfg.ARCHIVO SET RUTA = '/datos/act_ok/', CODEPAGE = '' WHERE CLIENTE = '4
 INSERT INTO dat.FOLIO_CONSECUTIVO (CLIENTE, ULTIMO_FOLIO) VALUES ('486', 100000);
 /* El escenario de prueba corre la asignación antes que la actualización; el candado se prueba aparte */
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'ASIG_REQUIERE_ACT';
+/* El retiro automático se prueba aparte (sql/77); el escenario usa @aplicar_retiro explícito */
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'RETIRO_AUTOMATICO';
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO) VALUES ('486', 'CUENTA', '20000008', 'Prueba de exclusión');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'TELEFONO', '5533333333', '486-104', 'Prueba de queja (TELBAJ)');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'CORREO', 'malo@correo.com', '20000009', 'Prueba de EMAILMALO');
@@ -276,21 +278,88 @@ FROM (SELECT N'ARRIBO CORREOS: bandera, remesa y JSP_CORREOS_486 en orden' AS p,
                     (SELECT COUNT(*) FROM @pl WHERE SCRIPT = 'MAIL_ACTUALIZA' AND PLSQL = N'BEGIN RCVRY.JSP_CORREOS_486; COMMIT; END;')) AS o) x;
 
 DECLARE @ar NVARCHAR(400), @ars NVARCHAR(2000) = N'';
+/* Foto de pendientes con CYBER vacío: todas las cuentas del SCBSDOS y todos los teléfonos del SCBTEL faltan */
 TRUNCATE TABLE stg.CYBER_DELQMST_ACT; TRUNCATE TABLE stg.CYBER_PHONE_G1;
+EXEC ops.sp_arribo_base @id, @sin_bajar = 1;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ARRIBO BASE: pendientes = cuentas del SCBSDOS y teléfonos del SCBTEL que no están en CYBER' AS p,
+             CONCAT((SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS'), '|0|', (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @id)) AS e,
+             CONCAT((SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'CUENTA'), '|',
+                    (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'DOMICILIO'), '|',
+                    (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'TELEFONO')) AS o) x;
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- nada subido
-INSERT INTO stg.CYBER_DELQMST_ACT (CUENTA) SELECT CUENTA2 FROM dat.HISTORIA_FOLIO WHERE ID_CORRIDA_ALTA = @id;
+INSERT INTO stg.CYBER_DELQMST_ACT (CUENTA, DOMICILIO)
+SELECT pru.fn_campo(LINEA, 'CUENTA'), pru.fn_campo(LINEA, 'DMADDR1') FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS';
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- SCBSDOS subido: correos (sin servidor vinculado -> ERROR)
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- correos ya intentados; teléfonos esperando
 INSERT INTO stg.CYBER_PHONE_G1 (CUENTA, AREA, TELEFONO) SELECT CUENTA2, AREA, TELEFONO FROM ops.TELEFONO WHERE ID_CORRIDA = @id;
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- SCBTEL subido: teléfonos
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar;           -- ya no repite
-TRUNCATE TABLE stg.CYBER_DELQMST_ACT; TRUNCATE TABLE stg.CYBER_PHONE_G1;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'ARRIBO AUTO: espera, detecta SCBSDOS (altas en DELQMST) y SCBTEL (teléfonos de altas en PHONE_G1), una vez cada uno' AS p,
-             N'ESPERANDO ARRIBO,CORREOS ERROR,ESPERANDO ARRIBO,TELEFONOS ERROR,ARRIBO AUTOMATICO TERMINADO|1|1' AS e,
+FROM (SELECT N'ARRIBO AUTO: espera, detecta SCBSDOS (pendientes en DELQMST) y SCBTEL (pendientes en PHONE_G1), una vez cada uno' AS p,
+             N'ESPERANDO ARRIBO,CORREOS ERROR,ESPERANDO ARRIBO,TELEFONOS ERROR,ARRIBO AUTOMATICO TERMINADO|1|1|2' AS e,
              CONCAT(@ars, '|',
                     (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO CORREOS' AND ESTATUS = 'ERROR'), '|',
-                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO TELEFONOS' AND ESTATUS = 'ERROR')) AS o) x;
+                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO TELEFONOS' AND ESTATUS = 'ERROR'), '|',
+                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'HALLAZGO' AND MENSAJE LIKE N'Arribo de % a CYBER con error:%')) AS o) x;
+
+/* Día sin cuentas nuevas ni teléfonos nuevos: CYBER ya tiene todo salvo un domicilio que cambió.
+   Los teléfonos se arriban de inmediato; los correos esperan a que el SCBSDOS suba el domicilio nuevo. */
+DELETE FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO IN ('ARRIBO CORREOS', 'ARRIBO TELEFONOS', 'ARRIBO BASE', 'HALLAZGO');
+DECLARE @cta_dom NVARCHAR(28) = (SELECT MIN(CUENTA) FROM stg.CYBER_DELQMST_ACT WHERE ISNULL(DOMICILIO, N'') <> N'');
+UPDATE stg.CYBER_DELQMST_ACT SET DOMICILIO = N'DOMICILIO ANTERIOR' WHERE CUENTA = @cta_dom;
+SET @ars = N'';
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- toma la foto (1 domicilio pendiente) y arriba teléfonos
+UPDATE s SET DOMICILIO = pru.fn_campo(l.LINEA, 'DMADDR1')
+FROM stg.CYBER_DELQMST_ACT s JOIN ops.SALIDA_LINEA l ON l.ID_CORRIDA = @id AND l.ARCHIVO = 'SCBSDOS' AND pru.fn_campo(l.LINEA, 'CUENTA') = s.CUENTA
+WHERE s.CUENTA = @cta_dom;
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar;           -- SCBSDOS con el domicilio nuevo: correos
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'ARRIBO AUTO sin cuentas nuevas: detecta por domicilio pendiente; sin teléfonos pendientes arriba de inmediato' AS p,
+             N'0|1|0|TELEFONOS ERROR,CORREOS ERROR' AS e,
+             CONCAT((SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'CUENTA'), '|',
+                    (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'DOMICILIO'), '|',
+                    (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'TELEFONO'), '|', @ars) AS o) x;
+TRUNCATE TABLE stg.CYBER_DELQMST_ACT; TRUNCATE TABLE stg.CYBER_PHONE_G1;
+
+/* Retiro automático (sql/77): tope por segmento y hallazgo al equipo de asignaciones */
+DECLARE @rap BIT, @rap1 BIT, @cta1 VARCHAR(20), @ntdc INT = (SELECT COUNT(*) FROM dat.DAT_486 WHERE SEGMENTO2 = 'TDC');
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE = 'RETIRO_AUTOMATICO';
+SELECT TOP (1) @cta1 = CUENTA FROM dat.DAT_486 WHERE SEGMENTO2 = 'TDC' ORDER BY CUENTA;
+INSERT INTO ops.DEVOLUCION (ID_CORRIDA, CLIENTE, CUENTA, SEGMENTO2, MOTIVO, ORIGEN) VALUES (@id, '486', @cta1, 'TDC', 'PRUEBA', 'PRUEBA');
+EXEC ops.sp_retiro_decidir @id, @rap1 OUTPUT;                -- 1 de @ntdc: dentro del tope si @ntdc >= 2
+INSERT INTO ops.DEVOLUCION (ID_CORRIDA, CLIENTE, CUENTA, SEGMENTO2, MOTIVO, ORIGEN)
+SELECT @id, '486', CUENTA, 'TDC', 'PRUEBA', 'PRUEBA' FROM dat.DAT_486 WHERE SEGMENTO2 = 'TDC' AND CUENTA <> @cta1;
+EXEC ops.sp_retiro_decidir @id, @rap OUTPUT;                 -- todo el segmento: 100 % > 50 %
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'RETIRO AUTO: se aplica solo dentro del tope; con todo el segmento se detiene y avisa a asignaciones' AS p,
+             CONCAT(CASE WHEN @ntdc >= 2 THEN 1 ELSE 0 END, '|0|', @ntdc, '|1|1') AS e,
+             CONCAT(@rap1, '|', @rap, '|',
+                    (SELECT COUNT(*) FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id AND PROCESADA = 0), '|',
+                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'RETIRO AUTOMATICO' AND ESTATUS = 'AVISO' AND MENSAJE LIKE N'%supera el tope de 50.00[%]%'), '|',
+                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'HALLAZGO' AND MENSAJE LIKE N'Retiro detenido: supera el tope:%')) AS o) x;
+DELETE FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id AND PROCESADA = 0;
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'RETIRO_AUTOMATICO';
+
+/* Cierre del retiro: plan de pasos (la corrida ya aplicó su retiro) */
+DECLARE @rc TABLE (PASO INT, QUE VARCHAR(30), DETALLE NVARCHAR(400), ESTADO VARCHAR(20));
+INSERT INTO @rc EXEC ops.sp_retiro_cerrar @id, @solo_mostrar = 1;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'RETIRO CERRAR: archivos+ZIP+correo, RETIRO en CYBER y copia de la devolución, pendientes' AS p,
+             N'RETIRO ARCHIVOS:PENDIENTE,RETIRO CYBER:PENDIENTE,RETIRO DEVOL CYBER:PENDIENTE|1' AS e,
+             CONCAT((SELECT STRING_AGG(CONCAT(QUE, ':', ESTADO), ',') WITHIN GROUP (ORDER BY PASO) FROM @rc), '|',
+                    (SELECT COUNT(*) FROM @rc WHERE PASO = 3 AND DETALLE LIKE N'%\\192.168.50.1\Cyber_00\dev\%')) AS o) x;
+
+/* Correo de hallazgos: solo al equipo de asignaciones, con tabla armada y escapada */
+DECLARE @hz TABLE (PARA NVARCHAR(MAX), CC NVARCHAR(MAX), CCO NVARCHAR(MAX), ASUNTO NVARCHAR(255), CUERPO NVARCHAR(MAX), ADJ NVARCHAR(MAX));
+INSERT INTO @hz EXEC mail.sp_hallazgo @id, N'Prueba de hallazgo', N'Detalle <b>escapado</b>', N'Nada', N'[{"Segmento":"TDC","Porcentaje":"80%"}]', 1;
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'HALLAZGO: va a asignaciones (sin Operación ni AEM), asunto con el tipo y tabla HTML',
+       CASE WHEN PARA LIKE N'%asig.486.cdmx@sertec.com.mx%' AND ISNULL(PARA, N'') + ISNULL(CC, N'') + ISNULL(CCO, N'') NOT LIKE N'%soluciones%'
+                 AND ISNULL(PARA, N'') + ISNULL(CC, N'') + ISNULL(CCO, N'') NOT LIKE N'%aem.%'
+                 AND ASUNTO LIKE N'Banbaj 486: Prueba de hallazgo (corrida%' AND CUERPO LIKE N'%<th %>Segmento</th>%<td %>80[%]</td>%'
+                 AND CUERPO LIKE N'%Detalle &lt;b&gt;escapado&lt;/b&gt;%' THEN 1 ELSE 0 END,
+       LEFT(CONCAT(PARA, ' | ', ASUNTO), 4000)
+FROM @hz;
 
 /* op9.prg: las cuentas nuevas guardan sus teléfonos como AREA + TELEFONO; las existentes, como llegan */
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
