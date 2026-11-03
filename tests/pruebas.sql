@@ -44,7 +44,8 @@ INSERT INTO dat.FOLIO_CONSECUTIVO (CLIENTE, ULTIMO_FOLIO) VALUES ('486', 100000)
 /* El escenario de prueba corre la asignación antes que la actualización; el candado se prueba aparte */
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'ASIG_REQUIERE_ACT';
 /* El retiro automático se prueba aparte (sql/77); el escenario usa @aplicar_retiro explícito */
-UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'RETIRO_AUTOMATICO';
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486'
+   AND CLAVE IN ('RETIRO_AUTOMATICO', 'EXPORTAR_AUTOMATICO', 'ACT_CYBER_AUTOMATICO', 'BLANQUEO_AUTOMATICO', 'CONFIRMACION_AUTOMATICA', 'CUADRE_AUTOMATICO');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO) VALUES ('486', 'CUENTA', '20000008', 'Prueba de exclusión');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'TELEFONO', '5533333333', '486-104', 'Prueba de queja (TELBAJ)');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'CORREO', 'malo@correo.com', '20000009', 'Prueba de EMAILMALO');
@@ -997,6 +998,82 @@ SET @o = CONCAT((SELECT COUNT(*) FROM cfg.TEL_QUEJA_CYBER), '|', (SELECT COUNT(*
 EXEC pru.sp_igual N'TEL CYBER: sin fuentes avisa y conserva quejas y plan', N'2|3|2', @o;
 EXEC ops.sp_corrida_finalizar @id, 'OK', N'Prueba de teléfonos de CYBER';
 IF EXISTS (SELECT 1 FROM sys.servers WHERE name = 'LOOP_PRUEBA') EXEC sp_dropserver 'LOOP_PRUEBA', 'droplogins';
+GO
+
+/* ---------------------------------------------------------------------
+   Pasos automáticos (sql/78): scripts de la actualización en CYBER, cuadre de pagos,
+   confirmación de la asignación, blanqueo de status y escritura de archivos
+   --------------------------------------------------------------------- */
+DECLARE @act INT = (SELECT MIN(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ACT' AND ESTATUS = 'OK'), @r NVARCHAR(400), @rs NVARCHAR(2000) = N'';
+DECLARE @ac TABLE (ORDEN INT, SCRIPT VARCHAR(40), LINEAS INT, ESTADO VARCHAR(20));
+INSERT INTO @ac EXEC ops.sp_act_cyber @act, @solo_mostrar = 1;
+SET @rs = (SELECT STRING_AGG(CONCAT(SCRIPT, ':', ESTADO), ',') WITHIN GROUP (ORDER BY ORDEN) FROM @ac);
+EXEC pru.sp_igual N'ACT CYBER: los cuatro scripts de la actualización pendientes',
+     N'ACT_SALDOS:PENDIENTE,ACT_VENCIDO:PENDIENTE,ACT_PAGMIN:PENDIENTE,ACT_PVS_REE:PENDIENTE', @rs;
+EXEC ops.sp_act_cyber @act, @resultado = @r OUTPUT;           -- sin servidor vinculado: cada script queda en ERROR y se avisa una vez
+SET @rs = CONCAT(@r, '|', (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @act AND PASO LIKE 'ACT CYBER %' AND ESTATUS = 'ERROR'), '|',
+                 (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @act AND PASO = 'HALLAZGO' AND MENSAJE LIKE N'Actualización en CYBER con error:%'));
+EXEC pru.sp_igual N'ACT CYBER: sin CYBER quedan los cuatro en ERROR y llega un hallazgo', N'ACTUALIZACION EN CYBER CON ERRORES|4|1', @rs;
+
+/* Cuadre de pagos: espera mientras faltan pagos; a la hora límite avisa los que no subieron */
+DECLARE @c INT;
+EXEC ops.sp_corrida_iniciar '486', 'ACT', '2030-01-07', NULL, @c OUTPUT;
+EXEC ops.sp_corrida_finalizar @c, 'OK', N'Prueba de cuadre';
+INSERT INTO dat.PAGO_ARRIBADO (CLIENTE, CUENTA, CUENTA2, FE_PAG, IMPORTE, FE_REG, ID_CORRIDA)
+VALUES ('486', 'C1', '486-901', '2030-01-06', 150.00, '2030-01-07', @c), ('486', 'C2', '486-902', '2030-01-06', 99.50, '2030-01-07', @c);
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE = 'CUADRE_AUTOMATICO';
+SET @rs = N'';
+TRUNCATE TABLE stg.CYBER_PAGO;
+EXEC ops.sp_cuadre_automatico @fecha = '2030-01-07', @sin_bajar = 1, @hora = '10:00', @resultado = @r OUTPUT; SET @rs += @r + N',';
+INSERT INTO stg.CYBER_PAGO (CUENTA, MONTO, FECHA) VALUES (N'486-901', N'150.00', N'07/01/2030');
+EXEC ops.sp_cuadre_automatico @fecha = '2030-01-07', @sin_bajar = 1, @hora = '12:00', @resultado = @r OUTPUT; SET @rs += @r + N',';
+INSERT INTO stg.CYBER_PAGO (CUENTA, MONTO, FECHA) VALUES (N'486-901', N'150.00', N'07/01/2030');
+EXEC ops.sp_cuadre_automatico @fecha = '2030-01-07', @sin_bajar = 1, @hora = '17:30', @resultado = @r OUTPUT; SET @rs += @r + N',';
+EXEC ops.sp_cuadre_automatico @fecha = '2030-01-07', @sin_bajar = 1, @hora = '18:00', @resultado = @r OUTPUT; SET @rs += @r;
+SET @rs = CONCAT(@rs, '|', (SELECT COUNT(*) FROM ops.RECHAZO WHERE ID_CORRIDA = @c AND ORIGEN = 'CUADRE_PAGOS'), '|',
+                 (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @c AND PASO = 'HALLAZGO' AND MENSAJE LIKE N'Pagos que no subieron a CYBER:%'));
+EXEC pru.sp_igual N'CUADRE AUTO: espera al SCBPAG, a la hora límite avisa el pago que no subió y no repite',
+     N'ESPERANDO PAGOS EN CYBER (0 de 2),ESPERANDO PAGOS EN CYBER (1 de 2),PAGOS SIN SUBIR: 1,CUADRE TERMINADO|1|1', @rs;
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'CUADRE_AUTOMATICO';
+
+/* Confirmación: solo con correos y teléfonos OK; marca el fin del arribo y manda CONFIRMACION_ASIG_486 una vez */
+DECLARE @g INT;
+EXEC ops.sp_corrida_iniciar '486', 'ASIG', '2030-01-07', NULL, @g OUTPUT;
+EXEC ops.sp_corrida_finalizar @g, 'OK', N'Prueba de confirmación';
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE = 'CONFIRMACION_AUTOMATICA';
+EXEC ops.sp_log @g, 'ARRIBO CORREOS', 'OK', 1, N'prueba';
+EXEC ops.sp_arribo_posterior @g;                               -- falta teléfonos: no confirma
+SET @rs = CAST((SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @g AND PLANTILLA = 'CONFIRMACION_ASIG_486') AS NVARCHAR(10));
+EXEC ops.sp_log @g, 'ARRIBO TELEFONOS', 'OK', 1, N'prueba';
+EXEC ops.sp_arribo_posterior @g;
+EXEC ops.sp_arribo_posterior @g;                               -- no repite
+SET @rs = CONCAT(@rs, '|', (SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @g AND PLANTILLA = 'CONFIRMACION_ASIG_486'), '|',
+                 (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @g AND PASO = 'ARRIBO FIN'), '|',
+                 (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @g AND PASO = 'CONFIRMACION AUTOMATICA' AND ESTATUS = 'OK'));
+EXEC pru.sp_igual N'CONFIRMACION AUTO: espera correos y teléfonos OK, marca el fin y manda el correo una sola vez', N'0|1|1|1', @rs;
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'CONFIRMACION_AUTOMATICA';
+
+/* Blanqueo: fuera de los días 1 a 10 no hace nada; dentro, sin CYBER queda en ERROR con hallazgo */
+DECLARE @g15 INT;
+EXEC ops.sp_corrida_iniciar '486', 'ASIG', '2030-01-15', NULL, @g15 OUTPUT;
+EXEC ops.sp_corrida_finalizar @g15, 'OK', N'Prueba de blanqueo';
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE = 'BLANQUEO_AUTOMATICO';
+EXEC ops.sp_blanqueo_automatico @g15;
+EXEC ops.sp_blanqueo_automatico @g;
+EXEC ops.sp_blanqueo_automatico @g;                            -- una vez por corrida
+SET @rs = CONCAT((SELECT MAX(ESTATUS) FROM ops.BITACORA WHERE ID_CORRIDA = @g15 AND PASO = 'BLANQUEO AUTOMATICO' AND MENSAJE LIKE N'Hoy no toca%'), '|',
+                 (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @g AND PASO = 'BLANQUEO AUTOMATICO' AND ESTATUS = 'ERROR'), '|',
+                 (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @g AND PASO = 'HALLAZGO' AND MENSAJE LIKE N'Blanqueo de status con error:%'));
+EXEC pru.sp_igual N'BLANQUEO AUTO: respeta los días, sin CYBER queda en ERROR con hallazgo y no repite', N'OK|1|1', @rs;
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'BLANQUEO_AUTOMATICO';
+
+/* Escritura automática: apagada no hace nada; encendida deja constancia (OK o ERROR con hallazgo) */
+EXEC ops.sp_exportar_auto @g15;
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE = 'EXPORTAR_AUTOMATICO';
+EXEC ops.sp_exportar_auto @g15;
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'EXPORTAR_AUTOMATICO';
+SET @rs = CAST((SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @g15 AND PASO = 'EXPORTAR AUTOMATICO') AS NVARCHAR(10));
+EXEC pru.sp_igual N'EXPORTAR AUTO: apagado no escribe; encendido deja constancia en la bitácora', N'1', @rs;
 GO
 
 /* ---------------------------------------------------------------------

@@ -327,6 +327,7 @@ BEGIN
     SET @hecho_t = CASE WHEN EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO TELEFONOS' AND ESTATUS IN ('OK', 'ERROR')) THEN 1 ELSE 0 END;
     IF @hecho_c = 1 AND @hecho_t = 1
     BEGIN
+        EXEC ops.sp_arribo_posterior @id;          -- blanqueo y confirmación, si quedaron pendientes (p. ej. tras un arribo a mano)
         SET @resultado = N'ARRIBO AUTOMATICO TERMINADO';
         SELECT @resultado AS ARRIBO, @id AS CORRIDA;
         RETURN;
@@ -402,6 +403,7 @@ BEGIN
         END CATCH;
     END;
 
+    EXEC ops.sp_arribo_posterior @id;              -- blanqueo de status y confirmación de la asignación
     SET @resultado = CASE WHEN @res = N'' THEN N'ESPERANDO ARRIBO' ELSE RTRIM(LEFT(@res, LEN(@res) - 1)) END;
     SELECT @resultado AS ARRIBO, @id AS CORRIDA,
            CONCAT(@r_c, N' de ', @p_c) AS CUENTAS_PENDIENTES_EN_CYBER, CONCAT(@r_d, N' de ', @p_d) AS DOMICILIOS_PENDIENTES_EN_CYBER,

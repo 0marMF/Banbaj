@@ -122,6 +122,7 @@ BEGIN
             EXEC ops.sp_log @id_corrida, 'ARRIBO BASE', 'AVISO', NULL, N'Sin servidor vinculado a CYBER: la foto se toma en la primera vuelta del arribo';
     END;
     /* Retiro automático: archivos, ZIP y correo, RETIRO en CYBER y copia de la devolución */
+    /* Sin retiro: solo se escriben los archivos (EXPORTAR_AUTOMATICO); con retiro, sp_retiro_cerrar los escribe con el ZIP */
     IF @aplicar_retiro = 1 AND ISNULL(cfg.fn_param('486', 'RETIRO_AUTOMATICO'), '0') = '1'
     BEGIN
         BEGIN TRY
@@ -131,7 +132,9 @@ BEGIN
             SET @msg = ERROR_MESSAGE();
             EXEC ops.sp_log @id_corrida, 'RETIRO CERRAR', 'ERROR', NULL, @msg;
         END CATCH;
-    END;
+    END
+    ELSE
+        EXEC ops.sp_exportar_auto @id_corrida;
 END;
 GO
 
@@ -179,6 +182,7 @@ BEGIN
     END CATCH;
 
     /* Retiro automático: archivos, ZIP y correo, RETIRO en CYBER y copia de la devolución */
+    /* Sin retiro: solo se escriben los archivos (EXPORTAR_AUTOMATICO); con retiro, sp_retiro_cerrar los escribe con el ZIP */
     IF @aplicar_retiro = 1 AND ISNULL(cfg.fn_param('486', 'RETIRO_AUTOMATICO'), '0') = '1'
     BEGIN
         BEGIN TRY
@@ -187,6 +191,19 @@ BEGIN
         BEGIN CATCH
             SET @msg = ERROR_MESSAGE();
             EXEC ops.sp_log @id_corrida, 'RETIRO CERRAR', 'ERROR', NULL, @msg;
+        END CATCH;
+    END
+    ELSE
+        EXEC ops.sp_exportar_auto @id_corrida;
+    /* Saldos, vencido, pago mínimo y PVS/REE en CYBER por el servidor vinculado (antes a mano en Oracle) */
+    IF ISNULL(cfg.fn_param('486', 'ACT_CYBER_AUTOMATICO'), '0') = '1'
+    BEGIN
+        BEGIN TRY
+            EXEC ops.sp_act_cyber @id_corrida;
+        END TRY
+        BEGIN CATCH
+            SET @msg = ERROR_MESSAGE();
+            EXEC ops.sp_log @id_corrida, 'ACT CYBER', 'ERROR', NULL, @msg;
         END CATCH;
     END;
 END;
@@ -286,6 +303,15 @@ BEGIN
         SELECT 'ACTUALIZACION DEL DIA SIN TERMINAR OK' AS RESULTADO;
         RETURN;
     END;
+
+    /* Cuadre de pagos contra CYBER: solo avisa si a la hora límite algún pago no subió */
+    BEGIN TRY
+        DECLARE @cuadre NVARCHAR(400);
+        EXEC ops.sp_cuadre_automatico @fecha = @fecha, @resultado = @cuadre OUTPUT;
+    END TRY
+    BEGIN CATCH
+        SELECT 'CUADRE DE PAGOS CON ERROR' AS CUADRE, ERROR_MESSAGE() AS DETALLE;
+    END CATCH;
 
     /* 2. Asignación (puede no llegar) */
     IF EXISTS (SELECT 1 FROM ops.CORRIDA WHERE CLIENTE = '486' AND PROCESO = 'ASIG' AND FECHA_PROCESO = @fecha AND ESTATUS <> 'REVERTIDA')

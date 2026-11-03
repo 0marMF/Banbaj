@@ -46,11 +46,13 @@ GO
    SCBPAG de la corrida (dat.PAGO_ARRIBADO) contra lo que CYBER registró hoy
    (stg.CYBER_PAGO, lo llena ops.sp_bajar_cyber 'PAGOS'). Se empareja por
    CUENTA2 + importe; lo que no aparece en CYBER es lo que "no subió".
-   Revisión a mano (fuera del flujo diario, sin correo): los pagos que no subieron
-   quedan en ops.RECHAZO (CUADRE_PAGOS) y en el resultado.
+   Lo corre solo ops.sp_cuadre_automatico (sql/78): si a la hora límite faltan pagos, avisa
+   al equipo de asignaciones (HALLAZGO_486). Los pagos que no subieron quedan en ops.RECHAZO
+   (CUADRE_PAGOS) y en el resultado.
    --------------------------------------------------------------------- */
 CREATE OR ALTER PROCEDURE ops.sp_cuadrar_pagos
-    @id_corrida INT
+    @id_corrida INT,
+    @silencioso BIT = 0          -- 1 = no regresa resultados (lo llama ops.sp_cuadre_automatico)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -83,6 +85,7 @@ BEGIN
     EXEC ops.sp_log @id_corrida, 'CUADRE PAGOS', @est, @no_subieron, @msg;
 
 
+    IF @silencioso = 1 RETURN;
     SELECT @arribados AS ARRIBADOS, @en_cyber AS EN_CYBER, @no_subieron AS NO_SUBIERON;
     SELECT CUENTA2, IMPORTE FROM #no ORDER BY CUENTA2;
 END;

@@ -159,7 +159,9 @@ BEGIN
             SET @msg = ERROR_MESSAGE();
             EXEC ops.sp_log @id_corrida, 'RETIRO CERRAR', 'ERROR', NULL, @msg;
         END CATCH;
-    END;
+    END
+    ELSE
+        EXEC ops.sp_exportar_auto @id_corrida;
 
     SELECT r.VALOR, r.TIPO, r.RESULTADO, h.CUENTA2, h.FOLIO
     FROM #r r

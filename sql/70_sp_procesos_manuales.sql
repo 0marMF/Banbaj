@@ -36,6 +36,7 @@ BEGIN
         EXEC ops.sp_retroceso_automatico @id_corrida;
         THROW;
     END CATCH;
+    EXEC ops.sp_exportar_auto @id_corrida;
 END;
 GO
 /* ---------------------------------------------------------------------
@@ -165,6 +166,7 @@ BEGIN
         EXEC ops.sp_retroceso_automatico @id_corrida;
         THROW;
     END CATCH;
+    EXEC ops.sp_exportar_auto @id_corrida;
 
     SELECT @campo AS CAMPO, RESULTADO, COUNT(*) AS REGISTROS FROM #v GROUP BY RESULTADO ORDER BY RESULTADO;
 END;
@@ -347,8 +349,9 @@ END;
 GO
 
 /* ---------------------------------------------------------------------
-   Correos que se mandan a mano (decisión 30/10):
-     CONFIRMACION_ASIG_486    fin de asignación (MAIL.prg), después de arribar a CYBER
+   Correos (decisión 30/10):
+     CONFIRMACION_ASIG_486    fin de asignación (MAIL.prg), después de arribar a CYBER; desde el 02/11 lo
+                              manda solo ops.sp_confirmar_asignacion cuando el arribo automático termina OK
      DEVOLUCION_486           devolución única (asignación, actualización o solicitud): ops.sp_aviso_devolucion
    Los demás salen solos: INICIO_ASIG_486, ALERTA_NUEVAS_486 y las validaciones.
    --------------------------------------------------------------------- */
