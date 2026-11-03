@@ -17,7 +17,7 @@
 --    sola sentencia y las cuentas activas se revisan con EXISTS.
 --  Índice recomendado: JSP_TAB_MAIL_REMESA_486 (CUENTA).
 --
---  Antes de instalar: confirmar que DELQMST.DMADDR1 es la columna donde
+--  Confirmado (03/11): DELQMST.DMADDR1 es la columna donde
 --  queda el domicilio del SCBSDOS (campo DMADDR1 del layout).
 --------------------------------------------------------
 set define off;

@@ -82,6 +82,60 @@ Lo corre un administrador (sysadmin) en `master`. Hace lo siguiente:
 
 Antes de correrlo, confirmar con Sistemas el servidor SMTP y si pide usuario. Si pide, agregar `@username` y `@password` en `sysmail_add_account_sp`.
 
+**En una instancia nueva**, antes del script:
+
+1. La edición no puede ser Express: no trae Agente (el job) ni Database Mail. Revisar con `SELECT SERVERPROPERTY('Edition');`.
+2. El Agente de SQL Server debe estar en automático y corriendo: Administrador de configuración de SQL Server → Servicios de SQL Server → SQL Server Agent → Propiedades → Modo de inicio **Automático** → Iniciar.
+3. Desde el servidor debe haber salida al SMTP. En PowerShell: `Test-NetConnection 192.168.50.7 -Port 25` debe decir `TcpTestSucceeded : True`. Si no, pedir a Sistemas que abra el puerto o que autorice la IP del servidor como relay.
+4. Correr el script 01 y revisar que llegue la prueba.
+5. Opcional, para que el Agente pueda avisar si el job falla: Agente de SQL Server → Propiedades → Sistema de alertas → Habilitar perfil de correo → `asig.486.cdmx`, y reiniciar el Agente.
+
+Si la prueba no llega:
+
+```sql
+SELECT TOP (20) log_date, description FROM msdb.dbo.sysmail_event_log ORDER BY log_id DESC;   -- el error del SMTP
+SELECT TOP (20) mailitem_id, sent_status, subject FROM msdb.dbo.sysmail_allitems ORDER BY mailitem_id DESC;
+EXEC msdb.dbo.sysmail_help_status_sp;    -- debe decir STARTED; si no: EXEC msdb.dbo.sysmail_start_sp;
+```
+
+Si el SMTP pide usuario, TLS u otro puerto (por ejemplo 587):
+
+```sql
+EXEC msdb.dbo.sysmail_update_account_sp @account_name = N'asig.486.cdmx', @mailserver_name = N'<servidor>', @port = 587,
+     @enable_ssl = 1, @username = N'<usuario>', @password = N'<contraseña>';
+```
+
+### Permisos en carpetas de red
+
+Todo lo que lee o escribe archivos (`BULK INSERT`, OLE, 7-Zip) lo hace la **cuenta del servicio de SQL Server**, no el usuario que ejecuta. Necesita:
+
+| Carpeta | Permiso | Para qué |
+| --- | --- | --- |
+| `\\192.168.50.13\q\CYBER\C_486\` | Lectura | Archivos del banco |
+| `\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\` | Modificar | Copia del DAT para MIS |
+| `\\192.168.50.1\Cyber_00\dev\` | Modificar | Copia de la devolución para CYBER |
+| `RUTA_SALIDA` y `CARPETA_ZIP` (de fábrica `C:\`) | Modificar | Archivos planos, scripts y ZIP |
+
+1. Ver qué cuenta usa el servicio:
+
+   ```sql
+   SELECT servicename, service_account FROM sys.dm_server_services;
+   ```
+
+2. Según lo que salga:
+   - **`NT Service\MSSQLSERVER` (u otra cuenta virtual) y el servidor está en dominio:** hacia la red sale como la cuenta de equipo, `DOMINIO\NOMBRE-DEL-SERVIDOR$`. Se le da permiso a esa cuenta.
+   - **Sin dominio (grupo de trabajo):** la cuenta virtual no puede entrar a otra máquina. Crear un usuario local con el mismo nombre y contraseña en el servidor de SQL y en cada equipo de las carpetas (192.168.50.1 y 192.168.50.13), y ponerlo como cuenta del servicio: Administrador de configuración de SQL Server → SQL Server (MSSQLSERVER) → Propiedades → Iniciar sesión → Esta cuenta → reiniciar el servicio. Ese cambio se hace desde el Administrador de configuración, no desde Servicios de Windows, para que se reasignen los permisos internos.
+   - **Una cuenta de dominio dedicada** (recomendado si hay dominio): ponerla como cuenta del servicio igual que arriba y darle el permiso a ella.
+3. En el equipo de la carpeta (ej. 192.168.50.1): clic derecho en `Cyber_00` → Propiedades → **Compartir** → Uso compartido avanzado → Permisos → agregar la cuenta con **Cambiar**; y en la pestaña **Seguridad**, la misma cuenta con **Modificar** sobre `dev`. Hacen falta los dos (el más restrictivo gana).
+4. Probar desde SQL Server (escribe y borra un archivo de prueba):
+
+   ```sql
+   EXEC xp_cmdshell 'echo prueba > \\192.168.50.1\Cyber_00\dev\prueba_banbaj.txt && del \\192.168.50.1\Cyber_00\dev\prueba_banbaj.txt && echo OK';
+   EXEC xp_cmdshell 'dir \\192.168.50.13\q\CYBER\C_486';
+   ```
+
+   Si dice `Acceso denegado`, falta el permiso de compartir o el de seguridad. Si dice que no encuentra la ruta de red, revisar que el servidor llegue a esa IP.
+
 ### 2. Job diario (`02_crear_job_486.sql`)
 
 Crea el job **Banbaj 486 diario** en el Agente de SQL Server. Corre un solo paso, `EXEC ops.sp_diario_486;`, en la base Banbaj, cada 30 minutos de lunes a viernes entre 07:00 y 22:00. El procedimiento revisa si ya llegaron los archivos y si ya corrió hoy, así que repetirlo no duplica nada. Si la base tiene otro nombre, cambiar `@base` al inicio del script.

@@ -155,7 +155,7 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 
 - [x] `RCVRY.JSP_TELEFONOS_REMESA_486`: versión optimizada en `cyber/486/oracle/JSP_TELEFONOS_REMESA_486.sql` (misma lógica, menos lecturas, corrige el filtro de grupo en PHONE_G1, crea el renglón del validador si falta y deja los errores en la bitácora). [ ] Instalarla en CYBER. Inserta desde `PHONE_G1` (arribo del SCBTEL), inactiva lo que no viene en la remesa y activa lo que sí, sin tocar gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`). El SCBTEL se arriba antes de cargar la remesa.
 - [x] `RCVRY.JSP_VALIDADOR_TELEFONOS`: el script `TEL_BORRA` inserta el renglón del día con el total enviado y el procedimiento lo completa. [ ] Confirmar que la tabla no tiene otras columnas obligatorias además de CLIENTE, FECHA y TOTAL_TELS.
-- [x] `RCVRY.JSP_CORREOS_486`: regla acordada, solo queda activo el domicilio de la última base maestra. Nueva versión en `cyber/486/oracle/JSP_CORREOS_486.sql` (correos igual que hoy; domicilios contra `DELQMST.DMADDR1`). [ ] Instalarla en CYBER y confirmar que `DMADDR1` es la columna del domicilio en `DELQMST`.
+- [x] `RCVRY.JSP_CORREOS_486`: regla acordada, solo queda activo el domicilio de la última base maestra. Nueva versión en `cyber/486/oracle/JSP_CORREOS_486.sql` (correos igual que hoy; domicilios contra `DELQMST.DMADDR1`). [ ] Instalarla en CYBER. [x] Confirmado (03/11): `DMADDR1` es la columna del domicilio en `DELQMST`.
 - [x] Los correos nuevos entran con `ops.sp_bajar_cyber 'CORREOS'` (`MAIL_INSERTA_NUEVOS.sql`), paso obligatorio del arribo; con el arribo automático lo hace el job.
 - [x] **Fecha de retiro en el histórico:** se migra de PURGA solo CUENTA, FOLIO y fecha (02/11). [ ] Confirmar el nombre del campo de fecha en PURGA.DBF (el programa de exportación avisa cuáles no existen).
 
@@ -176,7 +176,7 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [x] Retiro automático en asignación y actualización con tope de 50 % por segmento; arriba del tope queda manual.
 - [x] Cierre del retiro sin intervención: archivos, ZIP y correo de devolución, `dmstatus = 'R'` en CYBER y copia de la devolución a `\\192.168.50.1\Cyber_00\dev\`.
 - [x] Correo de hallazgos (`HALLAZGO_486`) solo al equipo de asignaciones.
-- [ ] Confirmar que `DELQMST.DMADDR1` es el domicilio (parámetro `CYBER_COLUMNA_DOMICILIO`); si no, dejarlo vacío y la detección del SCBSDOS usa solo las cuentas.
+- [x] Confirmado (03/11): el domicilio está en `DELQMST.DMADDR1` (parámetro `CYBER_COLUMNA_DOMICILIO`).
 - [x] (Confirmado 02/11) Permisos del usuario de Oracle.
 - [ ] Permiso de escritura de la cuenta del servicio de SQL Server en `\\192.168.50.1\Cyber_00\dev\`.
 - [ ] Estructura de `PHONE_G1` para usar también el sello de fecha y hora del SCBTEL (`FECHA_G`, `FECHA_A`) como señal.
@@ -188,6 +188,6 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [x] Blanqueo de status automático en cuanto subió el SCBSDOS (`BLANQUEO_AUTOMATICO`).
 - [x] Hora de fin del arribo y `CONFIRMACION_ASIG_486` automáticos (`CONFIRMACION_AUTOMATICA`).
 - [x] Cuadre de pagos automático; solo avisa si algo no subió a la hora límite (`CUADRE_AUTOMATICO`, `CUADRE_PAGOS_HORA_LIMITE` = 17:00).
-- [ ] Confirmar la hora límite del cuadre con Operación (a qué hora ya debe estar arriba el SCBPAG).
+- [x] Confirmado (03/11): hora límite del cuadre 17:00 (el SCBPAG llega temprano).
 - [ ] Sigue a mano subir los archivos de ancho fijo (SCBSDOS, SCBTEL, SCBPAG, gescar). Se puede quitar si el cargador de CYBER toma archivos de una carpeta o con la estructura de `PHONE_G1` y de las tablas que llena el SCBSDOS.
 - [x] (03/11) Correo ARCHIVOS_LISTOS_486 al equipo de asignaciones en cuanto están los planos para arribar.
