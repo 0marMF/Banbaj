@@ -90,6 +90,7 @@ El operador solo sube SCBSDOS, SCBTEL y los gescar. Después del arribo de corre
 | Qué | Cuándo | Procedimiento |
 |---|---|---|
 | Escribir los archivos de la corrida | Al terminar OK cada corrida (asignación, actualización, retiro, etiquetado) | `ops.sp_exportar_auto` |
+| Avisar a asignaciones que ya puede arribar (ARCHIVOS\_LISTOS\_486) | En cuanto se escriben los planos que se suben a CYBER | `ops.sp_aviso_archivos` |
 | Ejecutar en CYBER `ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN` y `ACT_PVS_REE` | Al terminar OK la actualización | `ops.sp_act_cyber` |
 | Cuadrar los pagos del SCBPAG contra `PMTFIL` | En cada vuelta después de la actualización; termina cuando todo subió o a la hora límite (17:00) | `ops.sp_cuadre_automatico` |
 | Blanqueo de status (días 1 a 10) | En cuanto el arribo de correos confirma que subió el SCBSDOS | `ops.sp_blanqueo_automatico` |
@@ -310,6 +311,7 @@ Se mandan con `mail.sp_enviar` usando plantillas de `mail.PLANTILLA` y listas de
 | ALERTA_SDO_ACT_CONS_486 | Consumo con saldo menor o igual a cero en la base | Operación |
 | PAGOS_NEGATIVOS_486 | Llegaron pagos negativos | Equipo de asignaciones |
 | MAESTRA_NUMEROS_EXCEL_486 | Excel cortó números en la base maestra | Equipo de asignaciones |
+| ARCHIVOS_LISTOS_486 | En cuanto se escriben los planos que se suben a CYBER (asignación, actualización, retiro, etiquetado y SCBACTH_SINTEL): carpeta, archivos con sus líneas y qué sigue (`ops.sp_aviso_archivos`) | Equipo de asignaciones |
 | HALLAZGO_486 | Retiro que supera el tope, pagos que no subieron y cualquier paso automático con error (`mail.sp_hallazgo`) | Equipo de asignaciones |
 
 # Respaldo y retroceso

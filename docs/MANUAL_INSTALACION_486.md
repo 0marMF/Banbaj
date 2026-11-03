@@ -122,6 +122,7 @@ SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clav
 | RETIRO\_AUTOMATICO | 1 | Las devoluciones se aplican solas y se cierran (archivos, ZIP, correo, CYBER) si no superan el tope (0 = manual) |
 | RETIRO\_TOPE\_PCT\_ASIG / \_ACT | 50 / 50 | Si la devolución de un segmento supera este % de sus cuentas en el DAT, el retiro queda manual y se avisa a asignaciones |
 | EXPORTAR\_AUTOMATICO | 1 | Cada corrida escribe sus archivos al terminar |
+| AVISO\_ARCHIVOS / ARCHIVOS\_ARRIBO | 1 / SCBSDOS, SCBTEL, gescar, SCBPAG… | Correo ARCHIVOS\_LISTOS\_486 a asignaciones con los planos que se suben a CYBER |
 | ACT\_CYBER\_AUTOMATICO | 1 | La actualización ejecuta sus scripts en CYBER |
 | BLANQUEO\_AUTOMATICO | 1 | Blanqueo de status (días 1 a 10) sin intervención |
 | CONFIRMACION\_AUTOMATICA | 1 | Marca el fin del arribo y manda CONFIRMACION\_ASIG\_486 |
@@ -362,7 +363,7 @@ EXEC ops.sp_retiro_cerrar @id;                                            -- arc
 
 **3. Escribir los archivos**
 
-El job ya los escribe al terminar cada corrida (`EXPORTAR_AUTOMATICO`), y la asignación con retiro los escribe con el ZIP. A mano solo hace falta si llegó un hallazgo de que no se pudieron escribir, o para otra carpeta:
+El job ya los escribe al terminar cada corrida (`EXPORTAR_AUTOMATICO`), y la asignación con retiro los escribe con el ZIP. En cuanto están, llega al equipo de asignaciones el correo **ARCHIVOS\_LISTOS\_486** con la carpeta, cada archivo que hay que subir a CYBER con sus líneas y qué sigue (`AVISO_ARCHIVOS`, lista de archivos en `ARCHIVOS_ARRIBO`). Para mandarlo a mano: `EXEC ops.sp_aviso_archivos @id;`. A mano solo hace falta si llegó un hallazgo de que no se pudieron escribir, o para otra carpeta:
 
 ```sql
 EXEC ops.sp_exportar_salidas @id, @solo_mostrar = 1;                    -- ver qué se va a escribir

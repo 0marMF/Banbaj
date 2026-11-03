@@ -190,3 +190,4 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [x] Cuadre de pagos automático; solo avisa si algo no subió a la hora límite (`CUADRE_AUTOMATICO`, `CUADRE_PAGOS_HORA_LIMITE` = 17:00).
 - [ ] Confirmar la hora límite del cuadre con Operación (a qué hora ya debe estar arriba el SCBPAG).
 - [ ] Sigue a mano subir los archivos de ancho fijo (SCBSDOS, SCBTEL, SCBPAG, gescar). Se puede quitar si el cargador de CYBER toma archivos de una carpeta o con la estructura de `PHONE_G1` y de las tablas que llena el SCBSDOS.
+- [x] (03/11) Correo ARCHIVOS_LISTOS_486 al equipo de asignaciones en cuanto están los planos para arribar.
