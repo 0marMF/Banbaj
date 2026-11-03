@@ -46,7 +46,7 @@ Se cargan con `ops.sp_migrar_486` desde CSV exportados con FoxPro (`cyber/486/EX
 
 | Tabla DBF | Ruta en los .prg | Destino | Campos que supuse | Confirmar |
 | --- | --- | --- | --- | --- |
-| PURGA | `O:\HISTORIA\GPO1\486\` | — | **No se migra** (decisión): las bajas se registran desde la migración | — |
+| PURGA | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` (FE_BAJA) | Solo CUENTA, FOLIO y fecha de retiro (02/11) | [ ] nombre del campo de fecha |
 | historia | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` | Estructura recibida (02/11): 1,804,213 renglones, una por asignación. Trae FE_ASIG, saldos (SDO_ACT, CAPITAL), TEL1-16 y DIRECC1-5; **no trae** SEGMENTO2, SUB_CTE, fecha de retiro ni correos. NVA/REA se deduce por orden de FE_ASIG | Lista |
 | DEVOL | `O:\HISTORIA\GPO1\486\` | — | **No se migra** (decisión) | — |
 | PAGTOT | `O:\PRG\GPO1\486\PAGOS\` | `dat.PAGO_ARRIBADO` (tabla fija) | Solo CUENTA, MONT, FE_PAG, FE_REG (01/11). 12,865 renglones viejos con FE_PAG incompleta se omiten | Lista |
@@ -151,9 +151,10 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 
 ## 7. Revisión de los procedimientos de CYBER (02/11)
 
-- [x] `RCVRY.JSP_TELEFONOS_REMESA_486`: inserta desde `PHONE_G1` (arribo del SCBTEL), inactiva lo que no viene en la remesa y activa lo que sí, sin tocar gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`). El SCBTEL se arriba antes de cargar la remesa (`cyber/486/ARRIBO_MANUAL.md`).
-- [ ] `RCVRY.JSP_VALIDADOR_TELEFONOS`: el procedimiento actualiza el renglón del día, pero Banbaj ya no lo inserta. ¿Alguien usa ese reporte? Si sí, se agrega el INSERT al script `TEL_ACTUALIZA`.
-- [ ] `RCVRY.JSP_CORREOS_486`: desde el 24/07/2026 toma también `adtype = '1'` (domicilios). Como la remesa solo trae correos, inactiva todos los domicilios de las cuentas activas del 486 en cada corrida. Confirmar con el dueño del procedimiento en CYBER.
-- [x] `JSP_CORREOS_486` no inserta correos nuevos: entran con `ops.sp_bajar_cyber 'CORREOS'` (`MAIL_INSERTA_NUEVOS.sql`), que es paso obligatorio del arribo.
-- [ ] **Fecha de retiro en el histórico:** historia.dbf no la trae (está en PURGA, que no se migra). ¿Se migra solo CUENTA, FOLIO y fecha de PURGA para tenerla?
+Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 
+- [x] `RCVRY.JSP_TELEFONOS_REMESA_486`: versión optimizada en `cyber/486/oracle/JSP_TELEFONOS_REMESA_486.sql` (misma lógica, menos lecturas, corrige el filtro de grupo en PHONE_G1, crea el renglón del validador si falta y deja los errores en la bitácora). [ ] Instalarla en CYBER. Inserta desde `PHONE_G1` (arribo del SCBTEL), inactiva lo que no viene en la remesa y activa lo que sí, sin tocar gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`). El SCBTEL se arriba antes de cargar la remesa.
+- [x] `RCVRY.JSP_VALIDADOR_TELEFONOS`: el script `TEL_BORRA` inserta el renglón del día con el total enviado y el procedimiento lo completa. [ ] Confirmar que la tabla no tiene otras columnas obligatorias además de CLIENTE, FECHA y TOTAL_TELS.
+- [x] `RCVRY.JSP_CORREOS_486`: regla acordada, solo queda activo el domicilio de la última base maestra. Nueva versión en `cyber/486/oracle/JSP_CORREOS_486.sql` (correos igual que hoy; domicilios contra `DELQMST.DMADDR1`). [ ] Instalarla en CYBER y confirmar que `DMADDR1` es la columna del domicilio en `DELQMST`.
+- [x] Los correos nuevos entran con `ops.sp_bajar_cyber 'CORREOS'` (`MAIL_INSERTA_NUEVOS.sql`), paso obligatorio del arribo.
+- [x] **Fecha de retiro en el histórico:** se migra de PURGA solo CUENTA, FOLIO y fecha (02/11). [ ] Confirmar el nombre del campo de fecha en PURGA.DBF (el programa de exportación avisa cuáles no existen).

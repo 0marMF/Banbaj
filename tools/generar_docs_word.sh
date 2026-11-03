@@ -9,4 +9,7 @@ pandoc docs/MANUAL_INSTALACION_486.md -f gfm --reference-doc=tools/plantilla_wor
 pandoc docs/FUNCIONAMIENTO_486.md -f markdown --reference-doc=tools/plantilla_word.docx \
   --toc --toc-depth=1 -M toc-title=Contenido -M lang=es-MX -s \
   -o "docs/Como funciona Banbaj 486.docx"
+pandoc docs/MIGRACION_PASO_A_PASO_486.md -f markdown --reference-doc=tools/plantilla_word.docx \
+  --toc --toc-depth=1 -M toc-title=Contenido -M lang=es-MX -s \
+  -o "docs/Migracion paso a paso Banbaj 486.docx"
 echo "Listo: docs/*.docx"

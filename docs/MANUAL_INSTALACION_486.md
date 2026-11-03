@@ -215,14 +215,15 @@ Un db\_owner podría quitarse a sí mismo la negación sobre las credenciales. E
 
 ## Migración de los datos de FoxPro
 
-Se hace **una sola vez**, justo antes de la primera corrida en SQL Server. Trae lo que el proceso necesita para seguir donde se quedó FoxPro: el DAT vigente, el histórico de folios, el consecutivo, los pagos arribados, las etiquetas, las exclusiones y los catálogos de LADA y PNC. **PURGA y DEVOL no se migran.**
+Se hace **una sola vez**, justo antes de la primera corrida en SQL Server. El detalle de cada paso, con los conteos de referencia y qué hacer con cada aviso, está en *Migración paso a paso Banbaj 486*. Trae lo que el proceso necesita para seguir donde se quedó FoxPro: el DAT vigente, el histórico de folios, el consecutivo, los pagos arribados, las etiquetas, las exclusiones y los catálogos de LADA y PNC. **PURGA y DEVOL no se migran.**
 
 ### Qué se lleva y a dónde
 
 | CSV (DBF de origen) | Campos que se usan | Destino en SQL Server |
 | --- | --- | --- |
 | DAT | todos los que existen en `dat.DAT_486` (los demás se ignoran) | `dat.DAT_486` y el periodo vigente en `dat.HISTORIA_FOLIO` |
-| HISTORIA | CUENTA, FOLIO, CUENTA2, RIESGO, SEGMENTO, STATUS, TRAMO, ETIQUETA, FE\_ASIG, SDO\_ACT, CAPITAL, TEL1-TEL16, DIRECC1-DIRECC5, ESTADO, EDO | `dat.HISTORIA_FOLIO`: cada asignación anterior como baja (la primera de la cuenta NVA, las siguientes REA); los datos van en `DATOS_BAJA` (JSON). historia.dbf no trae fecha de retiro ni correos |
+| HISTORIA | CUENTA, FOLIO, CUENTA2, RIESGO, SEGMENTO, STATUS, TRAMO, ETIQUETA, FE\_ASIG, SDO\_ACT, CAPITAL, TEL1-TEL16, DIRECC1-DIRECC5, ESTADO, EDO | `dat.HISTORIA_FOLIO`: cada asignación anterior como baja (la primera de la cuenta NVA, las siguientes REA); los datos van en `DATOS_BAJA` (JSON). historia.dbf no trae correos; la fecha de retiro sale de PURGA |
+| PURGA | CUENTA, FOLIO, fecha de retiro (FE\_BAJA, FE\_PURGA, FE\_RET o FECHA), MOTIVO | solo la fecha de retiro del periodo de esa cuenta y folio en `dat.HISTORIA_FOLIO` |
 | TAB7 | FOLIO | consecutivo de folios |
 | PAGTOT | CUENTA, MONT, FE\_PAG, FE\_REG | `dat.PAGO_ARRIBADO` (origen PAGTOT) |
 | ETI, DM1 | CUENTA, ETIQUETA | etiquetas (DMP2, DMP1 del SCBSDOS) |
@@ -233,13 +234,13 @@ Se hace **una sola vez**, justo antes de la primera corrida en SQL Server. Trae 
 | EMAILMALO | EMAIL, CUENTA | correos malos |
 | BLACKLIST | TEL, FE\_AGRE, OS, SOLICITUD | lista negra: OS = requerimiento, FE\_AGRE = fecha, SOLICITUD = quién lo pidió. STATUS X excluye y vacío no; el DBF no trae STATUS, así que todo cuenta como X |
 
-Ya no se migran: **TELBAJ** y **PNC** (se leen de CYBER en cada asignación), **LADA** (ningún proceso la usa), PURGA y DEVOL. El programa de FoxPro exporta solo los campos de esta tabla; si alguno no existe en el DBF lo avisa al final.
+Ya no se migran: **TELBAJ** y **PNC** (se leen de CYBER en cada asignación), **LADA** (ningún proceso la usa) y DEVOL. De PURGA solo se toma la fecha de retiro. El programa de FoxPro exporta solo los campos de esta tabla; si alguno no existe en el DBF lo avisa al final.
 
 ### Paso 1. Exportar desde FoxPro
 
 1. Detener los procesos del 486 en FoxPro para que nadie escriba en los DBF.
 2. Revisar las rutas de los DBF en `cyber/486/EXPORTAR_MIGRACION.prg`. Vienen de los .prg actuales; si algo cambió, ajustar `laF[n, 2]`.
-3. Correr `DO EXPORTAR_MIGRACION.prg` en Visual FoxPro. Escribe 12 CSV en `C:\MIGRA486\` sin los registros borrados y muestra cuántos registros salió de cada uno.
+3. Correr `DO EXPORTAR_MIGRACION.prg` en Visual FoxPro. Escribe 13 CSV en `C:\MIGRA486\` sin los registros borrados y muestra cuántos registros salió de cada uno.
 4. Si FoxPro corre en otro equipo, copiar la carpeta al servidor de SQL Server (o a una ruta UNC que la cuenta del servicio pueda leer). `BULK INSERT` lee las rutas desde el servidor, no desde la PC de quien ejecuta.
 
 ### Paso 2. Revisar sin escribir
@@ -325,10 +326,50 @@ EXEC ops.sp_exportar_salidas @id;                                       -- plano
 EXEC ops.sp_exportar_salidas @id, @zip = 'RETIROS', @enviar_zip = 1;    -- con devolución
 ```
 
-- Los archivos quedan en `RUTA_SALIDA\<aaaammdd>_corrida<id>\`: los planos en la raíz y los scripts en `cyber\`.
-- La copia del DAT se escribe en `RUTA_MIS`.
-- Con `@zip`, los archivos de retiro van en `C:\RETIROS_PAG_486_<fecha>.zip`, protegido con contraseña.
+- Los archivos planos quedan en `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\` y los scripts de Oracle en su subcarpeta `cyber\` (ver *Dónde quedan los archivos*, abajo).
+- La copia del DAT se escribe en `\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\`.
+- Con `@zip`, los archivos de retiro van en `C:\RETIROS_PAG_486_<mmddaaaahhmmss>.zip`, protegido con contraseña.
 - Con `@enviar_zip = 1` sale el **correo único de devolución**: Operación con el ZIP y AEM en copia oculta sin el ZIP. Aplica igual para asignación, actualización y retiro por solicitud.
+
+### Dónde quedan los archivos
+
+Todo lo escribe `ops.sp_exportar_salidas`, con la cuenta del servicio de SQL Server. Las rutas `C:\` son del **servidor de SQL Server**, no de la PC de quien ejecuta.
+
+| Qué | Ruta | Parámetro |
+|---|---|---|
+| Archivos del banco (entrada) | `\\192.168.50.13\q\CYBER\C_486\<año>\<mes>\<día>\` (ej. `...\2026\noviembre\03\`) | `cfg.ARCHIVO.RUTA` |
+| Archivos planos de cada corrida | `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\` | `RUTA_SALIDA` |
+| Scripts de Oracle de esa corrida | `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\cyber\` | `RUTA_SALIDA` |
+| Copia del DAT para MIS | `\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\DAT486_<aaaammdd>.csv` | `RUTA_MIS` |
+| ZIP de retiros con contraseña | `C:\RETIROS_PAG_486_<mmddaaaahhmmss>.zip` | `CARPETA_ZIP` |
+
+Ejemplo de una asignación del 3 de noviembre, corrida 125:
+
+```
+C:\BANBAJ\486\SALIDA\
+└── 20261103_corrida125\
+    ├── SCBSDOS.TXT
+    ├── SCBTEL.TXT
+    ├── sub_mst.TXT
+    ├── sub_mail.TXT
+    ├── SCBACTH_486NU.TXT
+    ├── SCBACTH_486REA.TXT
+    ├── DAT486_20261103.csv
+    └── cyber\
+        ├── TEL_BORRA.sql
+        ├── TEL_ACTUALIZA.sql
+        ├── MAIL_ACTIVA_BANDERA.sql
+        ├── MAIL_BORRA.sql
+        ├── MAIL_ACTUALIZA.sql
+        └── MAIL_INACTIVA_BANDERA.sql
+```
+
+Si el equipo que arriba no entra al disco `C:` del servidor, hay dos opciones: compartir `C:\BANBAJ\486\SALIDA\` en la red, o cambiar `RUTA_SALIDA` a una carpeta de red (por ejemplo, una carpeta en `\\192.168.50.13\q\`). La cuenta del servicio de SQL Server necesita permiso de escritura ahí.
+
+```sql
+UPDATE cfg.PARAMETRO SET VALOR = N'\\192.168.50.13\q\BANBAJ\486\SALIDA\' WHERE CLIENTE = '486' AND CLAVE = 'RUTA_SALIDA';
+EXEC ops.sp_exportar_salidas @id, @carpeta = N'D:\otra\carpeta\';   -- solo para una vez
+```
 
 **4. Arribar a CYBER**
 
@@ -466,6 +507,7 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 - [ ] `03_parametros_y_credenciales.sql`: origen de Oracle, credenciales y prueba de STATUS OK
 - [ ] La cuenta del servicio de SQL Server llega a `\\192.168.50.13\q`
 - [ ] La cuenta del servicio de SQL Server puede leer las carpetas de entrada y escribir en la salida, en MIS y en C:\\
+- [ ] Nuevas versiones instaladas en CYBER: `RCVRY.JSP_CORREOS_486` (`cyber/486/oracle/JSP_CORREOS_486.sql`: solo queda activo el domicilio de la última base maestra) y `RCVRY.JSP_TELEFONOS_REMESA_486` (`cyber/486/oracle/JSP_TELEFONOS_REMESA_486.sql`: optimizado, misma lógica)
 - [ ] Migración hecha y conteos cuadrados con FoxPro
 - [ ] `C:\MIGRA486` borrado
 - [ ] Listas de correo con los destinatarios reales (Operación, AEM, Asignaciones)

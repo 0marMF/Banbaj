@@ -417,6 +417,7 @@ PARAMETROS = [
     ("TEL_INVALIDOS", "1000000000,9999999999,0999999999,1111111111,4444444444,5555555555,5000000000",
      "Teléfonos que nunca se mandan (telbnx.prg + G4_025_TELEFONOS); además se descartan los que empiezan con 0"),
     ("TEL_EXIGIR_PNM", "1", "1 = el teléfono que no está en el plan de numeración se descarta (G4_025_TELEFONOS, decisión 01/11); 0 = sale como fijo (telbnx.prg)"),
+    ("CYBER_VALIDADOR_TELEFONOS", "1", "1 = el script TEL_BORRA inserta el renglón del día en RCVRY.JSP_VALIDADOR_TELEFONOS con el total de teléfonos (JSP_TELEFONOS_REMESA_486 lo completa)"),
     ("TELBAJ_LINKED_SERVER", "192.168.50.53", "Servidor vinculado al SQL Server de CYBER donde están telbaj, telbaj1 y TENOVA1 (como G4_025_TELEFONOS)"),
     ("TELBAJ_GRUPO", "1", "Grupo del 486 en telbaj (TELBAJ_G1)"),
     ("TELBAJ_TABLAS", "cyber.dbo.telbaj,cyber.dbo.telbaj1,tenova.dbo.TENOVA1", "Tablas de quejas en ese servidor (columnas grupo, cuenta, telo, telpho)"),

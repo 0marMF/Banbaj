@@ -120,9 +120,16 @@ BEGIN
     DELETE FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id_corrida AND SCRIPT IN ('TEL_BORRA', 'TEL_ACTUALIZA');
     /* borra.sql de ACT_PHONE: se vacía la remesa para volver a insertar */
     INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
-    VALUES (@id_corrida, 'TEL_BORRA', 1, N'TRUNCATE TABLE RCVRY.JSP_TAB_TEL_REMESA_486;'),
-           (@id_corrida, 'TEL_BORRA', 2, N'COMMIT;'),
-           (@id_corrida, 'TEL_BORRA', 3, N'EXIT;');
+    VALUES (@id_corrida, 'TEL_BORRA', 1, N'TRUNCATE TABLE RCVRY.JSP_TAB_TEL_REMESA_486;');
+    /* Renglón del día en RCVRY.JSP_VALIDADOR_TELEFONOS con el total que mandamos (antes lo insertaba FoxPro).
+       JSP_TELEFONOS_REMESA_486 lo completa al final (diferencia contra lo cargado, activos, inactivos, nuevos). */
+    IF ISNULL(cfg.fn_param(@cliente, 'CYBER_VALIDADOR_TELEFONOS'), '1') = '1'
+        INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
+        VALUES (@id_corrida, 'TEL_BORRA', 2, CONCAT(N'INSERT INTO RCVRY.JSP_VALIDADOR_TELEFONOS (CLIENTE, FECHA, TOTAL_TELS) SELECT ''', @cliente, N''', SYSDATE, ', @n,
+                N' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM RCVRY.JSP_VALIDADOR_TELEFONOS WHERE CLIENTE = ''', @cliente, N''' AND FIN IS NULL AND TRUNC(FECHA) = TRUNC(SYSDATE));'));
+    INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
+    VALUES (@id_corrida, 'TEL_BORRA', 3, N'COMMIT;'),
+           (@id_corrida, 'TEL_BORRA', 4, N'EXIT;');
     INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
     VALUES (@id_corrida, 'TEL_ACTUALIZA', 1, CONCAT(N'EXECUTE ', ISNULL(cfg.fn_param(@cliente, 'CYBER_PROC_TELEFONOS'), N'RCVRY.JSP_TELEFONOS_REMESA_486'), N';')),
            (@id_corrida, 'TEL_ACTUALIZA', 2, N'COMMIT;'),

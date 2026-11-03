@@ -29,8 +29,8 @@ Este documento explica cómo funciona por dentro. La instalación, la migración
 
 | Sale | Para qué |
 |---|---|
-| Archivos planos (SCBSDOS, SCBTEL, SCBPAG, sub_mst, sub_mail, gescar, devolución) | Arribo manual a CYBER |
-| Scripts de Oracle (saldos, vencido, pago mínimo, PVS y REE, retiro, teléfonos, blanqueo) | Se corren en CYBER |
+| Archivos planos (SCBSDOS, SCBTEL, SCBPAG, sub_mst, sub_mail, gescar, devolución) | Arribo manual a CYBER. Quedan en `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\` del servidor |
+| Scripts de Oracle (saldos, vencido, pago mínimo, PVS y REE, retiro, teléfonos, blanqueo) | Se corren en CYBER. Quedan en la subcarpeta `cyber\` de la corrida |
 | `DAT486_<fecha>.csv` | Copia del DAT para MIS |
 | ZIP de retiros con contraseña | Correo de devolución a Operación |
 | Correos | Operación, AEM y equipo de asignaciones |
@@ -115,7 +115,7 @@ Sustituye a `paso.prg`, `asig_bases.prg`, `asi486.prg`, `telbnx.prg`, `email.PRG
 | 11 | `sp_validar 'PRE_ALTA'` | Cuentas en la lista de exclusión (`exc486`) no entran |
 | 12 | `sp_asig_alta` | Altas: **REA** si la cuenta tuvo folio antes (se reutiliza), **NVA** con folio consecutivo. Alta en DAT e histórico. Más de 100 nuevas: correo de alerta |
 | 13 | `sp_telefonos` | Teléfonos para CYBER (ver *Teléfonos*) |
-| 14 | `sp_correos` | Correos para CYBER (minúsculas, con @, sin "no tiene", sin correos malos, uno por cuenta). En CYBER, `JSP_CORREOS_486` solo activa e inactiva; los correos nuevos entran con `sp_bajar_cyber 'CORREOS'` |
+| 14 | `sp_correos` | Correos para CYBER (minúsculas, con @, sin "no tiene", sin correos malos, uno por cuenta). En CYBER, `JSP_CORREOS_486` solo activa e inactiva; los correos nuevos entran con `sp_bajar_cyber 'CORREOS'`. Domicilios: en CYBER solo queda activo el de la última base maestra (versión nueva del procedimiento, `cyber/486/oracle/JSP_CORREOS_486.sql`) |
 | 15 | `sp_generar_salidas 'ASIG'` | SCBSDOS, SCBTEL, sub_mst, sub_mail, gescar de nuevas y reasignadas, copia para MIS |
 
 **Nuevas y reasignadas:** se comparan contra el DAT. Una cuenta que viene en la base y no está en el DAT entra: como REA si tiene historial (incluye las que se retiraron por saldo o por solicitud), como NVA si nunca tuvo folio.
@@ -148,7 +148,7 @@ Reglas de `telbnx.prg` con los ajustes del 01/11, que siguen el procedimiento `G
    - **Fijo:** área 01 + lada; 8 o 7 dígitos; tipo 1 (TEL1), 2 (TEL2) o 4 (resto).
    - **No está en el plan:** se descarta (`TEL_EXIGIR_PNM = 1`).
 
-Salen en SCBTEL (ancho fijo) y en sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL). En CYBER, `RCVRY.JSP_TELEFONOS_REMESA_486` inserta los teléfonos nuevos (los que dejó el arribo del SCBTEL en `PHONE_G1`), inactiva los activos que no vienen en la remesa y activa los de la remesa que estaban inactivos. Respeta los gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`): esos no se tocan. Por eso el SCBTEL se arriba antes de la remesa.
+Salen en SCBTEL (ancho fijo) y en sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL). En CYBER, `RCVRY.JSP_TELEFONOS_REMESA_486` inserta los teléfonos nuevos (los que dejó el arribo del SCBTEL en `PHONE_G1`), inactiva los activos que no vienen en la remesa y activa los de la remesa que estaban inactivos. Respeta los gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`): esos no se tocan. Por eso el SCBTEL se arriba antes de la remesa. El script `TEL_BORRA` también inserta el renglón del día en `RCVRY.JSP_VALIDADOR_TELEFONOS` con el total enviado, y el procedimiento lo completa (diferencia contra lo cargado, activados, inactivados y nuevos).
 
 # Exclusiones
 
@@ -170,6 +170,48 @@ Todas viven en `cfg.EXCLUSION`, con tipo, valor, requerimiento (OS), fecha, si e
 - **Etiquetas por cuenta** (`cfg.ETIQUETA`): ETI, DM1, TOP y STATUS, que salen en campos del SCBSDOS (DMP2, DMP1, U1EXT2, U1USO4).
 
 # Archivos y scripts que se generan
+
+## Dónde quedan los archivos
+
+Todo lo escribe `ops.sp_exportar_salidas`, con la cuenta del servicio de SQL Server. Las rutas `C:\` son del **servidor de SQL Server**, no de la PC de quien ejecuta.
+
+| Qué | Ruta | Parámetro |
+|---|---|---|
+| Archivos del banco (entrada) | `\\192.168.50.13\q\CYBER\C_486\<año>\<mes>\<día>\` (ej. `...\2026\noviembre\03\`) | `cfg.ARCHIVO.RUTA` |
+| Archivos planos de cada corrida | `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\` | `RUTA_SALIDA` |
+| Scripts de Oracle de esa corrida | `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\cyber\` | `RUTA_SALIDA` |
+| Copia del DAT para MIS | `\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\DAT486_<aaaammdd>.csv` | `RUTA_MIS` |
+| ZIP de retiros con contraseña | `C:\RETIROS_PAG_486_<mmddaaaahhmmss>.zip` | `CARPETA_ZIP` |
+
+Ejemplo de una asignación del 3 de noviembre, corrida 125:
+
+```
+C:\BANBAJ\486\SALIDA\
+└── 20261103_corrida125\
+    ├── SCBSDOS.TXT
+    ├── SCBTEL.TXT
+    ├── sub_mst.TXT
+    ├── sub_mail.TXT
+    ├── SCBACTH_486NU.TXT
+    ├── SCBACTH_486REA.TXT
+    ├── DAT486_20261103.csv
+    └── cyber\
+        ├── TEL_BORRA.sql
+        ├── TEL_ACTUALIZA.sql
+        ├── MAIL_ACTIVA_BANDERA.sql
+        ├── MAIL_BORRA.sql
+        ├── MAIL_ACTUALIZA.sql
+        └── MAIL_INACTIVA_BANDERA.sql
+```
+
+Si el equipo que arriba no entra al disco `C:` del servidor, hay dos opciones: compartir `C:\BANBAJ\486\SALIDA\` en la red, o cambiar `RUTA_SALIDA` a una carpeta de red (por ejemplo, una carpeta en `\\192.168.50.13\q\`). La cuenta del servicio de SQL Server necesita permiso de escritura ahí.
+
+```sql
+UPDATE cfg.PARAMETRO SET VALOR = N'\\192.168.50.13\q\BANBAJ\486\SALIDA\' WHERE CLIENTE = '486' AND CLAVE = 'RUTA_SALIDA';
+EXEC ops.sp_exportar_salidas @id, @carpeta = N'D:\otra\carpeta\';   -- solo para una vez
+```
+
+## Qué se genera
 
 Las salidas se definen en `cfg.SALIDA_ARCHIVO` (archivo, proceso, origen, nombre, separador) y `cfg.SALIDA` (campos, ancho y formato). Cada corrida guarda sus líneas en `ops.SALIDA_LINEA` y sus scripts en `ops.CYBER_SCRIPT`. `ops.sp_exportar_salidas` los escribe a disco en `RUTA_SALIDA\<aaaammdd>_corrida<id>\` (planos en la raíz, scripts en `cyber\`).
 

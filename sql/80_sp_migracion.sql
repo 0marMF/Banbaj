@@ -5,7 +5,7 @@
 
    1. En FoxPro, exportar cada DBF a CSV con cyber/486/EXPORTAR_MIGRACION.prg
       (deja C:\MIGRA486\<FUENTE>.csv: DAT, TAB7, HISTORIA, PAGTOT, ETI, DM1, TOP,
-      STATUS, EXC486, DIRMAL, EMAILMALO, BLACKLIST), solo con los campos que se usan.
+      STATUS, EXC486, DIRMAL, EMAILMALO, BLACKLIST, PURGA), solo con los campos que se usan.
       La carpeta debe ser visible para el servicio de SQL Server.
    2. Revisar (no escribe nada):   EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\';
    3. Cargar:                      EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;
@@ -18,7 +18,9 @@
      HISTORIA     DAT.csv (activas) + HISTORIA.csv (cada asignación anterior como baja: fechas de
                   asignación, reasignación y retiro, y en DATOS_BAJA saldos, correos, teléfonos y
                   dirección; sirve para reasignar con el mismo folio y ubicar pagos de cuentas
-                  retiradas)  -> dat.HISTORIA_FOLIO   (PURGA y DEVOL no se migran)
+                  retiradas)  -> dat.HISTORIA_FOLIO   (DEVOL no se migra)
+                  PURGA.csv (CUENTA, FOLIO, fecha): solo pone la fecha de retiro (FE_BAJA) al periodo
+                  de esa cuenta y folio en el histórico (decisión 02/11).
      CONSECUTIVO  máximo folio de TAB7, DAT e HISTORIA -> dat.FOLIO_CONSECUTIVO
      PAGOS        PAGTOT.csv (CUENTA, MONT, FE_PAG, FE_REG) -> dat.PAGO_ARRIBADO
      ETIQUETAS    ETI, DM1, TOP, STATUS                -> cfg.ETIQUETA
@@ -117,7 +119,7 @@ BEGIN
     BEGIN TRY
     /* 1. Leer los CSV */
     DECLARE cf CURSOR LOCAL FAST_FORWARD FOR
-        SELECT value FROM STRING_SPLIT('DAT,TAB7,HISTORIA,PAGTOT,ETI,DM1,TOP,STATUS,EXC486,DIRMAL,EMAILMALO,BLACKLIST', ',');
+        SELECT value FROM STRING_SPLIT('DAT,TAB7,HISTORIA,PURGA,PAGTOT,ETI,DM1,TOP,STATUS,EXC486,DIRMAL,EMAILMALO,BLACKLIST', ',');
     OPEN cf; FETCH NEXT FROM cf INTO @f;
     WHILE @@FETCH_STATUS = 0
     BEGIN
@@ -230,6 +232,35 @@ BEGIN
         INSERT INTO #aviso (TEXTO) SELECT CONCAT(N'HISTORIA: ', @n, N' asignaciones anteriores quedan como baja en el histórico (de ', FILAS, N' renglones)') FROM #fuente WHERE FUENTE = 'HISTORIA';
         INSERT INTO #aviso (TEXTO) VALUES (CONCAT(N'HISTORIA: fecha de asignación = ', ISNULL(@h_alta, N'(no viene)'), N' · fecha de retiro = ', ISNULL(@h_baja, N'(no viene)'),
                                                   N' · se conservan: ', ISNULL(REPLACE(REPLACE(REPLACE(@h_json, N'cfg.fn_texto(', N''), N') AS ', N'='), N'[', N''), N'(nada)')));
+    END;
+
+    -- PURGA.csv: fecha de retiro de cada periodo (CUENTA, FOLIO, fecha). Se aplica al periodo de esa cuenta y folio
+    -- que empezó antes de la fecha y no tiene retiro. Lo demás de PURGA no se migra.
+    IF EXISTS (SELECT 1 FROM @hay WHERE F = 'PURGA')
+    BEGIN
+        SET @falta = ops.fn_mig_faltan('PURGA', N'CUENTA, FOLIO');
+        IF @falta IS NOT NULL BEGIN SET @msg = CONCAT(N'PURGA.csv: faltan las columnas ', @falta); THROW 50908, @msg, 1; END;
+        DECLARE @p_fecha SYSNAME = (SELECT TOP (1) c FROM (VALUES (1, N'FE_BAJA'), (2, N'FE_PURGA'), (3, N'FE_RET'), (4, N'FE_RETIRO'), (5, N'FE_DEV'), (6, N'FECHA'), (7, N'FE_PUR'))
+                                    v(o, c) WHERE COL_LENGTH('stg.MIG_PURGA', c) IS NOT NULL ORDER BY o);
+        IF @p_fecha IS NULL THROW 50908, 'PURGA.csv: no trae columna de fecha (FE_BAJA, FE_PURGA, FE_RET, FE_RETIRO, FE_DEV o FECHA).', 1;
+        CREATE TABLE #purga (CUENTA VARCHAR(20), FOLIO INT, FE DATE, MOTIVO NVARCHAR(60));
+        SET @sql = N'INSERT INTO #purga (CUENTA, FOLIO, FE, MOTIVO) SELECT LEFT(cfg.fn_texto(CUENTA), 20), TRY_CONVERT(INT, cfg.fn_texto(FOLIO)), '
+                 + N'COALESCE(TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@p_fecha) + N'), 112), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@p_fecha) + N'), 23), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@p_fecha) + N'), 103)), '
+                 + CASE WHEN COL_LENGTH('stg.MIG_PURGA', 'MOTIVO') IS NOT NULL THEN N'LEFT(cfg.fn_texto(MOTIVO), 60)' ELSE N'NULL' END
+                 + N' FROM stg.MIG_PURGA WHERE cfg.fn_texto(CUENTA) IS NOT NULL;';
+        EXEC (@sql);
+        /* Para cada renglón de PURGA, el periodo más reciente de esa cuenta y folio que empezó antes y no tiene retiro */
+        ;WITH m AS (
+            SELECT h.CUENTA, h.FOLIO, h.FE_ALTA, p.FE, p.MOTIVO,
+                   ROW_NUMBER() OVER (PARTITION BY p.CUENTA, p.FOLIO, p.FE ORDER BY h.FE_ALTA DESC) AS RN
+            FROM #purga p
+            JOIN #d_hist h ON h.CUENTA = p.CUENTA AND h.FOLIO = p.FOLIO AND h.ESTATUS = 'B' AND h.FE_BAJA IS NULL AND h.FE_ALTA <= p.FE
+            WHERE p.FE IS NOT NULL)
+        UPDATE h SET FE_BAJA = m.FE, MOTIVO_BAJA = LEFT(CONCAT(N'MIGRACION (purga.dbf)', N': ' + m.MOTIVO), 60)
+        FROM #d_hist h JOIN m ON m.RN = 1 AND m.CUENTA = h.CUENTA AND m.FOLIO = h.FOLIO AND m.FE_ALTA = h.FE_ALTA
+        WHERE h.ESTATUS = 'B' AND h.FE_BAJA IS NULL;
+        SET @n = @@ROWCOUNT;
+        INSERT INTO #aviso (TEXTO) SELECT CONCAT(N'PURGA: ', @n, N' periodos del histórico con fecha de retiro (de ', FILAS, N' renglones; fecha = ', @p_fecha, N')') FROM #fuente WHERE FUENTE = 'PURGA';
     END;
 
     -- CONSECUTIVO: máximo de TAB7, DAT e HISTORIA.csv
@@ -429,7 +460,7 @@ BEGIN
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
         DECLARE @drop_e NVARCHAR(MAX) = (SELECT STRING_AGG(CAST(N'DROP TABLE IF EXISTS stg.' + QUOTENAME(N'MIG_' + value) + N';' AS NVARCHAR(MAX)), N' ')
-                                         FROM STRING_SPLIT('DAT,TAB7,HISTORIA,PAGTOT,ETI,DM1,TOP,STATUS,EXC486,DIRMAL,EMAILMALO,BLACKLIST', ','));
+                                         FROM STRING_SPLIT('DAT,TAB7,HISTORIA,PURGA,PAGTOT,ETI,DM1,TOP,STATUS,EXC486,DIRMAL,EMAILMALO,BLACKLIST', ','));
         EXEC (@drop_e);
         THROW;
     END CATCH;

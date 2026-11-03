@@ -158,6 +158,9 @@ def main(destino):
         ["500", "1", "20000001", "10022026", "000000001000.00", "pbank", "SERTEC", "10032026", "PAGO"],
         ["500", "1", "2000000", "1C  0603", "2abc", "SERTE", "C  06032", "", ""],          # renglón corrido
     ])
+    vfp(mig / "PURGA.csv", ["cuenta", "folio", "fe_baja", "motivo"], [
+        ["20000009", "       150", dt.date(2024, 1, 10), "PAGO TOTAL"],
+        ["20000009", "        90", dt.date(2018, 12, 1), ""]])                  # antes de la asignación: no aplica
     vfp(mig / "TOP.csv", ["cuenta2", "etiqueta"], [["486-100", "REE"], ["486-999", "REE"]])
     vfp(mig / "EXC486.csv", ["cuenta"], [["20000008"]])
     # Como BLACKLIST_486.DBF: TEL | FE_AGRE | OS | SOLICITUD, sin STATUS (todo cuenta como X)
