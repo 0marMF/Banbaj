@@ -134,7 +134,7 @@ BEGIN
     SET @que = UPPER(LTRIM(RTRIM(@que)));
     IF @proceso IS NULL OR @proceso <> 'ASIG' THROW 50763, 'Indica una corrida de asignación.', 1;
     IF @que NOT IN ('CORREOS', 'TELEFONOS') THROW 50764, '@que debe ser CORREOS o TELEFONOS.', 1;
-    IF @@TRANCOUNT > 0 THROW 50765, 'El arribo a CYBER no puede correr dentro de una transacción.', 1;
+    IF @@TRANCOUNT > 0 AND @solo_mostrar = 0 THROW 50765, 'El arribo a CYBER no puede correr dentro de una transacción.', 1;
 
     BEGIN TRY
         IF @que = 'CORREOS'
