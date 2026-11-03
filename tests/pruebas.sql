@@ -1004,7 +1004,8 @@ GO
    Pasos automáticos (sql/78): scripts de la actualización en CYBER, cuadre de pagos,
    confirmación de la asignación, blanqueo de status y escritura de archivos
    --------------------------------------------------------------------- */
-DECLARE @act INT = (SELECT MIN(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ACT' AND ESTATUS = 'OK'), @r NVARCHAR(400), @rs NVARCHAR(2000) = N'';
+DECLARE @act INT = (SELECT MIN(s.ID_CORRIDA) FROM ops.CYBER_SCRIPT s JOIN ops.CORRIDA c ON c.ID_CORRIDA = s.ID_CORRIDA AND c.PROCESO = 'ACT' WHERE s.SCRIPT = 'ACT_SALDOS'),
+        @r NVARCHAR(400), @rs NVARCHAR(2000) = N'';
 DECLARE @ac TABLE (ORDEN INT, SCRIPT VARCHAR(40), LINEAS INT, ESTADO VARCHAR(20));
 INSERT INTO @ac EXEC ops.sp_act_cyber @act, @solo_mostrar = 1;
 SET @rs = (SELECT STRING_AGG(CONCAT(SCRIPT, ':', ESTADO), ',') WITHIN GROUP (ORDER BY ORDEN) FROM @ac);
