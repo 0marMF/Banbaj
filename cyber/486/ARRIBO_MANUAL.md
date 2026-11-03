@@ -1,12 +1,45 @@
 # 486 · Arribo manual a CYBER
 
-Los procesos de SQL Server no escriben en CYBER. Cada corrida deja los archivos planos en `ops.SALIDA_LINEA` y los scripts de Oracle en `ops.CYBER_SCRIPT`. Para arribar:
+Cada corrida deja los archivos planos en `ops.SALIDA_LINEA` y los scripts de Oracle en `ops.CYBER_SCRIPT`. Para tenerlos en disco:
 
 ```sql
 EXEC ops.sp_exportar_salidas <ID>;
 ```
 
 Eso crea `RUTA_SALIDA\<AAAAMMDD>_corrida<ID>\` (de fábrica `C:\BANBAJ\486\SALIDA\`) con los archivos y la carpeta `cyber\` con los `.sql`.
+
+## Qué es automático y qué sigue a mano (desde el 02/11)
+
+En la asignación, **el operador solo sube los archivos de ancho fijo** con el cargador de CYBER: `SCBSDOS.TXT`, `SCBTEL.TXT` y los gescar (`SCBACTH_486NU.TXT`, `SCBACTH_486REA.TXT` y, cuando aparece, `SCBACTH_SINTEL.TXT`). Ya no se usa sqlldr ni se corren a mano los scripts de teléfonos y correos: el job los ejecuta en CYBER por el servidor vinculado `[CYBER]` (`sql/76_sp_arribo_cyber.sql`).
+
+| Qué | Quién | Cuándo |
+| --- | --- | --- |
+| Subir `SCBSDOS.TXT` | Operador | Después de la asignación |
+| Correos: insertar nuevos, bandera 416, remesa, `JSP_CORREOS_486` | **Job** | En cuanto detecta que el SCBSDOS ya subió (las altas de la corrida están activas en `DELQMST`) |
+| Subir `SCBTEL.TXT` | Operador | Después de la asignación |
+| Teléfonos: remesa, validador, `JSP_TELEFONOS_REMESA_486` | **Job** | En cuanto detecta que el SCBTEL ya subió (los teléfonos de las altas están en `PHONE_G1`) |
+| Generar `SCBACTH_SINTEL.TXT` | **Job** | Al terminar los teléfonos; lo escribe solo en la carpeta de la corrida |
+| Subir los gescar (incluido `SCBACTH_SINTEL.TXT`) | Operador | Cuando aparezcan en la carpeta |
+| Correo de cierre `CONFIRMACION_ASIG_486` | Operador | Al terminar |
+
+Cómo detecta el job que ya subió cada archivo: cada 30 minutos (`ops.sp_diario_486` → `ops.sp_arribo_automatico`) baja de CYBER las cuentas activas del 486 y los teléfonos de `PHONE_G1`, y los compara con las altas de la corrida. Arranca cuando están al menos el `ARRIBO_MIN_PCT` (95 %). Si la corrida no tiene altas con teléfono, los teléfonos esperan a que el operador marque `EXEC ops.sp_marcar_arribo <ID>, 'FIN';`.
+
+Cada proceso corre **una sola vez por corrida**. Si falla, queda `ERROR` en la bitácora (pasos `ARRIBO CORREOS` / `ARRIBO TELEFONOS`), la bandera 416 se intenta apagar y el job no lo reintenta. Se corrige la causa y se corre a mano:
+
+```sql
+EXEC ops.sp_arribo_automatico;                                          -- lo mismo que hace el job: revisa y arriba lo que ya esté listo
+SELECT PASO, ESTATUS, REGISTROS, MENSAJE FROM ops.BITACORA
+ WHERE ID_CORRIDA = <ID> AND PASO LIKE 'ARRIBO%' ORDER BY ID;           -- detalle
+EXEC ops.sp_arribar_cyber <ID>, 'CORREOS', @solo_mostrar = 1;           -- ver los bloques PL/SQL sin ejecutar
+EXEC ops.sp_arribar_cyber <ID>, 'CORREOS';                              -- ejecutar a mano
+EXEC ops.sp_arribar_cyber <ID>, 'TELEFONOS';
+```
+
+Para apagar el arribo automático y volver al arribo manual de abajo: `UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'ARRIBO_AUTOMATICO';`.
+
+Lo que **sigue a mano**: la actualización (SCBPAG y scripts `ACT_*`), el retiro, el blanqueo de status y el cuadre de pagos.
+
+**Permisos del usuario de Oracle** (el de la credencial `CYBER_ORACLE`): `TRUNCATE`/`INSERT` en `RCVRY.JSP_TAB_TEL_REMESA_486` y `RCVRY.JSP_TAB_MAIL_REMESA_486`, `INSERT` en `RCVRY.ADDRESS` y `RCVRY.JSP_VALIDADOR_TELEFONOS`, `UPDATE` en `RCVRY.RPT_LOG_CYBER_REG` y `EXECUTE` de `RCVRY.JSP_TELEFONOS_REMESA_486` y `RCVRY.JSP_CORREOS_486`. Sin ellos el arribo queda en `ERROR` con el mensaje de Oracle.
 
 ## Asignación (`ops.sp_asignacion_486`)
 
@@ -17,6 +50,8 @@ Eso crea `RUTA_SALIDA\<AAAAMMDD>_corrida<ID>\` (de fábrica `C:\BANBAJ\486\SALID
 | `sub_mst.TXT` | Teléfonos `CUENTA\|AREA\|TELEFONO\|TIPOTEL` | telbnx.prg → act_phone.prg |
 | `SCBACTH_486NU.TXT` | Gescar de cuentas nuevas, 119 posiciones | ges_nuevas_rea.prg |
 | `SCBACTH_486REA.TXT` | Gescar de reasignadas, 119 posiciones | ges_nuevas_rea.prg |
+
+Los pasos de teléfonos, correos y gescar sin teléfono que siguen son **lo que hace el job solo** (ver arriba). Quedan documentados para entenderlos y para el arribo manual si se apaga `ARRIBO_AUTOMATICO`.
 
 **Teléfonos (solo en la asignación).** Se mandan todos los del DAT; CYBER purga y agrega. El orden importa:
 1. Arribar `SCBTEL.TXT` **primero**. `RCVRY.JSP_TELEFONOS_REMESA_486` solo inserta en `PHONE` los teléfonos que ya están en `PHONE_G1` (lo que deja el arribo del SCBTEL) y que vienen en la remesa.
@@ -38,7 +73,7 @@ Qué hace el procedimiento de CYBER (revisado 02/11, versión del 27/12/2025; la
 
 Qué hace `JSP_CORREOS_486` (revisado 02/11): inactiva (`HIAS`) lo que está en `ADDRESS` de cuentas activas del 486 y no viene en la remesa, y activa (`HAAS`) lo de la remesa que estaba inactivo, salvo gestores `HOMS` y `HPHPI`. **Ojo:** la versión actual (`cyber/486/oracle/JSP_CORREOS_486_actual.sql`) toma desde el 24/07/2026 `adtype` 3 **y 1**; como la remesa solo trae correos, inactiva todos los domicilios del 486 en cada corrida. La regla acordada (02/11) es que solo quede activo el domicilio que llegó en la última base maestra. **Antes de la primera corrida hay que instalar en CYBER `cyber/486/oracle/JSP_CORREOS_486.sql`**: trata los correos igual que hoy y deja activo solo el domicilio vigente de cada cuenta (el de `DELQMST.DMADDR1`, que sube con el SCBSDOS).
 
-**Gescar de cuentas sin teléfono.** Después de arribar los teléfonos: `EXEC ops.sp_bajar_cyber 'TELEFONOS', @id_corrida = <ID>;`, volver a exportar y arribar `SCBACTH_SINTEL.TXT`.
+**Gescar de cuentas sin teléfono.** Después de arribar los teléfonos: `EXEC ops.sp_bajar_cyber 'TELEFONOS', @id_corrida = <ID>;`, volver a exportar y arribar `SCBACTH_SINTEL.TXT`. Con el arribo automático este archivo aparece solo en la carpeta de la corrida; solo falta subirlo.
 
 **Después de arribar:** `EXEC ops.sp_avisar <corrida>, 'CONFIRMACION_ASIG_486'` (el correo Express se retiró el 30/10).
 

@@ -148,11 +148,14 @@ SELECT FOLIO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA FROM dat.HISTORIA_
 
 1. Correr la semana en paralelo con FoxPro, como dice el manual (*Salida a producción*).
 2. Justo antes del corte, repetir los pasos 1 a 7 con `@reemplazar = 1` para tomar el último día de FoxPro.
-3. Encender el job:
+3. Encender el job y el arribo automático a CYBER (durante el paralelo va en 0 para que solo FoxPro escriba en CYBER):
 
 ```sql
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE = 'ARRIBO_AUTOMATICO';
 EXEC msdb.dbo.sp_update_job @job_name = N'Banbaj 486 diario', @enabled = 1;
 ```
+
+Desde ese día el operador solo sube SCBSDOS, SCBTEL y los gescar; correos y teléfonos los arriba el job (ver el manual, *Arribar a CYBER*).
 
 # Si algo sale mal
 

@@ -156,5 +156,16 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [x] `RCVRY.JSP_TELEFONOS_REMESA_486`: versión optimizada en `cyber/486/oracle/JSP_TELEFONOS_REMESA_486.sql` (misma lógica, menos lecturas, corrige el filtro de grupo en PHONE_G1, crea el renglón del validador si falta y deja los errores en la bitácora). [ ] Instalarla en CYBER. Inserta desde `PHONE_G1` (arribo del SCBTEL), inactiva lo que no viene en la remesa y activa lo que sí, sin tocar gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`). El SCBTEL se arriba antes de cargar la remesa.
 - [x] `RCVRY.JSP_VALIDADOR_TELEFONOS`: el script `TEL_BORRA` inserta el renglón del día con el total enviado y el procedimiento lo completa. [ ] Confirmar que la tabla no tiene otras columnas obligatorias además de CLIENTE, FECHA y TOTAL_TELS.
 - [x] `RCVRY.JSP_CORREOS_486`: regla acordada, solo queda activo el domicilio de la última base maestra. Nueva versión en `cyber/486/oracle/JSP_CORREOS_486.sql` (correos igual que hoy; domicilios contra `DELQMST.DMADDR1`). [ ] Instalarla en CYBER y confirmar que `DMADDR1` es la columna del domicilio en `DELQMST`.
-- [x] Los correos nuevos entran con `ops.sp_bajar_cyber 'CORREOS'` (`MAIL_INSERTA_NUEVOS.sql`), paso obligatorio del arribo.
+- [x] Los correos nuevos entran con `ops.sp_bajar_cyber 'CORREOS'` (`MAIL_INSERTA_NUEVOS.sql`), paso obligatorio del arribo; con el arribo automático lo hace el job.
 - [x] **Fecha de retiro en el histórico:** se migra de PURGA solo CUENTA, FOLIO y fecha (02/11). [ ] Confirmar el nombre del campo de fecha en PURGA.DBF (el programa de exportación avisa cuáles no existen).
+
+## 8. Arribo automático a CYBER (02/11)
+
+`sql/76_sp_arribo_cyber.sql`: el job arriba solo correos (al detectar el SCBSDOS en `DELQMST`) y teléfonos (al detectar el SCBTEL en `PHONE_G1`) por el servidor vinculado. El operador solo sube SCBSDOS, SCBTEL y los gescar.
+
+- [x] Correos y teléfonos de la asignación sin sqlldr ni scripts a mano (`ops.sp_arribo_automatico`, `ops.sp_arribar_cyber`).
+- [x] `SCBACTH_SINTEL.TXT` se genera y se escribe solo al terminar los teléfonos.
+- [ ] Dar al usuario de Oracle los permisos: `TRUNCATE`/`INSERT` en las dos remesas, `INSERT` en `ADDRESS` y `JSP_VALIDADOR_TELEFONOS`, `UPDATE` en `RPT_LOG_CYBER_REG`, `EXECUTE` de `JSP_TELEFONOS_REMESA_486` y `JSP_CORREOS_486`, `SELECT` en `DELQMST`, `PHONE_G1` y `PHONE`.
+- [ ] Confirmar las columnas de las remesas contra `LOAD_TEL_REMESA.CTL` y `LOAD_MAIL_REMESA.CTL` (parámetros `CYBER_REMESA_TEL_COLUMNAS` y `CYBER_REMESA_MAIL_COLUMNAS`).
+- [ ] Probar en CYBER con `@solo_mostrar = 1` y luego una corrida real con el arribo automático encendido.
+- [ ] Opcional: estructura completa de `PHONE_G1` para insertar ahí directamente y dejar de subir el SCBTEL.

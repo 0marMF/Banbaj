@@ -70,7 +70,20 @@ El job llama `ops.sp_diario_486` cada 30 minutos. El procedimiento decide qué h
 4. Si todavía no corre la **asignación** y ya llegaron bases maestras, la corre.
 5. Si ya corrieron las dos, contesta "DIA COMPLETO" y no repite nada.
 
-Cada proceso es una **corrida** (`ops.CORRIDA`) con número, tipo (ACT, ASIG, RET, ETI), fecha, estatus y mensaje. Cada paso deja un renglón en `ops.BITACORA`. Después de cada corrida el operador escribe los archivos, arriba a CYBER y manda el correo de cierre.
+Cada proceso es una **corrida** (`ops.CORRIDA`) con número, tipo (ACT, ASIG, RET, ETI), fecha, estatus y mensaje. Cada paso deja un renglón en `ops.BITACORA`. Después de cada corrida el operador escribe los archivos, sube a CYBER los archivos de ancho fijo y manda el correo de cierre.
+
+## Arribo automático a CYBER (desde el 02/11)
+
+Con el día completo, en cada vuelta el job también llama `ops.sp_arribo_automatico`, que toma la última asignación OK del día:
+
+| Detecta | Cómo | Hace |
+|---|---|---|
+| El SCBSDOS ya subió | Al menos el 95 % (`ARRIBO_MIN_PCT`) de las altas de la corrida están activas en `DELQMST` | **Correos:** baja los correos de CYBER, inserta los nuevos en `ADDRESS`, bandera 416, remesa `JSP_TAB_MAIL_REMESA_486`, `JSP_CORREOS_486` y apaga la bandera |
+| El SCBTEL ya subió | Al menos el 95 % de los teléfonos de esas altas están en `PHONE_G1` (sin altas con teléfono: la marca `ARRIBO FIN`) | **Teléfonos:** remesa `JSP_TAB_TEL_REMESA_486`, renglón del validador, `JSP_TELEFONOS_REMESA_486`, y escribe `SCBACTH_SINTEL.TXT` en la carpeta de la corrida |
+
+Todo va por el servidor vinculado `[CYBER]` en bloques PL/SQL (`ops.sp_cyber_ejecutar`), con las mismas sentencias que quedan en `ops.CYBER_SCRIPT`: ya no se usa sqlldr. Cada proceso corre una vez por corrida y deja `ARRIBO CORREOS` / `ARRIBO TELEFONOS` en la bitácora. Si falla no se reintenta solo; se corre a mano con `ops.sp_arribar_cyber`. Si la remesa saliera vacía no se ejecuta el procedimiento de CYBER, para no inactivar todo el 486.
+
+El operador solo sube SCBSDOS, SCBTEL y los gescar. La actualización, el retiro y el blanqueo siguen con arribo manual.
 
 Si una corrida falla, se revierte sola (ver *Respaldo y retroceso*) y el job no la vuelve a intentar ese día. Para reintentar se corre a mano.
 
@@ -148,7 +161,7 @@ Reglas de `telbnx.prg` con los ajustes del 01/11, que siguen el procedimiento `G
    - **Fijo:** área 01 + lada; 8 o 7 dígitos; tipo 1 (TEL1), 2 (TEL2) o 4 (resto).
    - **No está en el plan:** se descarta (`TEL_EXIGIR_PNM = 1`).
 
-Salen en SCBTEL (ancho fijo) y en sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL). En CYBER, `RCVRY.JSP_TELEFONOS_REMESA_486` inserta los teléfonos nuevos (los que dejó el arribo del SCBTEL en `PHONE_G1`), inactiva los activos que no vienen en la remesa y activa los de la remesa que estaban inactivos. Respeta los gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`): esos no se tocan. Por eso el SCBTEL se arriba antes de la remesa. El script `TEL_BORRA` también inserta el renglón del día en `RCVRY.JSP_VALIDADOR_TELEFONOS` con el total enviado, y el procedimiento lo completa (diferencia contra lo cargado, activados, inactivados y nuevos).
+Salen en SCBTEL (ancho fijo) y en sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL). En CYBER, `RCVRY.JSP_TELEFONOS_REMESA_486` inserta los teléfonos nuevos (los que dejó el arribo del SCBTEL en `PHONE_G1`), inactiva los activos que no vienen en la remesa y activa los de la remesa que estaban inactivos. Respeta los gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`): esos no se tocan. Por eso el SCBTEL se arriba antes de la remesa: el job espera a ver los teléfonos en `PHONE_G1` antes de cargarla. El script `TEL_BORRA` también inserta el renglón del día en `RCVRY.JSP_VALIDADOR_TELEFONOS` con el total enviado, y el procedimiento lo completa (diferencia contra lo cargado, activados, inactivados y nuevos).
 
 # Exclusiones
 
@@ -191,7 +204,7 @@ Los archivos planos de ancho fijo (TXT) quedan todos en la carpeta de su corrida
 | `SCBTEL.TXT` | Teléfonos | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBTEL.TXT` |
 | `SCBACTH_486NU.TXT` | Gescar de cuentas nuevas | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486NU.TXT` |
 | `SCBACTH_486REA.TXT` | Gescar de cuentas reasignadas | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486REA.TXT` |
-| `SCBACTH_SINTEL.TXT` | Gescar de cuentas sin teléfono en CYBER | `ops.sp_bajar_cyber 'TELEFONOS'` sobre la asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_SINTEL.TXT` |
+| `SCBACTH_SINTEL.TXT` | Gescar de cuentas sin teléfono en CYBER | El arribo automático de teléfonos (o `ops.sp_bajar_cyber 'TELEFONOS'` a mano); se escribe solo | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_SINTEL.TXT` |
 | `SCBACTH_486.TXT` | Gescar de retiro | Retiro (`ops.sp_retiro`) | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486.TXT` |
 | `SCBPAG.TXT` | Arribo de pagos | Actualización | `C:\BANBAJ\486\SALIDA\20261103_corrida124\SCBPAG.TXT` |
 | `sub_mst.TXT`, `sub_mail.TXT` | Remesas de teléfonos y correos (separadas por `\|`) | Asignación | misma carpeta |
@@ -302,6 +315,8 @@ Se mandan con `mail.sp_enviar` usando plantillas de `mail.PLANTILLA` y listas de
 | `ops.sp_etiquetar_campo` | Etiquetado del DAT |
 | `ops.sp_regenerar_scbsdos` | SCBSDOS fuera de proceso |
 | `ops.sp_bajar_cyber` | Status (blanqueo), correos, teléfonos y pagos desde CYBER |
+| `ops.sp_arribo_automatico` | Revisa si ya subieron SCBSDOS y SCBTEL y arriba correos y teléfonos (lo hace el job) |
+| `ops.sp_arribar_cyber` | Arribar a mano correos o teléfonos de una asignación (`@solo_mostrar = 1` para ver los bloques) |
 | `cfg.sp_exclusion_cargar` | Lista negra y otras exclusiones |
 | `ops.sp_revertir_corrida` | Retroceso manual |
 | `ops.sp_migrar_486` | Migración desde FoxPro (una sola vez) |
@@ -323,6 +338,10 @@ Todos los que cambian datos tienen modo de revisión (`@confirmar = 0` o `@solo_
 | TEL\_EXIGIR\_PNM | 1 | Descartar teléfonos fuera del plan de numeración |
 | TELBAJ\_GRUPO | 1 | Grupo del 486 en telbaj |
 | PERFIL\_DBMAIL | asig.486.cdmx | Perfil de correo |
+| ARRIBO\_AUTOMATICO | 1 | El job arriba solo correos y teléfonos (0 = manual) |
+| ARRIBO\_MIN\_PCT | 95 | Porcentaje de altas en CYBER para dar por subido un archivo |
+| CYBER\_REMESA\_TEL\_COLUMNAS / \_MAIL\_COLUMNAS | CUENTA,AREA,TELEFONO,TIPOTEL / CUENTA,CORREO | Columnas de las remesas en CYBER |
+| CYBER\_SENTENCIAS\_POR\_BLOQUE | 200 | Tamaño de cada bloque PL/SQL |
 
 # Seguridad
 

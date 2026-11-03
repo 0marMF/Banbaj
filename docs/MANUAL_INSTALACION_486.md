@@ -116,6 +116,12 @@ SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clav
 | CYBER\_ORACLE\_ORIGEN | (vacío) | Lo llena el script 03 |
 | RETROCESO\_AUTOMATICO | 1 | 0 para apagarlo |
 | NEGATIVO\_MODO | CERO | Saldos negativos suben como cero |
+| ARRIBO\_AUTOMATICO | 1 | El job arriba solo correos y teléfonos a CYBER (0 = arribo manual) |
+| ARRIBO\_MIN\_PCT | 95 | Porcentaje de altas que deben estar en CYBER para dar por subido el SCBSDOS o el SCBTEL |
+| CYBER\_REMESA\_TEL\_COLUMNAS | CUENTA,AREA,TELEFONO,TIPOTEL | Columnas de `RCVRY.JSP_TAB_TEL_REMESA_486` (como el `.CTL` de sqlldr) |
+| CYBER\_REMESA\_MAIL\_COLUMNAS | CUENTA,CORREO | Columnas de `RCVRY.JSP_TAB_MAIL_REMESA_486` |
+| CYBER\_SENTENCIAS\_POR\_BLOQUE | 200 | Sentencias por bloque PL/SQL que se mandan a CYBER |
+| CYBER\_VALIDADOR\_TELEFONOS | 1 | `TEL_BORRA` crea el renglón del día en `RCVRY.JSP_VALIDADOR_TELEFONOS` |
 
 Cambiar uno: `UPDATE cfg.PARAMETRO SET VALOR = N'…' WHERE CLIENTE = '486' AND CLAVE = '…';`
 
@@ -143,6 +149,21 @@ Reglas desde el 01/11:
 | TEL\_INVALIDOS | lista de números que nunca se mandan |
 
 La cuenta del servicio de SQL Server necesita lectura en esas tablas y un mapeo de inicio de sesión en el servidor vinculado. Si en la primera corrida el aviso dice que no pudo leer, revisar eso.
+
+### Permisos en CYBER para el arribo automático
+
+El usuario de Oracle de la credencial `CYBER_ORACLE` necesita, en el esquema `RCVRY`:
+
+| Objeto | Permiso |
+| --- | --- |
+| `JSP_TAB_TEL_REMESA_486`, `JSP_TAB_MAIL_REMESA_486` | `TRUNCATE` (dueño o `DROP ANY TABLE`) e `INSERT` |
+| `ADDRESS` | `INSERT` (correos nuevos) |
+| `JSP_VALIDADOR_TELEFONOS` | `INSERT` |
+| `RPT_LOG_CYBER_REG` | `UPDATE` (bandera 416) |
+| `JSP_TELEFONOS_REMESA_486`, `JSP_CORREOS_486` | `EXECUTE` |
+| `DELQMST`, `PHONE_G1`, `PHONE` | `SELECT` (para detectar el arribo y bajar los teléfonos) |
+
+Antes de la primera corrida, probar sin escribir con `EXEC ops.sp_arribar_cyber <corrida>, 'TELEFONOS', @solo_mostrar = 1;`.
 
 ### Proveedor de Oracle
 
@@ -296,7 +317,10 @@ Cada 30 minutos el job llama `ops.sp_diario_486`. Esto es lo que hace:
    - Genera SCBSDOS, SCBTEL, sub\_mst, sub\_mail, gescar y la copia del DAT para MIS.
    - Si hay validaciones, manda sus avisos: saldo ≤0 en Consumo, pagos negativos (al equipo de asignaciones) o números cortados por Excel en la base maestra.
    - Con más de 100 cuentas nuevas avisa con ALERTA\_NUEVAS\_486.
-4. Si la ACT y la ASIG del día ya están hechas, contesta "DIA COMPLETO" y no repite nada.
+4. Si la ACT y la ASIG del día ya están hechas, contesta "DIA COMPLETO" y no repite nada. En ese momento revisa el **arribo automático a CYBER** (`ops.sp_arribo_automatico`):
+   - **Correos:** en cuanto detecta que el operador ya subió el SCBSDOS (las altas de la corrida están activas en `DELQMST`), inserta los correos nuevos en `ADDRESS`, enciende la bandera 416, carga la remesa, ejecuta `JSP_CORREOS_486` y apaga la bandera.
+   - **Teléfonos:** en cuanto detecta que ya subió el SCBTEL (los teléfonos de las altas están en `PHONE_G1`), carga la remesa, crea el renglón del validador, ejecuta `JSP_TELEFONOS_REMESA_486` y escribe `SCBACTH_SINTEL.TXT` en la carpeta de la corrida.
+   - Cada uno corre una sola vez por corrida. Si falla queda `ERROR` en la bitácora y no se reintenta solo.
 
 Las devoluciones que detecta la asignación **no se aplican solas**: quedan en `ops.DEVOLUCION` para revisión (`@aplicar_retiro = 0`).
 
@@ -351,7 +375,7 @@ Los archivos planos de ancho fijo (TXT) quedan todos en la carpeta de su corrida
 | `SCBTEL.TXT` | Teléfonos | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBTEL.TXT` |
 | `SCBACTH_486NU.TXT` | Gescar de cuentas nuevas | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486NU.TXT` |
 | `SCBACTH_486REA.TXT` | Gescar de cuentas reasignadas | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486REA.TXT` |
-| `SCBACTH_SINTEL.TXT` | Gescar de cuentas sin teléfono en CYBER | `ops.sp_bajar_cyber 'TELEFONOS'` sobre la asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_SINTEL.TXT` |
+| `SCBACTH_SINTEL.TXT` | Gescar de cuentas sin teléfono en CYBER | El arribo automático de teléfonos (o `ops.sp_bajar_cyber 'TELEFONOS'` a mano); se escribe solo | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_SINTEL.TXT` |
 | `SCBACTH_486.TXT` | Gescar de retiro | Retiro (`ops.sp_retiro`) | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486.TXT` |
 | `SCBPAG.TXT` | Arribo de pagos | Actualización | `C:\BANBAJ\486\SALIDA\20261103_corrida124\SCBPAG.TXT` |
 | `sub_mst.TXT`, `sub_mail.TXT` | Remesas de teléfonos y correos (separadas por `\|`) | Asignación | misma carpeta |
@@ -388,7 +412,23 @@ EXEC ops.sp_exportar_salidas @id, @carpeta = N'D:\otra\carpeta\';   -- solo para
 
 **4. Arribar a CYBER**
 
-El arribo sigue siendo manual (`cyber/486/ARRIBO_MANUAL.md`): subir los planos y correr los scripts en Oracle. Marcar las horas para el seguimiento de tiempos:
+En la asignación el operador **solo sube los archivos de ancho fijo** con el cargador de CYBER; el resto lo hace el job (detalle en `cyber/486/ARRIBO_MANUAL.md`):
+
+1. Subir `SCBSDOS.TXT`. En la siguiente vuelta del job (máximo 30 minutos) se arriban los correos.
+2. Subir `SCBTEL.TXT`. En la siguiente vuelta se arriban los teléfonos y aparece `SCBACTH_SINTEL.TXT` en la carpeta de la corrida.
+3. Subir los gescar: `SCBACTH_486NU.TXT`, `SCBACTH_486REA.TXT` y `SCBACTH_SINTEL.TXT`.
+
+Para ver cómo va, o para correrlo a mano si quedó en ERROR (una vez corregida la causa):
+
+```sql
+SELECT PASO, ESTATUS, REGISTROS, MENSAJE FROM ops.BITACORA
+ WHERE ID_CORRIDA = @id AND PASO LIKE 'ARRIBO%' ORDER BY ID;    -- ARRIBO CORREOS / ARRIBO TELEFONOS
+EXEC ops.sp_arribo_automatico;                                   -- revisa y arriba lo que ya esté listo (lo mismo que el job)
+EXEC ops.sp_arribar_cyber @id, 'CORREOS', @solo_mostrar = 1;     -- ver los bloques PL/SQL sin ejecutar
+EXEC ops.sp_arribar_cyber @id, 'CORREOS';                        -- o 'TELEFONOS'
+```
+
+La actualización (SCBPAG y scripts `ACT_*`), el retiro y el blanqueo siguen siendo manuales. Marcar las horas para el seguimiento de tiempos:
 
 ```sql
 EXEC ops.sp_marcar_arribo @id, 'SOLICITUD';
@@ -411,8 +451,9 @@ EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486';     -- correo de fin de asignac
 | Cambiar una etiqueta | `EXEC ops.sp_etiquetar_campo @campo = 'ETIQUETA1', @archivo = N'…\etiquetas.csv';` El CSV lleva FOLIO,ETIQUETA (o `@tipo_llave = 'CUENTA'`). Agregar `@confirmar = 1` para aplicar. Genera SCBSDOS. |
 | SCBSDOS fuera de proceso | `EXEC ops.sp_regenerar_scbsdos @motivo = N'…';` |
 | Blanqueo de STATUS (días 1 a 10) | `EXEC ops.sp_bajar_cyber 'STATUS', @id_corrida = @id;` |
-| Correos nuevos desde CYBER | `EXEC ops.sp_bajar_cyber 'CORREOS', @id_corrida = @id;` |
-| Gescar de cuentas sin teléfono | `EXEC ops.sp_bajar_cyber 'TELEFONOS', @id_corrida = @id;` |
+| Arribar correos o teléfonos a mano (si el automático quedó en ERROR o está apagado) | `EXEC ops.sp_arribar_cyber @id, 'CORREOS';` o `'TELEFONOS'`. Con `@solo_mostrar = 1` solo muestra los bloques. |
+| Correos nuevos desde CYBER (solo arribo manual) | `EXEC ops.sp_bajar_cyber 'CORREOS', @id_corrida = @id;` |
+| Gescar de cuentas sin teléfono (solo arribo manual) | `EXEC ops.sp_bajar_cyber 'TELEFONOS', @id_corrida = @id;` |
 | Cuadre de pagos | `EXEC ops.sp_bajar_cyber 'PAGOS', @id_corrida = @id, @fecha = '…';` |
 | Lista negra o exclusiones | `EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'…', @req = '…', @solicita = N'…';` Los teléfonos deben tener 10 dígitos. |
 | Correr el día a mano | `EXEC ops.sp_diario_486 @fecha = '…', @forzar = 1;` o directamente `ops.sp_actualizacion_486` / `ops.sp_asignacion_486`. |
@@ -498,7 +539,7 @@ Reglas:
 
 Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre los mismos archivos. Solo FoxPro arriba a CYBER; Banbaj solo genera.
 
-1. Deshabilitar el job (`msdb.dbo.sp_update_job @job_name = N'Banbaj 486 diario', @enabled = 0`) y correr cada día a mano con `ops.sp_diario_486 @fecha = '…'`.
+1. Deshabilitar el job (`msdb.dbo.sp_update_job @job_name = N'Banbaj 486 diario', @enabled = 0`) y correr cada día a mano con `ops.sp_diario_486 @fecha = '…'`. Apagar el arribo automático para que Banbaj no escriba en CYBER: `UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'ARRIBO_AUTOMATICO';`.
 2. Para no mandar correos reales, cambiar las listas de `mail.DESTINATARIO` a un correo propio, o usar `@solo_prueba = 1` en `sp_avisar` y `sp_aviso_devolucion`.
 3. Escribir los archivos con `ops.sp_exportar_salidas` a una carpeta de pruebas (`@carpeta = N'C:\BANBAJ\PARALELO\'`).
 4. Comparar contra lo que generó FoxPro el mismo día:
@@ -523,6 +564,8 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 - [ ] La cuenta del servicio de SQL Server llega a `\\192.168.50.13\q`
 - [ ] La cuenta del servicio de SQL Server puede leer las carpetas de entrada y escribir en la salida, en MIS y en C:\\
 - [ ] Nuevas versiones instaladas en CYBER: `RCVRY.JSP_CORREOS_486` (`cyber/486/oracle/JSP_CORREOS_486.sql`: solo queda activo el domicilio de la última base maestra) y `RCVRY.JSP_TELEFONOS_REMESA_486` (`cyber/486/oracle/JSP_TELEFONOS_REMESA_486.sql`: optimizado, misma lógica)
+- [ ] Usuario de Oracle con los permisos del arribo automático (ver *Permisos en CYBER para el arribo automático*) y columnas de las remesas confirmadas contra los `.CTL`
+- [ ] Durante el paralelo, `ARRIBO_AUTOMATICO = 0` (solo FoxPro arriba); al salir a producción, `ARRIBO_AUTOMATICO = 1`
 - [ ] Migración hecha y conteos cuadrados con FoxPro
 - [ ] `C:\MIGRA486` borrado
 - [ ] Listas de correo con los destinatarios reales (Operación, AEM, Asignaciones)
@@ -547,6 +590,11 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 | 50300–50304 | Retroceso no permitido | Ver *Retroceso manual* |
 | 50900–50906 | A un CSV de migración le faltan columnas | Revisar la exportación de ese DBF |
 | 50910–50914 | El destino de la migración ya tiene datos | Agregar `@reemplazar = 1` si de verdad se quiere sobrescribir |
+| 50760–50762 | Las columnas de la remesa están mal configuradas | Revisar `CYBER_REMESA_TEL_COLUMNAS` (2 a 4 columnas) y `CYBER_REMESA_MAIL_COLUMNAS` (2 columnas): solo letras, números, `_` y comas |
+| 50763–50765 | Arribo pedido sobre una corrida que no es ASIG, con un tipo que no es CORREOS/TELEFONOS o dentro de una transacción abierta | Pasar el número de la asignación y correrlo fuera de `BEGIN TRAN` |
+| 50766–50767 | La remesa salió vacía | No se ejecuta para no inactivar todos los teléfonos o correos del 486. Revisar la asignación |
+| `ARRIBO CORREOS` / `ARRIBO TELEFONOS` en ERROR | Oracle rechazó un bloque (permisos, columnas, tabla bloqueada) | El mensaje trae el error de Oracle. Corregir y correr `EXEC ops.sp_arribar_cyber <id>, '<CORREOS\|TELEFONOS>';` |
+| El arribo se queda en `ESPERANDO ARRIBO` | No se ha subido el SCBSDOS o el SCBTEL, o subió menos del `ARRIBO_MIN_PCT` | Revisar el cargador de CYBER. Si no hubo altas con teléfono, marcar `EXEC ops.sp_marcar_arribo <id>, 'FIN';` |
 | Error de proveedor OraOLEDB | Sin *Allow inprocess* o sin cliente de Oracle | Ver *Proveedor de Oracle* en la configuración |
 | No llegan correos | Falla de Database Mail | `SELECT * FROM msdb.dbo.sysmail_event_log ORDER BY log_date DESC;` y `sysmail_faileditems` |
 
