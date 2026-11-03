@@ -169,3 +169,13 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [ ] Confirmar las columnas de las remesas contra `LOAD_TEL_REMESA.CTL` y `LOAD_MAIL_REMESA.CTL` (parámetros `CYBER_REMESA_TEL_COLUMNAS` y `CYBER_REMESA_MAIL_COLUMNAS`).
 - [ ] Probar en CYBER con `@solo_mostrar = 1` y luego una corrida real con el arribo automático encendido.
 - [ ] Opcional: estructura completa de `PHONE_G1` para insertar ahí directamente y dejar de subir el SCBTEL.
+
+## 9. Arribo por pendientes, retiro automático y correo de hallazgos (02/11)
+
+- [x] El arribo detecta el SCBSDOS y el SCBTEL contra lo que le faltaba a CYBER al terminar la asignación (cuentas, domicilios y teléfonos), no contra las altas: funciona en días sin cuentas nuevas.
+- [x] Retiro automático en asignación y actualización con tope de 50 % por segmento; arriba del tope queda manual.
+- [x] Cierre del retiro sin intervención: archivos, ZIP y correo de devolución, `dmstatus = 'R'` en CYBER y copia de la devolución a `\\192.168.50.1\Cyber_00\dev\`.
+- [x] Correo de hallazgos (`HALLAZGO_486`) solo al equipo de asignaciones.
+- [ ] Confirmar que `DELQMST.DMADDR1` es el domicilio (parámetro `CYBER_COLUMNA_DOMICILIO`); si no, dejarlo vacío y la detección del SCBSDOS usa solo las cuentas.
+- [ ] Permiso de escritura de la cuenta del servicio de SQL Server en `\\192.168.50.1\Cyber_00\dev\` y `UPDATE` en `RCVRY.DELQMST` para el usuario de Oracle.
+- [ ] Estructura de `PHONE_G1` para usar también el sello de fecha y hora del SCBTEL (`FECHA_G`, `FECHA_A`) como señal.

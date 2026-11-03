@@ -15,16 +15,16 @@ En la asignación, **el operador solo sube los archivos de ancho fijo** con el c
 | Qué | Quién | Cuándo |
 | --- | --- | --- |
 | Subir `SCBSDOS.TXT` | Operador | Después de la asignación |
-| Correos: insertar nuevos, bandera 416, remesa, `JSP_CORREOS_486` | **Job** | En cuanto detecta que el SCBSDOS ya subió (las altas de la corrida están activas en `DELQMST`) |
+| Correos: insertar nuevos, bandera 416, remesa, `JSP_CORREOS_486` | **Job** | En cuanto detecta que el SCBSDOS ya subió (lo que le faltaba a `DELQMST` ya llegó) |
 | Subir `SCBTEL.TXT` | Operador | Después de la asignación |
-| Teléfonos: remesa, validador, `JSP_TELEFONOS_REMESA_486` | **Job** | En cuanto detecta que el SCBTEL ya subió (los teléfonos de las altas están en `PHONE_G1`) |
+| Teléfonos: remesa, validador, `JSP_TELEFONOS_REMESA_486` | **Job** | En cuanto detecta que el SCBTEL ya subió (los teléfonos que le faltaban a `PHONE_G1` ya llegaron) |
 | Generar `SCBACTH_SINTEL.TXT` | **Job** | Al terminar los teléfonos; lo escribe solo en la carpeta de la corrida |
 | Subir los gescar (incluido `SCBACTH_SINTEL.TXT`) | Operador | Cuando aparezcan en la carpeta |
 | Correo de cierre `CONFIRMACION_ASIG_486` | Operador | Al terminar |
 
-Cómo detecta el job que ya subió cada archivo: cada 30 minutos (`ops.sp_diario_486` → `ops.sp_arribo_automatico`) baja de CYBER las cuentas activas del 486 y los teléfonos de `PHONE_G1`, y los compara con las altas de la corrida. Arranca cuando están al menos el `ARRIBO_MIN_PCT` (95 %). Si la corrida no tiene altas con teléfono, los teléfonos esperan a que el operador marque `EXEC ops.sp_marcar_arribo <ID>, 'FIN';`.
+Cómo detecta el job que ya subió cada archivo: al terminar la asignación, antes de que existan los TXT, toma una **foto de lo que le falta a CYBER** (`ops.sp_arribo_base`, tabla `ops.ARRIBO_PENDIENTE`): las cuentas del SCBSDOS que no están activas en `DELQMST`, las cuentas cuyo domicilio en CYBER (`DMADDR1`, parámetro `CYBER_COLUMNA_DOMICILIO`) es distinto al que manda el SCBSDOS y los teléfonos del SCBTEL, de todas las cuentas, que no están en `PHONE_G1`. Cada 30 minutos (`ops.sp_diario_486` → `ops.sp_arribo_automatico`) vuelve a bajar CYBER y da por subido el archivo cuando ya llegó al menos el `ARRIBO_MIN_PCT` (95 %) de lo pendiente. Así funciona igual con cero o con muchas cuentas nuevas. Si no había nada pendiente, CYBER ya tiene lo que necesitan los procedimientos y se arriba en la siguiente vuelta. Los teléfonos además esperan a que las cuentas pendientes estén activas (el procedimiento de teléfonos solo trabaja cuentas activas). `EXEC ops.sp_marcar_arribo <ID>, 'FIN';` da todo por subido.
 
-Cada proceso corre **una sola vez por corrida**. Si falla, queda `ERROR` en la bitácora (pasos `ARRIBO CORREOS` / `ARRIBO TELEFONOS`), la bandera 416 se intenta apagar y el job no lo reintenta. Se corrige la causa y se corre a mano:
+Cada proceso corre **una sola vez por corrida**. Si falla, queda `ERROR` en la bitácora (pasos `ARRIBO CORREOS` / `ARRIBO TELEFONOS`), la bandera 416 se intenta apagar, se manda el correo de hallazgos (`HALLAZGO_486`) al equipo de asignaciones y el job no lo reintenta. Se corrige la causa y se corre a mano:
 
 ```sql
 EXEC ops.sp_arribo_automatico;                                          -- lo mismo que hace el job: revisa y arriba lo que ya esté listo
@@ -37,7 +37,7 @@ EXEC ops.sp_arribar_cyber <ID>, 'TELEFONOS';
 
 Para apagar el arribo automático y volver al arribo manual de abajo: `UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'ARRIBO_AUTOMATICO';`.
 
-Lo que **sigue a mano**: la actualización (SCBPAG y scripts `ACT_*`), el retiro, el blanqueo de status y el cuadre de pagos.
+Lo que **sigue a mano**: la actualización (SCBPAG y scripts `ACT_*`), el blanqueo de status y el cuadre de pagos. El retiro también es automático (ver *Retiro*).
 
 **Permisos del usuario de Oracle** (el de la credencial `CYBER_ORACLE`): `TRUNCATE`/`INSERT` en `RCVRY.JSP_TAB_TEL_REMESA_486` y `RCVRY.JSP_TAB_MAIL_REMESA_486`, `INSERT` en `RCVRY.ADDRESS` y `RCVRY.JSP_VALIDADOR_TELEFONOS`, `UPDATE` en `RCVRY.RPT_LOG_CYBER_REG` y `EXECUTE` de `RCVRY.JSP_TELEFONOS_REMESA_486` y `RCVRY.JSP_CORREOS_486`. Sin ellos el arribo queda en `ERROR` con el mensaje de Oracle.
 
@@ -96,6 +96,15 @@ Si hubo retiro: `EXEC ops.sp_exportar_salidas <corrida>, @zip = 'RETIROS', @envi
 Los pagos negativos no salen en `SCBPAG.TXT`: quedan en `ops.RECHAZO` (origen `PAGOS_NEGATIVOS`) y se avisa al equipo de asignaciones con la plantilla `PAGOS_NEGATIVOS_486`.
 
 ## Retiro (`ops.sp_retiro`, también desde `ops.sp_retiro_solicitud`)
+
+**Automático desde el 02/11** (`sql/77_sp_retiro_automatico.sql`, parámetro `RETIRO_AUTOMATICO = 1`):
+- La asignación y la actualización aplican solas sus devoluciones, salvo que en algún segmento superen el 50 % de las cuentas que ese segmento tiene en el DAT (`RETIRO_TOPE_PCT_ASIG` y `RETIRO_TOPE_PCT_ACT`). En ese caso no se aplica nada, quedan en `ops.DEVOLUCION` y llega el correo de hallazgos al equipo de asignaciones con la tabla por segmento.
+- Después de aplicar, `ops.sp_retiro_cerrar` hace sin intervención: escribe los archivos de la corrida, arma el ZIP y manda el correo único de devolución; ejecuta `cyber\RETIRO.sql` en CYBER por el servidor vinculado; y copia `MX_G1MCT_DVBJIG_*` a `RUTA_DEVOLUCION_CYBER` (`\\192.168.50.1\Cyber_00\dev\`).
+- El retiro por solicitud hace lo mismo al confirmarlo (`@confirmar = 1`).
+- El operador solo sube `SCBACTH_486.TXT` (gescar de retiro).
+- Si un paso falla, queda `ERROR` en la bitácora (`RETIRO ARCHIVOS`, `RETIRO CYBER`, `RETIRO DEVOL CYBER`), llega el correo de hallazgos y se repite con `EXEC ops.sp_retiro_cerrar <ID>;` (solo repite lo que no quedó OK; `@solo_mostrar = 1` muestra qué falta).
+- Si el retiro quedó detenido por el tope y es correcto: `EXEC ops.sp_retiro <ID>; EXEC ops.sp_retiro_cerrar <ID>;`.
+
 
 | Archivo | Qué es |
 | --- | --- |
