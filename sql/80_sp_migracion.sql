@@ -23,8 +23,9 @@
      PAGOS        PAGTOT.csv (CUENTA, MONT, FE_PAG, FE_REG) -> dat.PAGO_ARRIBADO
      ETIQUETAS    ETI, DM1, TOP, STATUS                -> cfg.ETIQUETA
      EXCLUSIONES  EXC486, DIRMAL, EMAILMALO, BLACKLIST -> cfg.EXCLUSION
-                  BLACKLIST: TELEFONO (o TEL, 10 dígitos), OS, FECHA, STATUS. STATUS 'X' excluye,
-                  vacío no; si el archivo no trae STATUS, todo cuenta como 'X'.
+                  BLACKLIST (TEL | FE_AGRE | OS | SOLICITUD): TEL de 10 dígitos, OS = requerimiento,
+                  FE_AGRE = fecha, SOLICITUD = quién lo pidió. STATUS 'X' excluye, vacío no; el DBF
+                  no trae STATUS, así que todo cuenta como 'X'.
    Ya no se migran (01/11): TELBAJ y PNC se leen de CYBER en cada asignación
    (ops.sp_telefonos_refrescar_cyber) y LADA no la usa ningún proceso.
    ===================================================================== */
@@ -196,7 +197,8 @@ BEGIN
                      (20, N'MAIL'), (21, N'CORREO1'), (22, N'CORREO2'),
                      (30, N'TEL1'), (31, N'TEL2'), (32, N'TEL3'), (33, N'TEL4'), (34, N'TEL5'), (35, N'TEL6'), (36, N'TEL7'), (37, N'TEL8'),
                      (38, N'TEL9'), (39, N'TEL10'), (40, N'TEL11'), (41, N'TEL12'), (42, N'TEL13'), (43, N'TEL14'), (44, N'TEL15'), (45, N'TEL16'),
-                     (50, N'DIRECC1'), (51, N'DIRECC2'), (52, N'DIRECC3'), (53, N'DIRECC4'), (54, N'DIRECC5'), (55, N'ESTADO'), (56, N'EDO')) v(o, c)
+                     (50, N'DIRECC1'), (51, N'DIRECC2'), (52, N'DIRECC3'), (53, N'DIRECC4'), (54, N'DIRECC5'), (55, N'ESTADO'), (56, N'EDO'),
+                     (60, N'SEGMENTO'), (61, N'STATUS'), (62, N'TRAMO'), (63, N'ETIQUETA')) v(o, c)
         WHERE COL_LENGTH('stg.MIG_HISTORIA', c) IS NOT NULL;
         DECLARE @fx_alta NVARCHAR(600) = CASE WHEN @h_alta IS NULL THEN N'CAST(NULL AS DATE)'
                 ELSE N'COALESCE(TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_alta) + N'), 112), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_alta) + N'), 23), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@h_alta) + N'), 103))' END,
@@ -207,11 +209,13 @@ BEGIN
                        ' + CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'CUENTA2') IS NOT NULL THEN N'LEFT(cfg.fn_texto(CUENTA2), 28)' ELSE N'CAST(NULL AS VARCHAR(28))' END + N' AS CUENTA2,
                        ' + CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'SEGMENTO2') IS NOT NULL THEN N'LEFT(cfg.fn_texto(SEGMENTO2), 20)' ELSE N'CAST(NULL AS VARCHAR(20))' END + N' AS SEGMENTO2,
                        ' + CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'RIESGO') IS NOT NULL THEN N'LEFT(cfg.fn_texto(RIESGO), 35)' ELSE N'CAST(NULL AS VARCHAR(35))' END + N' AS RIESGO,
-                       ' + CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'SUB_CTE') IS NOT NULL THEN N'cfg.fn_texto(SUB_CTE)' ELSE N'CAST(NULL AS NVARCHAR(3))' END + N' AS SUB_CTE,
+                       ' + CASE WHEN COL_LENGTH('stg.MIG_HISTORIA', 'SUB_CTE') IS NOT NULL THEN N'cfg.fn_texto(SUB_CTE)' ELSE N'CAST(NULL AS NVARCHAR(3))' END + N' AS SUB_CTE0,
                        ' + @fx_alta + N' AS FE_ALTA, ' + @fx_baja + N' AS FE_BAJA,
                        ' + CASE WHEN @h_json IS NULL THEN N'CAST(NULL AS NVARCHAR(MAX))' ELSE N'(SELECT ' + @h_json + N' FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)' END + N' AS DATOS, FILA
                 FROM stg.MIG_HISTORIA),
-            u AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY CUENTA, FOLIO, FE_ALTA ORDER BY FILA DESC) AS RN FROM h WHERE CUENTA IS NOT NULL AND FOLIO > 0)
+            u0 AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY CUENTA, FOLIO, FE_ALTA ORDER BY FILA DESC) AS RN FROM h WHERE CUENTA IS NOT NULL AND FOLIO > 0),
+            /* historia.dbf no trae SUB_CTE: la primera asignación de la cuenta es NVA y las siguientes son REA */
+            u AS (SELECT *, COALESCE(SUB_CTE0, CASE WHEN ROW_NUMBER() OVER (PARTITION BY CUENTA, RN ORDER BY FE_ALTA, FILA) = 1 THEN ''NVA'' ELSE ''REA'' END) AS SUB_CTE FROM u0)
             INSERT INTO #d_hist (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA, DATOS_BAJA)
             SELECT @cliente, u.CUENTA, u.FOLIO, ISNULL(u.CUENTA2, CONCAT(@cliente, ''-'', u.FOLIO)), u.SEGMENTO2, u.RIESGO,
                    CASE WHEN u.SUB_CTE IN (''NVA'', ''REA'') THEN u.SUB_CTE ELSE ''NVA'' END, ''B'', ISNULL(u.FE_ALTA, ''19000101''), u.FE_BAJA,
@@ -303,7 +307,10 @@ BEGIN
         ('DIRMAL', 'DIRECCION', 'CUENTA', 'DIRECC1', N'Dirección mala (dirmal)', 'VALOR'),
         ('EMAILMALO', 'CORREO', 'EMAIL', 'CUENTA', N'Correo malo (EMAILMALO)', 'VALOR2'),
         ('BLACKLIST', 'TELEFONO', 'TEL', NULL, N'Lista negra de teléfonos (blacklist_486)', NULL);
-    /* BLACKLIST: el teléfono puede venir como TELEFONO o TEL */
+    /* BLACKLIST_486.DBF: TEL | FE_AGRE | OS | SOLICITUD (sin STATUS). El teléfono puede venir como TELEFONO o TEL
+       y la fecha como FE_AGRE o FECHA. */
+    DECLARE @bl_fecha SYSNAME = CASE WHEN COL_LENGTH('stg.MIG_BLACKLIST', 'FE_AGRE') IS NOT NULL THEN N'FE_AGRE'
+                                     WHEN COL_LENGTH('stg.MIG_BLACKLIST', 'FECHA') IS NOT NULL THEN N'FECHA' END;
     IF COL_LENGTH('stg.MIG_BLACKLIST', 'TEL') IS NULL AND COL_LENGTH('stg.MIG_BLACKLIST', 'TELEFONO') IS NOT NULL
         UPDATE @ex SET CV = 'TELEFONO' WHERE FUENTE = 'BLACKLIST';
     DECLARE @fx SYSNAME, @cv SYSNAME, @cv2 SYSNAME, @mot NVARCHAR(200), @filtro VARCHAR(10), @antes INT;
@@ -318,13 +325,14 @@ BEGIN
             /* TELEFONO, OS (requerimiento), FECHA y STATUS: 'X' excluye, vacío no. Sin columna STATUS, todo es 'X'. */
             SET @sql = N';WITH x AS (SELECT cfg.fn_solo_digitos(cfg.fn_texto(' + QUOTENAME(@cv) + N')) AS V, '
                      + CASE WHEN COL_LENGTH('stg.MIG_BLACKLIST', 'OS') IS NOT NULL THEN N'LEFT(cfg.fn_texto(OS), 40)' ELSE N'CAST(NULL AS VARCHAR(40))' END + N' AS OS, '
-                     + CASE WHEN COL_LENGTH('stg.MIG_BLACKLIST', 'FECHA') IS NOT NULL
-                            THEN N'COALESCE(TRY_CONVERT(DATE, cfg.fn_texto(FECHA), 112), TRY_CONVERT(DATE, cfg.fn_texto(FECHA), 23), TRY_CONVERT(DATE, cfg.fn_texto(FECHA), 103))'
+                     + CASE WHEN @bl_fecha IS NOT NULL
+                            THEN N'COALESCE(TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@bl_fecha) + N'), 112), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@bl_fecha) + N'), 23), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@bl_fecha) + N'), 103))'
                             ELSE N'CAST(NULL AS DATE)' END + N' AS FE, '
+                     + CASE WHEN COL_LENGTH('stg.MIG_BLACKLIST', 'SOLICITUD') IS NOT NULL THEN N'LEFT(cfg.fn_texto(SOLICITUD), 150)' ELSE N'CAST(NULL AS NVARCHAR(150))' END + N' AS SOL, '
                      + CASE WHEN COL_LENGTH('stg.MIG_BLACKLIST', 'STATUS') IS NOT NULL THEN N'CASE WHEN UPPER(cfg.fn_texto(STATUS)) = ''X'' THEN 1 ELSE 0 END' ELSE N'1' END + N' AS ACT, '
                      + N'ROW_NUMBER() OVER (PARTITION BY cfg.fn_solo_digitos(cfg.fn_texto(' + QUOTENAME(@cv) + N')) ORDER BY FILA DESC) AS RN FROM stg.MIG_BLACKLIST) '
                      + N'INSERT INTO #d_exc (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO, REQ, ACTIVO, FE_ALTA) '
-                     + N'SELECT @cliente, @tipo, V, NULL, @mot, OS, ACT, FE FROM x WHERE RN = 1 AND LEN(V) = 10;';
+                     + N'SELECT @cliente, @tipo, V, NULL, ISNULL(N''Solicita: '' + SOL, @mot), OS, ACT, FE FROM x WHERE RN = 1 AND LEN(V) = 10;';
         ELSE
         SET @sql = N';WITH x AS (SELECT '
                  + CASE WHEN @tipo = 'CORREO' THEN N'LOWER(cfg.fn_texto(' + QUOTENAME(@cv) + N'))'

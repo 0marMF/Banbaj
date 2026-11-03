@@ -222,7 +222,7 @@ Se hace **una sola vez**, justo antes de la primera corrida en SQL Server. Trae 
 | CSV (DBF de origen) | Campos que se usan | Destino en SQL Server |
 | --- | --- | --- |
 | DAT | todos los que existen en `dat.DAT_486` (los demás se ignoran) | `dat.DAT_486` y el periodo vigente en `dat.HISTORIA_FOLIO` |
-| HISTORIA | CUENTA, FOLIO, CUENTA2, RIESGO, SEGMENTO2, SUB\_CTE; fechas de asignación (FE\_ASIG), reasignación (FE\_REA) y retiro (FE\_BAJA / FE\_RET); saldos, correos, teléfonos y dirección | `dat.HISTORIA_FOLIO`: cada asignación anterior como baja; los datos van en `DATOS_BAJA` (JSON) |
+| HISTORIA | CUENTA, FOLIO, CUENTA2, RIESGO, SEGMENTO, STATUS, TRAMO, ETIQUETA, FE\_ASIG, SDO\_ACT, CAPITAL, TEL1-TEL16, DIRECC1-DIRECC5, ESTADO, EDO | `dat.HISTORIA_FOLIO`: cada asignación anterior como baja (la primera de la cuenta NVA, las siguientes REA); los datos van en `DATOS_BAJA` (JSON). historia.dbf no trae fecha de retiro ni correos |
 | TAB7 | FOLIO | consecutivo de folios |
 | PAGTOT | CUENTA, MONT, FE\_PAG, FE\_REG | `dat.PAGO_ARRIBADO` (origen PAGTOT) |
 | ETI, DM1 | CUENTA, ETIQUETA | etiquetas (DMP2, DMP1 del SCBSDOS) |
@@ -231,7 +231,7 @@ Se hace **una sola vez**, justo antes de la primera corrida en SQL Server. Trae 
 | EXC486 | CUENTA | exclusión de cuentas |
 | DIRMAL | CUENTA, DIRECC1 | direcciones malas |
 | EMAILMALO | EMAIL, CUENTA | correos malos |
-| BLACKLIST | TELEFONO (o TEL), OS, FECHA, STATUS | lista negra: OS = requerimiento; STATUS X excluye, vacío no; sin STATUS en el archivo, todo cuenta como X |
+| BLACKLIST | TEL, FE\_AGRE, OS, SOLICITUD | lista negra: OS = requerimiento, FE\_AGRE = fecha, SOLICITUD = quién lo pidió. STATUS X excluye y vacío no; el DBF no trae STATUS, así que todo cuenta como X |
 
 Ya no se migran: **TELBAJ** y **PNC** (se leen de CYBER en cada asignación), **LADA** (ningún proceso la usa), PURGA y DEVOL. El programa de FoxPro exporta solo los campos de esta tabla; si alguno no existe en el DBF lo avisa al final.
 

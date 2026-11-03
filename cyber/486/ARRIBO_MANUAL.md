@@ -2,11 +2,11 @@
 
 Los procesos de SQL Server no escriben en CYBER. Cada corrida deja los archivos planos en `ops.SALIDA_LINEA` y los scripts de Oracle en `ops.CYBER_SCRIPT`. Para arribar:
 
-```
-python tools/exportar_salidas.py --conexion "<ODBC>" --corrida <ID> --carpeta "D:\Banbaj\486\salida"
+```sql
+EXEC ops.sp_exportar_salidas <ID>;
 ```
 
-Eso crea `D:\Banbaj\486\salida\<AAAAMMDD>_corrida<ID>\` con los archivos y la carpeta `cyber\` con los `.sql`.
+Eso crea `RUTA_SALIDA\<AAAAMMDD>_corrida<ID>\` (de fábrica `C:\BANBAJ\486\SALIDA\`) con los archivos y la carpeta `cyber\` con los `.sql`.
 
 ## Asignación (`ops.sp_asignacion_486`)
 
@@ -18,23 +18,31 @@ Eso crea `D:\Banbaj\486\salida\<AAAAMMDD>_corrida<ID>\` con los archivos y la ca
 | `SCBACTH_486NU.TXT` | Gescar de cuentas nuevas, 119 posiciones | ges_nuevas_rea.prg |
 | `SCBACTH_486REA.TXT` | Gescar de reasignadas, 119 posiciones | ges_nuevas_rea.prg |
 
-**Teléfonos (solo en la asignación).** Se mandan todos los del DAT; CYBER purga y agrega.
-1. `cyber\TEL_BORRA.sql` (vacía la remesa).
-2. Cargar `sub_mst.TXT` en `RCVRY.JSP_TAB_TEL_REMESA_486` con `LOAD_TEL_REMESA.CTL` (sqlldr, igual que hoy) y revisar que la tabla tenga la información.
-3. Ejecutar `cyber\TEL_ACTUALIZA.sql` (`EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486`).
+**Teléfonos (solo en la asignación).** Se mandan todos los del DAT; CYBER purga y agrega. El orden importa:
+1. Arribar `SCBTEL.TXT` **primero**. `RCVRY.JSP_TELEFONOS_REMESA_486` solo inserta en `PHONE` los teléfonos que ya están en `PHONE_G1` (lo que deja el arribo del SCBTEL) y que vienen en la remesa.
+2. `cyber\TEL_BORRA.sql` (vacía la remesa).
+3. Cargar `sub_mst.TXT` en `RCVRY.JSP_TAB_TEL_REMESA_486` con `LOAD_TEL_REMESA.CTL` (sqlldr, igual que hoy) y revisar que la tabla tenga la información.
+4. Ejecutar `cyber\TEL_ACTUALIZA.sql` (`EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486`).
 
-La bitácora `RCVRY.JSP_VALIDADOR_TELEFONOS` ya no se alimenta: la bitácora es `ops.BITACORA` (paso `TELEFONOS`, con capturados, inválidos, repetidos, quejas y enviados).
+Qué hace el procedimiento de CYBER (revisado 02/11, versión del 27/12/2025):
+- Inserta en `PHONE` los teléfonos de la remesa que están en `PHONE_G1` y no en `PHONE`, solo de cuentas activas del 486 (`dmstatus` nulo).
+- **Inactiva** (`HIAS`) los teléfonos activos del 486 que no vienen en la remesa, salvo los marcados con gestor de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`).
+- **Activa** (`HAAS`) los teléfonos de la remesa que estaban inactivos, salvo esos mismos gestores de queja: aunque Banbaj mandara un teléfono con queja, CYBER no lo reactiva.
+- Compara por cuenta, área y teléfono exactos, así que el área de sub_mst debe coincidir con la de SCBTEL (Banbaj saca los dos de la misma tabla).
+- Al final actualiza `RCVRY.JSP_VALIDADOR_TELEFONOS` del día. Banbaj ya no inserta ese renglón (la bitácora es `ops.BITACORA`, paso `TELEFONOS`), así que el procedimiento no actualiza nada ahí. Si alguien usa ese reporte, hay que volver a insertar el renglón antes de ejecutar.
 
 **Correos (solo en la asignación).** Como hoy (email.PRG + act_mail.prg):
-1. `python tools/bajar_cyber.py correos --corrida <ID> …` baja los correos que ya tiene CYBER (sin archivos) y arma `cyber\MAIL_INSERTA_NUEVOS.sql`; volver a exportar la corrida.
+1. `EXEC ops.sp_bajar_cyber 'CORREOS', @id_corrida = <ID>;` baja los correos que ya tiene CYBER y arma `cyber\MAIL_INSERTA_NUEVOS.sql`; volver a exportar la corrida. **No es opcional:** `JSP_CORREOS_486` solo activa e inactiva correos que ya existen en `ADDRESS`; los correos nuevos solo entran con este INSERT.
 2. Correr `cyber\MAIL_INSERTA_NUEVOS.sql` (INSERT en `RCVRY.ADDRESS` de los nuevos).
 3. Depuración: `cyber\MAIL_ACTIVA_BANDERA.sql` → `cyber\MAIL_BORRA.sql` → cargar `sub_mail.TXT` con `LOAD_MAIL_REMESA.CTL` → revisar la tabla → `cyber\MAIL_ACTUALIZA.sql` (`JSP_CORREOS_486` purga lo que ya no llega) → `cyber\MAIL_INACTIVA_BANDERA.sql`.
 
-**Gescar de cuentas sin teléfono.** Después de arribar los teléfonos: `python tools/bajar_cyber.py telefonos --corrida <ID> …`, volver a exportar y arribar `SCBACTH_SINTEL.TXT`.
+Qué hace `JSP_CORREOS_486` (revisado 02/11): inactiva (`HIAS`) lo que está en `ADDRESS` de cuentas activas del 486 y no viene en la remesa, y activa (`HAAS`) lo de la remesa que estaba inactivo, salvo gestores `HOMS` y `HPHPI`. **Ojo:** desde el 24/07/2026 toma `adtype` 3 **y 1** ("se agregan domicilios"). Como la remesa solo trae correos, todos los domicilios (tipo 1) de las cuentas activas del 486 se inactivan en cada corrida. Confirmar con el dueño del procedimiento en CYBER que eso es lo que se quiere; Banbaj no lo puede cambiar.
 
-**Después de arribar:** `EXEC ops.sp_avisar <corrida>, 'CONFIRMACION_ASIG_486'` (y `ASIG_EXPRESS_486` si aplica).
+**Gescar de cuentas sin teléfono.** Después de arribar los teléfonos: `EXEC ops.sp_bajar_cyber 'TELEFONOS', @id_corrida = <ID>;`, volver a exportar y arribar `SCBACTH_SINTEL.TXT`.
 
-**Blanqueo de status (día 1 al 10).** `python tools/bajar_cyber.py status --corrida <ID> …` (sin archivos), volver a exportar, revisar `BLANQUEA_486_<fecha>.csv` y correr `cyber\BLANQUEO_STATUS.sql`.
+**Después de arribar:** `EXEC ops.sp_avisar <corrida>, 'CONFIRMACION_ASIG_486'` (el correo Express se retiró el 30/10).
+
+**Blanqueo de status (día 1 al 10).** `EXEC ops.sp_bajar_cyber 'STATUS', @id_corrida = <ID>;`, volver a exportar, revisar `BLANQUEA_486_<fecha>.csv` y correr `cyber\BLANQUEO_STATUS.sql`.
 
 **DAT para MIS.** En cada proceso sale `DAT486_<fecha>.csv` (CUENTA = 486-folio, CUENTA3 = crédito), con encabezado.
 

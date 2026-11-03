@@ -4,7 +4,7 @@ Inventario sacado de todos los `.prg` del 486 (`paso`, `asig_bases`, `asi486`, `
 
 Formato preferido para compartir:
 - **Programas:** el `.prg` tal cual.
-- **Tablas:** basta la estructura (lista de campos) y 3 a 5 registros con datos ficticios o tapados. No hace falta el contenido real; la carga real la hace `tools/migrar_dbf.py`.
+- **Tablas:** basta la estructura (lista de campos). No hace falta el contenido real; la carga la hace `ops.sp_migrar_486` en SQL Server.
 
 ## 1. Programas que faltan
 
@@ -47,7 +47,7 @@ Se cargan con `ops.sp_migrar_486` desde CSV exportados con FoxPro (`cyber/486/EX
 | Tabla DBF | Ruta en los .prg | Destino | Campos que supuse | Confirmar |
 | --- | --- | --- | --- | --- |
 | PURGA | `O:\HISTORIA\GPO1\486\` | — | **No se migra** (decisión): las bajas se registran desde la migración | — |
-| historia | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` | Cada asignación anterior como baja (01/11): CUENTA, FOLIO, CUENTA2, RIESGO, SEGMENTO2, SUB_CTE, FE_ASIG, FE_REA, FE_BAJA/FE_RET + saldos, correos, teléfonos y dirección en DATOS_BAJA | [ ] confirmar nombres de las fechas |
+| historia | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` | Estructura recibida (02/11): 1,804,213 renglones, una por asignación. Trae FE_ASIG, saldos (SDO_ACT, CAPITAL), TEL1-16 y DIRECC1-5; **no trae** SEGMENTO2, SUB_CTE, fecha de retiro ni correos. NVA/REA se deduce por orden de FE_ASIG | Lista |
 | DEVOL | `O:\HISTORIA\GPO1\486\` | — | **No se migra** (decisión) | — |
 | PAGTOT | `O:\PRG\GPO1\486\PAGOS\` | `dat.PAGO_ARRIBADO` (tabla fija) | Solo CUENTA, MONT, FE_PAG, FE_REG (01/11). 12,865 renglones viejos con FE_PAG incompleta se omiten | Lista |
 | TELSAN | `O:\PRG\MEXGPO1\ASI486\` | `ops.TELEFONO` (se arma en cada asignación) | Recibida: la regla nueva reproduce sus 15,353 teléfonos; no se migra | Lista |
@@ -60,7 +60,7 @@ Se cargan con `ops.sp_migrar_486` desde CSV exportados con FoxPro (`cyber/486/EX
 | exc486 | `O:\PRG\GPO1\486\` | `cfg.EXCLUSION` (CUENTA) | CUENTA | [ ] |
 | dirmal | `O:\ASIGNA\` | `cfg.EXCLUSION` (DIRECCION) | CUENTA, DIRECC1 | [ ] |
 | EMAILMALO | `O:\ASIGNA\` | `cfg.EXCLUSION` (CORREO) | CUENTA, EMAIL | [ ] |
-| blacklist_486 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.EXCLUSION` (TELEFONO) | TELEFONO (o TEL, 10 dígitos), OS → REQ, FECHA → FE_ALTA, STATUS: X excluye, vacío no; el DBF no trae STATUS: todo cuenta como X (01/11) | Lista |
+| blacklist_486 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.EXCLUSION` (TELEFONO) | Estructura recibida (02/11): TEL, FE_AGRE, OS, SOLICITUD (7,820 registros). Sin STATUS: todo cuenta como X | Lista |
 | TELBAJ_G1 | `\\192.168.50.108\T\CYBER_SISTEMAS\CYBER\TELEFONOS\` | — | **Ya no se migra** (01/11): se lee de CYBER (telbaj grupo 1) en cada asignación | — |
 | LADA | `O:\PRG\MEXGPO1\ASI486\` | — | **Ya no se migra** (01/11): ningún proceso la usa | — |
 | PNC | `\\192.168.50.108\T\CYBER_SISTEMAS\CYBER\PNM\` | — | **Ya no se migra** (01/11): se lee de `CYBER.dbo.CAT_PNM` en cada asignación | — |
@@ -148,3 +148,12 @@ Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, 
 - `covid` y `garantizada` se eliminan; las bases comentadas en `asi486.prg` se omiten.
 - `top` la alimenta Asignaciones con folio + etiqueta de operación (`cfg.sp_etiqueta_cargar`).
 - La base maestra se trabaja como llega (sin tope de devolución); hay retroceso por corrida.
+
+## 7. Revisión de los procedimientos de CYBER (02/11)
+
+- [x] `RCVRY.JSP_TELEFONOS_REMESA_486`: inserta desde `PHONE_G1` (arribo del SCBTEL), inactiva lo que no viene en la remesa y activa lo que sí, sin tocar gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`). El SCBTEL se arriba antes de cargar la remesa (`cyber/486/ARRIBO_MANUAL.md`).
+- [ ] `RCVRY.JSP_VALIDADOR_TELEFONOS`: el procedimiento actualiza el renglón del día, pero Banbaj ya no lo inserta. ¿Alguien usa ese reporte? Si sí, se agrega el INSERT al script `TEL_ACTUALIZA`.
+- [ ] `RCVRY.JSP_CORREOS_486`: desde el 24/07/2026 toma también `adtype = '1'` (domicilios). Como la remesa solo trae correos, inactiva todos los domicilios de las cuentas activas del 486 en cada corrida. Confirmar con el dueño del procedimiento en CYBER.
+- [x] `JSP_CORREOS_486` no inserta correos nuevos: entran con `ops.sp_bajar_cyber 'CORREOS'` (`MAIL_INSERTA_NUEVOS.sql`), que es paso obligatorio del arribo.
+- [ ] **Fecha de retiro en el histórico:** historia.dbf no la trae (está en PURGA, que no se migra). ¿Se migra solo CUENTA, FOLIO y fecha de PURGA para tenerla?
+

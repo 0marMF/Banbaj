@@ -115,7 +115,7 @@ Sustituye a `paso.prg`, `asig_bases.prg`, `asi486.prg`, `telbnx.prg`, `email.PRG
 | 11 | `sp_validar 'PRE_ALTA'` | Cuentas en la lista de exclusión (`exc486`) no entran |
 | 12 | `sp_asig_alta` | Altas: **REA** si la cuenta tuvo folio antes (se reutiliza), **NVA** con folio consecutivo. Alta en DAT e histórico. Más de 100 nuevas: correo de alerta |
 | 13 | `sp_telefonos` | Teléfonos para CYBER (ver *Teléfonos*) |
-| 14 | `sp_correos` | Correos para CYBER (minúsculas, con @, sin "no tiene", sin correos malos, uno por cuenta) |
+| 14 | `sp_correos` | Correos para CYBER (minúsculas, con @, sin "no tiene", sin correos malos, uno por cuenta). En CYBER, `JSP_CORREOS_486` solo activa e inactiva; los correos nuevos entran con `sp_bajar_cyber 'CORREOS'` |
 | 15 | `sp_generar_salidas 'ASIG'` | SCBSDOS, SCBTEL, sub_mst, sub_mail, gescar de nuevas y reasignadas, copia para MIS |
 
 **Nuevas y reasignadas:** se comparan contra el DAT. Una cuenta que viene en la base y no está en el DAT entra: como REA si tiene historial (incluye las que se retiraron por saldo o por solicitud), como NVA si nunca tuvo folio.
@@ -148,7 +148,7 @@ Reglas de `telbnx.prg` con los ajustes del 01/11, que siguen el procedimiento `G
    - **Fijo:** área 01 + lada; 8 o 7 dígitos; tipo 1 (TEL1), 2 (TEL2) o 4 (resto).
    - **No está en el plan:** se descarta (`TEL_EXIGIR_PNM = 1`).
 
-Salen en SCBTEL (ancho fijo) y en sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL). CYBER vacía la remesa y vuelve a cargar todo con su procedimiento `RCVRY.JSP_TELEFONOS_REMESA_486`.
+Salen en SCBTEL (ancho fijo) y en sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL). En CYBER, `RCVRY.JSP_TELEFONOS_REMESA_486` inserta los teléfonos nuevos (los que dejó el arribo del SCBTEL en `PHONE_G1`), inactiva los activos que no vienen en la remesa y activa los de la remesa que estaban inactivos. Respeta los gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`): esos no se tocan. Por eso el SCBTEL se arriba antes de la remesa.
 
 # Exclusiones
 
@@ -162,7 +162,7 @@ Todas viven en `cfg.EXCLUSION`, con tipo, valor, requerimiento (OS), fecha, si e
 | DIRECCION | cuenta + DIRECC1 | Se borra la dirección (`dirmal`) |
 | CORREO | correo + cuenta | No sale en sub_mail (`EMAILMALO`) |
 
-**Lista negra:** columnas TELEFONO, OS, FECHA y STATUS. STATUS **X** excluye; **vacío** no excluye, y si el teléfono estaba activo se desactiva. Un archivo sin columna STATUS cuenta todo como X. Se carga con `cfg.sp_exclusion_cargar`.
+**Lista negra:** columnas TEL, FE\_AGRE, OS y SOLICITUD (como `BLACKLIST_486.DBF`) más STATUS. STATUS **X** excluye; **vacío** no excluye, y si el teléfono estaba activo se desactiva. Un archivo sin columna STATUS cuenta todo como X. Se carga con `cfg.sp_exclusion_cargar`.
 
 # Etiquetas
 
