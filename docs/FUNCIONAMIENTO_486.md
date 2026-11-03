@@ -183,6 +183,21 @@ Todo lo escribe `ops.sp_exportar_salidas`, con la cuenta del servicio de SQL Ser
 | Copia del DAT para MIS | `\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\DAT486_<aaaammdd>.csv` | `RUTA_MIS` |
 | ZIP de retiros con contraseña | `C:\RETIROS_PAG_486_<mmddaaaahhmmss>.zip` | `CARPETA_ZIP` |
 
+Los archivos planos de ancho fijo (TXT) quedan todos en la carpeta de su corrida, `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\`:
+
+| Archivo TXT | Qué es | Lo genera | Ruta de ejemplo |
+|---|---|---|---|
+| `SCBSDOS.TXT` | Cuentas del DAT para CYBER | Asignación y etiquetado | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBSDOS.TXT` |
+| `SCBTEL.TXT` | Teléfonos | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBTEL.TXT` |
+| `SCBACTH_486NU.TXT` | Gescar de cuentas nuevas | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486NU.TXT` |
+| `SCBACTH_486REA.TXT` | Gescar de cuentas reasignadas | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486REA.TXT` |
+| `SCBACTH_SINTEL.TXT` | Gescar de cuentas sin teléfono en CYBER | `ops.sp_bajar_cyber 'TELEFONOS'` sobre la asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_SINTEL.TXT` |
+| `SCBACTH_486.TXT` | Gescar de retiro | Retiro (`ops.sp_retiro`) | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486.TXT` |
+| `SCBPAG.TXT` | Arribo de pagos | Actualización | `C:\BANBAJ\486\SALIDA\20261103_corrida124\SCBPAG.TXT` |
+| `sub_mst.TXT`, `sub_mail.TXT` | Remesas de teléfonos y correos (separadas por `\|`) | Asignación | misma carpeta |
+
+Cada corrida tiene su propia carpeta, así que un SCBSDOS de la asignación y otro de un etiquetado del mismo día no se pisan. Los archivos se escriben cuando se corre `EXEC ops.sp_exportar_salidas <id corrida>;`, no antes: hasta entonces solo están en la base (`ops.SALIDA_LINEA`).
+
 Ejemplo de una asignación del 3 de noviembre, corrida 125:
 
 ```
