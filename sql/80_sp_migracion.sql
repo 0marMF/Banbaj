@@ -19,8 +19,8 @@
                   asignación, reasignación y retiro, y en DATOS_BAJA saldos, correos, teléfonos y
                   dirección; sirve para reasignar con el mismo folio y ubicar pagos de cuentas
                   retiradas)  -> dat.HISTORIA_FOLIO   (DEVOL no se migra)
-                  PURGA.csv (CUENTA, FOLIO, fecha): solo pone la fecha de retiro (FE_BAJA) al periodo
-                  de esa cuenta y folio en el histórico (decisión 02/11).
+                  PURGA.csv: no se usa (03/11). Los periodos anteriores quedan sin fechas de asignación,
+                  reasignación y retiro; se llenan con las corridas de Banbaj.
      CONSECUTIVO  máximo folio de TAB7, DAT e HISTORIA -> dat.FOLIO_CONSECUTIVO
      PAGOS        PAGTOT.csv (CUENTA, MONT, FE_PAG, FE_REG) -> dat.PAGO_ARRIBADO
      ETIQUETAS    ETI, DM1, TOP, STATUS                -> cfg.ETIQUETA
@@ -178,7 +178,7 @@ BEGIN
         -- HISTORIA: activas del DAT
         INSERT INTO #d_hist (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA)
         SELECT @cliente, d.CUENTA, TRY_CONVERT(INT, d.FOLIO), ISNULL(d.CUENTA2, CONCAT(@cliente, '-', TRY_CONVERT(INT, d.FOLIO))), d.SEGMENTO2, d.RIESGO,
-               CASE WHEN d.SUB_CTE IN ('NVA', 'REA') THEN d.SUB_CTE ELSE 'NVA' END, 'A', ISNULL(d.FE_ASIG, '19000101'), NULL, NULL
+               CASE WHEN d.SUB_CTE IN ('NVA', 'REA') THEN d.SUB_CTE ELSE 'NVA' END, 'A', d.FE_ASIG, NULL, NULL
         FROM #d_dat d WHERE TRY_CONVERT(INT, d.FOLIO) IS NOT NULL;
     END;
 
@@ -220,7 +220,8 @@ BEGIN
             u AS (SELECT *, COALESCE(SUB_CTE0, CASE WHEN ROW_NUMBER() OVER (PARTITION BY CUENTA, RN ORDER BY FE_ALTA, FILA) = 1 THEN ''NVA'' ELSE ''REA'' END) AS SUB_CTE FROM u0)
             INSERT INTO #d_hist (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA, DATOS_BAJA)
             SELECT @cliente, u.CUENTA, u.FOLIO, ISNULL(u.CUENTA2, CONCAT(@cliente, ''-'', u.FOLIO)), u.SEGMENTO2, u.RIESGO,
-                   CASE WHEN u.SUB_CTE IN (''NVA'', ''REA'') THEN u.SUB_CTE ELSE ''NVA'' END, ''B'', ISNULL(u.FE_ALTA, ''19000101''), u.FE_BAJA,
+                   CASE WHEN u.SUB_CTE IN (''NVA'', ''REA'') THEN u.SUB_CTE ELSE ''NVA'' END, ''B'',
+                   NULL, NULL,     -- decisión 03/11: las fechas de asignación, reasignación y retiro del histórico migrado quedan vacías
                    ''MIGRACION (historia.dbf)'', u.DATOS
             FROM u
             WHERE u.RN = 1
@@ -230,42 +231,14 @@ BEGIN
         EXEC sp_executesql @sql, N'@cliente VARCHAR(10)', @cliente = @cliente;
         SET @n = @@ROWCOUNT;
         INSERT INTO #aviso (TEXTO) SELECT CONCAT(N'HISTORIA: ', @n, N' asignaciones anteriores quedan como baja en el histórico (de ', FILAS, N' renglones)') FROM #fuente WHERE FUENTE = 'HISTORIA';
-        INSERT INTO #aviso (TEXTO) VALUES (CONCAT(N'HISTORIA: fecha de asignación = ', ISNULL(@h_alta, N'(no viene)'), N' · fecha de retiro = ', ISNULL(@h_baja, N'(no viene)'),
-                                                  N' · se conservan: ', ISNULL(REPLACE(REPLACE(REPLACE(@h_json, N'cfg.fn_texto(', N''), N') AS ', N'='), N'[', N''), N'(nada)')));
+        INSERT INTO #aviso (TEXTO) VALUES (CONCAT(N'HISTORIA: las fechas de asignación, reasignación y retiro de los periodos anteriores quedan vacías (', ISNULL(@h_alta, N'sin fecha'),
+                                                  N' solo ordena NVA/REA) · se conservan: ', ISNULL(REPLACE(REPLACE(REPLACE(@h_json, N'cfg.fn_texto(', N''), N') AS ', N'='), N'[', N''), N'(nada)')));
     END;
 
-    -- PURGA.csv: fecha de retiro de cada periodo (CUENTA, FOLIO, fecha). Se aplica al periodo de esa cuenta y folio
-    -- que empezó antes de la fecha y no tiene retiro. Lo demás de PURGA no se migra.
-    -- Si PURGA no trae CUENTA, FOLIO o una fecha (03/11: la purga del 486 no trae ninguna de estas fechas), no se usa:
-    -- se avisa y la migración sigue; los periodos del histórico quedan sin fecha de retiro.
-    DECLARE @p_fecha SYSNAME = (SELECT TOP (1) c FROM (VALUES (1, N'FE_BAJA'), (2, N'FE_PURGA'), (3, N'FE_RET'), (4, N'FE_RETIRO'), (5, N'FE_DEV'), (6, N'FECHA'), (7, N'FE_PUR'))
-                                v(o, c) WHERE COL_LENGTH('stg.MIG_PURGA', c) IS NOT NULL ORDER BY o);
+    -- PURGA (decisión 03/11): no se usa. No trae fecha de retiro y las fechas del histórico migrado quedan vacías;
+    -- se empiezan a llenar con las corridas de Banbaj.
     IF EXISTS (SELECT 1 FROM @hay WHERE F = 'PURGA')
-       AND (ops.fn_mig_faltan('PURGA', N'CUENTA, FOLIO') IS NOT NULL OR @p_fecha IS NULL)
-        INSERT INTO #aviso (TEXTO)
-        VALUES (CONCAT(N'PURGA: no se usa (', CASE WHEN @p_fecha IS NULL THEN N'no trae fecha de retiro' ELSE N'faltan ' + ops.fn_mig_faltan('PURGA', N'CUENTA, FOLIO') END,
-                       N'); los periodos del histórico quedan sin fecha de retiro'));
-    ELSE IF EXISTS (SELECT 1 FROM @hay WHERE F = 'PURGA')
-    BEGIN
-        CREATE TABLE #purga (CUENTA VARCHAR(20), FOLIO INT, FE DATE, MOTIVO NVARCHAR(60));
-        SET @sql = N'INSERT INTO #purga (CUENTA, FOLIO, FE, MOTIVO) SELECT LEFT(cfg.fn_texto(CUENTA), 20), TRY_CONVERT(INT, cfg.fn_texto(FOLIO)), '
-                 + N'COALESCE(TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@p_fecha) + N'), 112), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@p_fecha) + N'), 23), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@p_fecha) + N'), 103)), '
-                 + CASE WHEN COL_LENGTH('stg.MIG_PURGA', 'MOTIVO') IS NOT NULL THEN N'LEFT(cfg.fn_texto(MOTIVO), 60)' ELSE N'NULL' END
-                 + N' FROM stg.MIG_PURGA WHERE cfg.fn_texto(CUENTA) IS NOT NULL;';
-        EXEC (@sql);
-        /* Para cada renglón de PURGA, el periodo más reciente de esa cuenta y folio que empezó antes y no tiene retiro */
-        ;WITH m AS (
-            SELECT h.CUENTA, h.FOLIO, h.FE_ALTA, p.FE, p.MOTIVO,
-                   ROW_NUMBER() OVER (PARTITION BY p.CUENTA, p.FOLIO, p.FE ORDER BY h.FE_ALTA DESC) AS RN
-            FROM #purga p
-            JOIN #d_hist h ON h.CUENTA = p.CUENTA AND h.FOLIO = p.FOLIO AND h.ESTATUS = 'B' AND h.FE_BAJA IS NULL AND h.FE_ALTA <= p.FE
-            WHERE p.FE IS NOT NULL)
-        UPDATE h SET FE_BAJA = m.FE, MOTIVO_BAJA = LEFT(CONCAT(N'MIGRACION (purga.dbf)', N': ' + m.MOTIVO), 60)
-        FROM #d_hist h JOIN m ON m.RN = 1 AND m.CUENTA = h.CUENTA AND m.FOLIO = h.FOLIO AND m.FE_ALTA = h.FE_ALTA
-        WHERE h.ESTATUS = 'B' AND h.FE_BAJA IS NULL;
-        SET @n = @@ROWCOUNT;
-        INSERT INTO #aviso (TEXTO) SELECT CONCAT(N'PURGA: ', @n, N' periodos del histórico con fecha de retiro (de ', FILAS, N' renglones; fecha = ', @p_fecha, N')') FROM #fuente WHERE FUENTE = 'PURGA';
-    END;
+        INSERT INTO #aviso (TEXTO) VALUES (N'PURGA: no se usa; las fechas de retiro del histórico migrado quedan vacías');
 
     -- CONSECUTIVO: máximo de TAB7, DAT e HISTORIA.csv
     DECLARE @max_tab7 INT, @max_otros INT = 0, @hay_folio BIT = 0;

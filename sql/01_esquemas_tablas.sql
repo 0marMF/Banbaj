@@ -42,7 +42,7 @@ CREATE TABLE dat.HISTORIA_FOLIO (
     RIESGO        VARCHAR(35)   NULL,                -- crédito con el que llegan los pagos (DAT.RIESGO)
     SUB_CTE       VARCHAR(3)    NOT NULL,            -- NVA / REA
     ESTATUS       CHAR(1)       NOT NULL CONSTRAINT DF_HISTORIA_FOLIO_EST DEFAULT 'A',  -- A=activa, B=baja
-    FE_ALTA       DATE          NOT NULL,
+    FE_ALTA       DATE          NULL,                -- vacía en los periodos migrados de historia.dbf (decisión 03/11)
     FE_BAJA       DATE          NULL,
     MOTIVO_BAJA   VARCHAR(60)   NULL,
     ID_CORRIDA_ALTA INT         NULL,
@@ -52,6 +52,13 @@ CREATE TABLE dat.HISTORIA_FOLIO (
     CONSTRAINT CK_HISTORIA_FOLIO_SUB CHECK (SUB_CTE IN ('NVA','REA'))
 );
 GO
+/* Bases creadas antes del 03/11: FE_ALTA pasa a aceptar vacío (el índice se vuelve a crear abajo) */
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dat.HISTORIA_FOLIO') AND name = 'FE_ALTA' AND is_nullable = 0)
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_HISTORIA_FOLIO_CUENTA' AND object_id = OBJECT_ID('dat.HISTORIA_FOLIO'))
+        DROP INDEX IX_HISTORIA_FOLIO_CUENTA ON dat.HISTORIA_FOLIO;
+    ALTER TABLE dat.HISTORIA_FOLIO ALTER COLUMN FE_ALTA DATE NULL;
+END;
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_HISTORIA_FOLIO_CUENTA')
     CREATE INDEX IX_HISTORIA_FOLIO_CUENTA ON dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FE_ALTA DESC) INCLUDE (FOLIO, ESTATUS);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_HISTORIA_FOLIO_FOLIO_ACTIVO')
