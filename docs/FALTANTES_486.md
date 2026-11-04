@@ -178,7 +178,7 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [x] Correo de hallazgos (`HALLAZGO_486`) solo al equipo de asignaciones.
 - [x] Confirmado (03/11): el domicilio está en `DELQMST.DMADDR1` (parámetro `CYBER_COLUMNA_DOMICILIO`).
 - [x] (Confirmado 02/11) Permisos del usuario de Oracle.
-- [ ] Permiso de escritura de la cuenta del servicio de SQL Server en `\\192.168.50.1\Cyber_00\dev\`.
+- [x] (03/11) Sin acceso a `\\192.168.50.1\Cyber_00\dev\`: la devolución se copia a mano (`RUTA_DEVOLUCION_CYBER` vacío).
 - [ ] Estructura de `PHONE_G1` para usar también el sello de fecha y hora del SCBTEL (`FECHA_G`, `FECHA_A`) como señal.
 
 ## 10. Más pasos automáticos (02/11)

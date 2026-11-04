@@ -20,7 +20,8 @@ Eso crea `RUTA_SALIDA\<AAAAMMDD>_corrida<ID>\` (de fábrica `C:\BANBAJ\486\SALID
 | Depuración de correos (correos nuevos, bandera 416, remesa, `JSP_CORREOS_486`) | Asignaciones | `EXEC ops.sp_arribar_cyber <ID>, 'CORREOS';` |
 | Depuración de teléfonos (remesa, validador, `JSP_TELEFONOS_REMESA_486`) y `SCBACTH_SINTEL.TXT` | Asignaciones | `EXEC ops.sp_arribar_cyber <ID>, 'TELEFONOS';` |
 | Scripts de la actualización (`ACT_*`) | Asignaciones | `EXEC ops.sp_act_cyber <ID>;` |
-| Retiro en CYBER y copia de la devolución | Asignaciones | `EXEC ops.sp_retiro_cerrar <ID>, @con_cyber = 1;` |
+| Retiro en CYBER | Asignaciones | `EXEC ops.sp_retiro_cerrar <ID>, @con_cyber = 1;` |
+| Copiar `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` | Asignaciones | A mano: el servidor no tiene acceso a esa carpeta |
 | Blanqueo de status (días 1 a 10) | Asignaciones | `EXEC ops.sp_blanqueo_automatico <ID>, @forzar = 1;` |
 | Confirmación de la asignación | Asignaciones | `EXEC ops.sp_avisar <ID>, 'CONFIRMACION_ASIG_486';` |
 | Cuadre de pagos (solo lee y avisa) | **Job** | Hallazgo si a las 17:00 falta algún pago |

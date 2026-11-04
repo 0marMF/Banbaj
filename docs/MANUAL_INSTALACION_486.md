@@ -113,7 +113,7 @@ Todo lo que lee o escribe archivos (`BULK INSERT`, OLE, 7-Zip) lo hace la **cuen
 | --- | --- | --- |
 | `\\192.168.50.13\q\CYBER\C_486\` | Lectura | Archivos del banco |
 | `\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\` | Modificar | Copia del DAT para MIS |
-| `\\192.168.50.1\Cyber_00\dev\` | Modificar | Copia de la devolución para CYBER |
+| `\\192.168.50.1\Cyber_00\dev\` | — | **Sin acceso (03/11):** la devolución `MX_G1MCT_DVBJIG_*` se copia a mano desde la carpeta de la corrida |
 | `RUTA_SALIDA` y `CARPETA_ZIP` (de fábrica `C:\`) | Modificar | Archivos planos, scripts y ZIP |
 
 1. Ver qué cuenta usa el servicio:
@@ -182,7 +182,7 @@ SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clav
 | CONFIRMACION\_AUTOMATICA | 0 | CONFIRMACION\_ASIG\_486 a mano (1 = al terminar las depuraciones automáticas) |
 | RETIRO\_CYBER\_AUTOMATICO | 0 | Retiro en CYBER y copia de la devolución a mano (1 = automáticos) |
 | CUADRE\_AUTOMATICO / CUADRE\_PAGOS\_HORA\_LIMITE | 1 / 17:00 | Cuadre de pagos contra CYBER; a esa hora avisa lo que no subió |
-| RUTA\_DEVOLUCION\_CYBER | \\\\192.168.50.1\\Cyber\_00\\dev\\ | Carpeta donde CYBER toma `MX_G1MCT_DVBJIG_*` (vacío = no se copia) |
+| RUTA\_DEVOLUCION\_CYBER | (vacío) | Sin acceso a `\\\\192.168.50.1\\Cyber\_00\\dev\\`: la devolución se copia a mano. Si algún día hay acceso, poner esa ruta |
 | CYBER\_REMESA\_TEL\_COLUMNAS | CUENTA,AREA,TELEFONO,TIPOTEL | Columnas de `RCVRY.JSP_TAB_TEL_REMESA_486` (como el `.CTL` de sqlldr) |
 | CYBER\_REMESA\_MAIL\_COLUMNAS | CUENTA,CORREO | Columnas de `RCVRY.JSP_TAB_MAIL_REMESA_486` |
 | CYBER\_SENTENCIAS\_POR\_BLOQUE | 200 | Sentencias por bloque PL/SQL que se mandan a CYBER |
@@ -392,7 +392,7 @@ Cada 30 minutos el job llama `ops.sp_diario_486`. Esto es lo que hace:
    - **Teléfonos:** en cuanto detecta que ya subió el SCBTEL (los teléfonos que le faltaban a `PHONE_G1` ya llegaron), carga la remesa, crea el renglón del validador, ejecuta `JSP_TELEFONOS_REMESA_486` y escribe `SCBACTH_SINTEL.TXT` en la carpeta de la corrida.
    - Cada uno corre una sola vez por corrida. Si falla queda `ERROR` en la bitácora y no se reintenta solo.
 
-Las devoluciones que detectan la asignación y la actualización **se aplican solas** salvo que en algún segmento superen el 50 % de sus cuentas en el DAT. Después se escriben los archivos y sale el ZIP con el correo de devolución. El retiro en CYBER y la copia de la devolución a `\\192.168.50.1\Cyber_00\dev\` por ahora son a mano (`EXEC ops.sp_retiro_cerrar @id, @con_cyber = 1;`). Si superan el tope, o algún paso automático falla, llega el **correo de hallazgos** (`HALLAZGO_486`) solo al equipo de asignaciones con el detalle y qué hacer.
+Las devoluciones que detectan la asignación y la actualización **se aplican solas** salvo que en algún segmento superen el 50 % de sus cuentas en el DAT. Después se escriben los archivos y sale el ZIP con el correo de devolución. El retiro en CYBER por ahora es a mano (`EXEC ops.sp_retiro_cerrar @id, @con_cyber = 1;`) y el archivo `MX_G1MCT_DVBJIG_*` se copia a mano a `\\192.168.50.1\Cyber_00\dev\`, porque el servidor no tiene acceso a esa carpeta. Si superan el tope, o algún paso automático falla, llega el **correo de hallazgos** (`HALLAZGO_486`) solo al equipo de asignaciones con el detalle y qué hacer.
 
 Si algo falla, la corrida queda en ERROR, el DAT se regresa solo a como estaba (ver *Respaldo y retroceso*) y el job no vuelve a intentar ese proceso ese día.
 
@@ -663,7 +663,7 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 - [ ] Nuevas versiones instaladas en CYBER: `RCVRY.JSP_CORREOS_486` (`cyber/486/oracle/JSP_CORREOS_486.sql`: solo queda activo el domicilio de la última base maestra) y `RCVRY.JSP_TELEFONOS_REMESA_486` (`cyber/486/oracle/JSP_TELEFONOS_REMESA_486.sql`: optimizado, misma lógica)
 - [ ] Usuario de Oracle con los permisos del arribo automático (ver *Permisos en CYBER para el arribo automático*) y columnas de las remesas confirmadas contra los `.CTL`
 - [ ] Durante el paralelo, en 0 todo lo que escribe en CYBER o manda correos: `ARRIBO_AUTOMATICO`, `RETIRO_AUTOMATICO`, `ACT_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO`, `CONFIRMACION_AUTOMATICA` y `CUADRE_AUTOMATICO`; al salir a producción, todos en 1
-- [ ] La cuenta del servicio de SQL Server puede escribir en `\\192.168.50.1\Cyber_00\dev\` y el usuario de Oracle tiene `UPDATE` en `RCVRY.DELQMST` (retiro)
+- [ ] Copia de `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` a mano en cada retiro (el servidor no tiene acceso)
 - [ ] Lista `ASIGNACIONES_486` con los destinatarios reales del correo de hallazgos
 - [ ] Migración hecha y conteos cuadrados con FoxPro
 - [ ] `C:\MIGRA486` borrado
@@ -699,6 +699,8 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 | Correo de hallazgos: pagos que no subieron a CYBER | A la hora límite hay pagos del SCBPAG que no están en `PMTFIL` | Revisar si se subió el SCBPAG o si CYBER lo rechazó; la lista completa está en `ops.RECHAZO` (`CUADRE_PAGOS`) |
 | Correo de hallazgos: blanqueo o escritura de archivos con error | Falló bajar status, ejecutar el blanqueo o escribir en `RUTA_SALIDA` | Corregir y `EXEC ops.sp_blanqueo_automatico <id>, @forzar = 1;` o `EXEC ops.sp_exportar_salidas <id>;` |
 | Correo de hallazgos: retiro con pasos pendientes | Falló escribir archivos/ZIP/correo, el retiro en CYBER o la copia de la devolución | Corregir lo que dice la tabla y `EXEC ops.sp_retiro_cerrar <id>;` |
+| ORA-12504 (el listener no recibió el SERVICE\_NAME) o 50811 | `CYBER_ORACLE_ORIGEN` trae solo la IP | Ponerlo como `IP:1521/NOMBRE_SERVICIO` (el servicio está en el `tnsnames.ora` de la PC que hoy corre sqlldr, o lo da el DBA con `lsnrctl status`) y volver a correr `EXEC cfg.sp_cyber_conectar;` |
+| `Bulk load failed due to invalid column value in CSV data file …HISTORIA.csv` | Un campo de texto del DBF trae comillas dobles o un salto de línea (FoxPro no los escapa) | Volver a exportar con la versión actual de `EXPORTAR_MIGRACION.prg`, que los limpia |
 | Error de proveedor OraOLEDB | Sin *Allow inprocess* o sin cliente de Oracle | Ver *Proveedor de Oracle* en la configuración |
 | No llegan correos | Falla de Database Mail | `SELECT * FROM msdb.dbo.sysmail_event_log ORDER BY log_date DESC;` y `sysmail_faileditems` |
 

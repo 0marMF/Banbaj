@@ -91,7 +91,8 @@ Cada proceso es una **corrida** (`ops.CORRIDA`) con número, tipo (ACT, ASIG, RE
 | Depuración de correos (`JSP_CORREOS_486`, correos nuevos, bandera 416) | A mano | `EXEC ops.sp_arribar_cyber <id>, 'CORREOS';` (`ARRIBO_AUTOMATICO = 0`) |
 | Depuración de teléfonos (`JSP_TELEFONOS_REMESA_486`, validador) y gescar sin teléfono | A mano | `EXEC ops.sp_arribar_cyber <id>, 'TELEFONOS';` |
 | Scripts de la actualización (`ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN`, `ACT_PVS_REE`) | A mano | `EXEC ops.sp_act_cyber <id>;` (`ACT_CYBER_AUTOMATICO = 0`) |
-| Retiro en CYBER (`dmstatus = 'R'`) y copia de la devolución a `\\192.168.50.1\Cyber_00\dev\` | A mano | `EXEC ops.sp_retiro_cerrar <id>, @con_cyber = 1;` (`RETIRO_CYBER_AUTOMATICO = 0`) |
+| Retiro en CYBER (`dmstatus = 'R'`) | A mano | `EXEC ops.sp_retiro_cerrar <id>, @con_cyber = 1;` (`RETIRO_CYBER_AUTOMATICO = 0`) |
+| Copiar `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` | A mano | El servidor no tiene acceso a esa carpeta (`RUTA_DEVOLUCION_CYBER` vacío) |
 | Blanqueo de status (días 1 a 10) | A mano | `EXEC ops.sp_blanqueo_automatico <id>, @forzar = 1;` (`BLANQUEO_AUTOMATICO = 0`) |
 | Correo de cierre CONFIRMACION\_ASIG\_486 | A mano | `EXEC ops.sp_avisar <id>, 'CONFIRMACION_ASIG_486';` (`CONFIRMACION_AUTOMATICA = 0`) |
 
