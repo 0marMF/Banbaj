@@ -8,6 +8,8 @@ date: "Noviembre 2026"
 
 Banbaj sustituye los programas de Visual FoxPro del cliente 486 (Banco Bajío). Recibe los archivos del banco, mantiene el DAT y el histórico de folios, y genera los archivos planos y los scripts que se arriban a CYBER. También manda los correos del proceso.
 
+**Por ahora llega hasta los archivos planos.** Las depuraciones en CYBER (los stores de correos y teléfonos, los scripts de la actualización, el retiro y el blanqueo) se corren a mano; ver *Hasta dónde llega Banbaj*.
+
 En producción todo corre dentro de SQL Server: la carga de archivos, las reglas, la escritura de archivos, el ZIP de retiros, los correos y las consultas a CYBER. No hay Python ni otro lenguaje en la operación.
 
 Este documento explica cómo funciona por dentro. La instalación, la migración y la operación paso a paso están en el *Manual de migración, instalación y operación*.
@@ -70,35 +72,50 @@ El job llama `ops.sp_diario_486` cada 30 minutos. El procedimiento decide qué h
 4. Si todavía no corre la **asignación** y ya llegaron bases maestras, la corre.
 5. Si ya corrieron las dos, contesta "DIA COMPLETO" y no repite nada.
 
-Cada proceso es una **corrida** (`ops.CORRIDA`) con número, tipo (ACT, ASIG, RET, ETI), fecha, estatus y mensaje. Cada paso deja un renglón en `ops.BITACORA`. Después de cada corrida el operador escribe los archivos, sube a CYBER los archivos de ancho fijo y manda el correo de cierre.
+Cada proceso es una **corrida** (`ops.CORRIDA`) con número, tipo (ACT, ASIG, RET, ETI), fecha, estatus y mensaje. Cada paso deja un renglón en `ops.BITACORA`.
 
-## Arribo automático a CYBER (desde el 02/11)
+## Hasta dónde llega Banbaj (decisión 03/11)
 
-Con el día completo, en cada vuelta el job también llama `ops.sp_arribo_automatico`, que toma la última asignación OK del día:
+**Por ahora Banbaj genera los archivos planos y los scripts, y hasta ahí.** Todo lo que escribe en CYBER (las depuraciones con los stores de correos y teléfonos, los scripts de la actualización, el retiro y el blanqueo) se corre **a mano**. Ya está programado y probado, y cada parte se prende con un parámetro cuando se decida.
+
+| Paso | Hoy | Cómo |
+|---|---|---|
+| Correr el proceso del día (actualización y asignación) | **Automático** | Job cada 30 minutos (`ops.sp_diario_486`) |
+| Escribir los archivos planos y los scripts en la carpeta de la corrida | **Automático** | `ops.sp_exportar_auto` (`EXPORTAR_AUTOMATICO = 1`) |
+| Avisar a asignaciones que ya están los archivos (ARCHIVOS\_LISTOS\_486) | **Automático** | `ops.sp_aviso_archivos` (`AVISO_ARCHIVOS = 1`) |
+| Aplicar las devoluciones en el DAT, con tope de 50 % por segmento | **Automático** | `ops.sp_retiro_decidir` (`RETIRO_AUTOMATICO = 1`) |
+| Archivos de retiro, ZIP y correo de devolución | **Automático** | `ops.sp_retiro_cerrar` |
+| Cuadre de pagos contra CYBER (solo lee y avisa si falta algo a las 17:00) | **Automático** | `ops.sp_cuadre_automatico` (`CUADRE_AUTOMATICO = 1`) |
+| Correo de hallazgos al equipo de asignaciones | **Automático** | `mail.sp_hallazgo` |
+| Subir a CYBER los archivos de ancho fijo (SCBSDOS, SCBTEL, SCBPAG, gescar) | A mano | Cargador de CYBER |
+| Depuración de correos (`JSP_CORREOS_486`, correos nuevos, bandera 416) | A mano | `EXEC ops.sp_arribar_cyber <id>, 'CORREOS';` (`ARRIBO_AUTOMATICO = 0`) |
+| Depuración de teléfonos (`JSP_TELEFONOS_REMESA_486`, validador) y gescar sin teléfono | A mano | `EXEC ops.sp_arribar_cyber <id>, 'TELEFONOS';` |
+| Scripts de la actualización (`ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN`, `ACT_PVS_REE`) | A mano | `EXEC ops.sp_act_cyber <id>;` (`ACT_CYBER_AUTOMATICO = 0`) |
+| Retiro en CYBER (`dmstatus = 'R'`) y copia de la devolución a `\\192.168.50.1\Cyber_00\dev\` | A mano | `EXEC ops.sp_retiro_cerrar <id>, @con_cyber = 1;` (`RETIRO_CYBER_AUTOMATICO = 0`) |
+| Blanqueo de status (días 1 a 10) | A mano | `EXEC ops.sp_blanqueo_automatico <id>, @forzar = 1;` (`BLANQUEO_AUTOMATICO = 0`) |
+| Correo de cierre CONFIRMACION\_ASIG\_486 | A mano | `EXEC ops.sp_avisar <id>, 'CONFIRMACION_ASIG_486';` (`CONFIRMACION_AUTOMATICA = 0`) |
+
+Los procedimientos de a mano ejecutan en CYBER, por el servidor vinculado, las mismas sentencias que quedan en los `.sql` de la carpeta `cyber\` de la corrida, así que también se pueden correr esos archivos en Oracle como antes. Lo que los procedimientos de CYBER hacen por dentro está en *Teléfonos* y *Correos* y en `cyber/486/ARRIBO_MANUAL.md`.
+
+En un día normal: llega ARCHIVOS\_LISTOS\_486 → asignaciones sube los archivos de ancho fijo → corre las depuraciones (correos y teléfonos en la asignación, scripts `ACT_*` en la actualización) → sube el `SCBACTH_SINTEL.TXT` que deja la depuración de teléfonos → manda la confirmación.
+
+## Cuando se prendan las depuraciones automáticas
+
+Con `ARRIBO_AUTOMATICO = 1`, en cada vuelta del job `ops.sp_arribo_automatico` detecta que ya se subieron el SCBSDOS y el SCBTEL y corre las depuraciones solo:
 
 | Detecta | Cómo | Hace |
 |---|---|---|
 | El SCBSDOS ya subió | Ya llegó al menos el 95 % (`ARRIBO_MIN_PCT`) de lo que le faltaba a `DELQMST` al terminar la asignación: cuentas no activas y domicilios distintos | **Correos:** baja los correos de CYBER, inserta los nuevos en `ADDRESS`, bandera 416, remesa `JSP_TAB_MAIL_REMESA_486`, `JSP_CORREOS_486` y apaga la bandera |
-| El SCBTEL ya subió | Ya llegó al menos el 95 % de los teléfonos que le faltaban a `PHONE_G1`, y las cuentas pendientes ya están activas | **Teléfonos:** remesa `JSP_TAB_TEL_REMESA_486`, renglón del validador, `JSP_TELEFONOS_REMESA_486`, y escribe `SCBACTH_SINTEL.TXT` en la carpeta de la corrida |
+| El SCBTEL ya subió | Ya llegó al menos el 95 % de los teléfonos que le faltaban a `PHONE_G1`, y las cuentas pendientes ya están activas | **Teléfonos:** remesa `JSP_TAB_TEL_REMESA_486`, renglón del validador, `JSP_TELEFONOS_REMESA_486`, y escribe `SCBACTH_SINTEL.TXT` |
 
-Lo pendiente se calcula con una foto que se toma al terminar la asignación, antes de que existan los TXT (`ops.sp_arribo_base`, tabla `ops.ARRIBO_PENDIENTE`). Por eso funciona aunque no haya cuentas nuevas; si no había nada pendiente, se arriba en la siguiente vuelta. Todo va por el servidor vinculado `[CYBER]` en bloques PL/SQL (`ops.sp_cyber_ejecutar`), con las mismas sentencias que quedan en `ops.CYBER_SCRIPT`: ya no se usa sqlldr. Cada proceso corre una vez por corrida y deja `ARRIBO CORREOS` / `ARRIBO TELEFONOS` en la bitácora. Si falla no se reintenta solo: llega el correo de hallazgos al equipo de asignaciones y se corre a mano con `ops.sp_arribar_cyber`. Si la remesa saliera vacía no se ejecuta el procedimiento de CYBER, para no inactivar todo el 486.
+Lo pendiente sale de una foto que se toma al terminar la asignación, antes de que existan los TXT (`ops.sp_arribo_base`, tabla `ops.ARRIBO_PENDIENTE`); por eso funciona aunque no haya cuentas nuevas. Cada proceso corre una vez por corrida y, si falla, avisa con el correo de hallazgos. Si la remesa saliera vacía no se ejecuta el procedimiento de CYBER, para no inactivar todo el 486.
 
-El operador solo sube SCBSDOS, SCBTEL y los gescar. Después del arribo de correos se hace solo el blanqueo de status (días 1 a 10), y al terminar OK correos y teléfonos se marca el fin del arribo y sale CONFIRMACION\_ASIG\_486. El retiro también es automático (ver *Retiro*).
+Con `ACT_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO`, `CONFIRMACION_AUTOMATICA` y `RETIRO_CYBER_AUTOMATICO` en 1, el job también ejecuta los scripts de la actualización al terminarla, el blanqueo después del arribo de correos, la confirmación al terminar correos y teléfonos, y el retiro en CYBER con la copia de la devolución. Para prender todo:
 
-## Lo demás que hace el job solo (desde el 02/11)
-
-| Qué | Cuándo | Procedimiento |
-|---|---|---|
-| Escribir los archivos de la corrida | Al terminar OK cada corrida (asignación, actualización, retiro, etiquetado) | `ops.sp_exportar_auto` |
-| Avisar a asignaciones que ya puede arribar (ARCHIVOS\_LISTOS\_486) | En cuanto se escriben los planos que se suben a CYBER | `ops.sp_aviso_archivos` |
-| Ejecutar en CYBER `ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN` y `ACT_PVS_REE` | Al terminar OK la actualización | `ops.sp_act_cyber` |
-| Cuadrar los pagos del SCBPAG contra `PMTFIL` | En cada vuelta después de la actualización; termina cuando todo subió o a la hora límite (17:00) | `ops.sp_cuadre_automatico` |
-| Blanqueo de status (días 1 a 10) | En cuanto el arribo de correos confirma que subió el SCBSDOS | `ops.sp_blanqueo_automatico` |
-| Marcar el fin del arribo y mandar CONFIRMACION\_ASIG\_486 | Al terminar OK correos y teléfonos (y el blanqueo) | `ops.sp_confirmar_asignacion` |
-
-Cada uno corre una vez, deja su paso en la bitácora y, si falla, manda el correo de hallazgos al equipo de asignaciones. Se repiten a mano con el mismo procedimiento.
-
-**Lo que sigue a mano:** subir los archivos de ancho fijo a CYBER (SCBSDOS, SCBTEL, SCBPAG y gescar), marcar la solicitud y la autorización del arribo, revisar lo que llega en el correo de hallazgos (por ejemplo, un retiro que supera el tope), el retiro por solicitud del banco, el etiquetado y la carga de lista negra.
+```sql
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486'
+   AND CLAVE IN ('ARRIBO_AUTOMATICO', 'ACT_CYBER_AUTOMATICO', 'BLANQUEO_AUTOMATICO', 'CONFIRMACION_AUTOMATICA', 'RETIRO_CYBER_AUTOMATICO');
+```
 
 Si una corrida falla, se revierte sola (ver *Respaldo y retroceso*) y el job no la vuelve a intentar ese día. Para reintentar se corre a mano.
 
@@ -165,7 +182,7 @@ El retiro por solicitud del banco entra con `ops.sp_retiro_solicitud` (lista de 
 Con `RETIRO_AUTOMATICO = 1`:
 
 1. **Decide** (`ops.sp_retiro_decidir`), justo después de detectar las devoluciones y con el DAT todavía como estaba: por segmento, compara las cuentas a retirar contra las que ese segmento tiene en el DAT. Si ninguno supera el tope (50 % en la asignación, `RETIRO_TOPE_PCT_ASIG`; 50 % en la actualización, `RETIRO_TOPE_PCT_ACT`), se aplica `ops.sp_retiro` dentro de la corrida. Si alguno lo supera, no se aplica nada y se manda el correo de hallazgos.
-2. **Cierra** (`ops.sp_retiro_cerrar`), con la corrida ya en OK: escribe los archivos, arma el ZIP y manda el correo único de devolución; ejecuta el script `RETIRO` en CYBER (`dmstatus = 'R'`); y copia `MX_G1MCT_DVBJIG_*` a `RUTA_DEVOLUCION_CYBER`. Cada paso queda en la bitácora y solo corre una vez; si uno falla, llega el correo de hallazgos y se repite a mano con el mismo procedimiento.
+2. **Cierra** (`ops.sp_retiro_cerrar`), con la corrida ya en OK: escribe los archivos, arma el ZIP y manda el correo único de devolución. El script `RETIRO` en CYBER (`dmstatus = 'R'`) y la copia de `MX_G1MCT_DVBJIG_*` a `RUTA_DEVOLUCION_CYBER` **por ahora son a mano**: `EXEC ops.sp_retiro_cerrar <id>, @con_cyber = 1;` (automáticos con `RETIRO_CYBER_AUTOMATICO = 1`). Cada paso queda en la bitácora y solo corre una vez; si uno falla, llega el correo de hallazgos y se repite a mano con el mismo procedimiento.
 
 El retiro por solicitud también se cierra solo al confirmarlo. Lo que ya se escribió en CYBER no se revierte con el retroceso.
 
@@ -385,12 +402,12 @@ Todos los que cambian datos tienen modo de revisión (`@confirmar = 0` o `@solo_
 | TEL\_EXIGIR\_PNM | 1 | Descartar teléfonos fuera del plan de numeración |
 | TELBAJ\_GRUPO | 1 | Grupo del 486 en telbaj |
 | PERFIL\_DBMAIL | asig.486.cdmx | Perfil de correo |
-| ARRIBO\_AUTOMATICO | 1 | El job arriba solo correos y teléfonos (0 = manual) |
 | ARRIBO\_MIN\_PCT | 95 | Porcentaje de lo pendiente que ya debe estar en CYBER para dar por subido un archivo |
 | CYBER\_COLUMNA\_DOMICILIO | DMADDR1 | Domicilio en `DELQMST` para detectar el SCBSDOS |
-| RETIRO\_AUTOMATICO | 1 | Retiro automático (0 = manual) |
+| RETIRO\_AUTOMATICO | 1 | Aplicar solas las devoluciones en el DAT (dentro del tope) |
 | RETIRO\_TOPE\_PCT\_ASIG / \_ACT | 50 / 50 | Tope por segmento para aplicar el retiro solo |
-| EXPORTAR\_AUTOMATICO, ACT\_CYBER\_AUTOMATICO, BLANQUEO\_AUTOMATICO, CONFIRMACION\_AUTOMATICA, CUADRE\_AUTOMATICO | 1 | Pasos automáticos (0 = a mano) |
+| EXPORTAR\_AUTOMATICO, AVISO\_ARCHIVOS, RETIRO\_AUTOMATICO, CUADRE\_AUTOMATICO | 1 | Archivos, aviso, retiro en el DAT y cuadre automáticos |
+| ARRIBO\_AUTOMATICO, ACT\_CYBER\_AUTOMATICO, RETIRO\_CYBER\_AUTOMATICO, BLANQUEO\_AUTOMATICO, CONFIRMACION\_AUTOMATICA | 0 | Depuraciones y escrituras en CYBER: a mano por ahora (1 = automáticas) |
 | CUADRE\_PAGOS\_HORA\_LIMITE | 17:00 | Hora a la que el cuadre avisa lo que no subió |
 | RUTA\_DEVOLUCION\_CYBER | `\\192.168.50.1\Cyber_00\dev\` | Copia de la devolución para CYBER |
 | CYBER\_REMESA\_TEL\_COLUMNAS / \_MAIL\_COLUMNAS | CUENTA,AREA,TELEFONO,TIPOTEL / CUENTA,CORREO | Columnas de las remesas en CYBER |

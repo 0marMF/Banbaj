@@ -236,13 +236,17 @@ BEGIN
 
     -- PURGA.csv: fecha de retiro de cada periodo (CUENTA, FOLIO, fecha). Se aplica al periodo de esa cuenta y folio
     -- que empezó antes de la fecha y no tiene retiro. Lo demás de PURGA no se migra.
+    -- Si PURGA no trae CUENTA, FOLIO o una fecha (03/11: la purga del 486 no trae ninguna de estas fechas), no se usa:
+    -- se avisa y la migración sigue; los periodos del histórico quedan sin fecha de retiro.
+    DECLARE @p_fecha SYSNAME = (SELECT TOP (1) c FROM (VALUES (1, N'FE_BAJA'), (2, N'FE_PURGA'), (3, N'FE_RET'), (4, N'FE_RETIRO'), (5, N'FE_DEV'), (6, N'FECHA'), (7, N'FE_PUR'))
+                                v(o, c) WHERE COL_LENGTH('stg.MIG_PURGA', c) IS NOT NULL ORDER BY o);
     IF EXISTS (SELECT 1 FROM @hay WHERE F = 'PURGA')
+       AND (ops.fn_mig_faltan('PURGA', N'CUENTA, FOLIO') IS NOT NULL OR @p_fecha IS NULL)
+        INSERT INTO #aviso (TEXTO)
+        VALUES (CONCAT(N'PURGA: no se usa (', CASE WHEN @p_fecha IS NULL THEN N'no trae fecha de retiro' ELSE N'faltan ' + ops.fn_mig_faltan('PURGA', N'CUENTA, FOLIO') END,
+                       N'); los periodos del histórico quedan sin fecha de retiro'));
+    ELSE IF EXISTS (SELECT 1 FROM @hay WHERE F = 'PURGA')
     BEGIN
-        SET @falta = ops.fn_mig_faltan('PURGA', N'CUENTA, FOLIO');
-        IF @falta IS NOT NULL BEGIN SET @msg = CONCAT(N'PURGA.csv: faltan las columnas ', @falta); THROW 50908, @msg, 1; END;
-        DECLARE @p_fecha SYSNAME = (SELECT TOP (1) c FROM (VALUES (1, N'FE_BAJA'), (2, N'FE_PURGA'), (3, N'FE_RET'), (4, N'FE_RETIRO'), (5, N'FE_DEV'), (6, N'FECHA'), (7, N'FE_PUR'))
-                                    v(o, c) WHERE COL_LENGTH('stg.MIG_PURGA', c) IS NOT NULL ORDER BY o);
-        IF @p_fecha IS NULL THROW 50908, 'PURGA.csv: no trae columna de fecha (FE_BAJA, FE_PURGA, FE_RET, FE_RETIRO, FE_DEV o FECHA).', 1;
         CREATE TABLE #purga (CUENTA VARCHAR(20), FOLIO INT, FE DATE, MOTIVO NVARCHAR(60));
         SET @sql = N'INSERT INTO #purga (CUENTA, FOLIO, FE, MOTIVO) SELECT LEFT(cfg.fn_texto(CUENTA), 20), TRY_CONVERT(INT, cfg.fn_texto(FOLIO)), '
                  + N'COALESCE(TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@p_fecha) + N'), 112), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@p_fecha) + N'), 23), TRY_CONVERT(DATE, cfg.fn_texto(' + QUOTENAME(@p_fecha) + N'), 103)), '

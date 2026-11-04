@@ -62,7 +62,7 @@ Los conteos de referencia son de la exportación de prueba; el día de la migrac
 - Que ningún archivo diga "NO SE ENCONTRÓ". Si pasa, corregir su ruta en el programa y volver a correr.
 - En HISTORIA es normal que diga que no existen campos como SEGMENTO2 o FE\_REA: historia.dbf no los tiene.
 - En BLACKLIST es normal que diga que no existe STATUS: el DBF no lo tiene y todo cuenta como X.
-- En PURGA, anotar qué campo de fecha sí existe (FE\_BAJA, FE\_PURGA, FE\_RET, FECHA…).
+- En PURGA es normal que diga que no existen los campos de fecha (FE\_BAJA, FE\_PURGA, FE\_RET, FECHA…): la purga del 486 no los trae. La migración avisa *PURGA: no se usa* y los periodos anteriores quedan sin fecha de retiro.
 
 No se exportan DEVOL, TELBAJ, PNC ni LADA. TELBAJ y PNC se leen de CYBER en cada asignación.
 
@@ -94,7 +94,8 @@ No escribe nada. Regresa tres resultados:
 | `DAT: n registros sin CUENTA omitidos` / `con CUENTA repetida` | Registros del DAT que no se cargan | Revisar en FoxPro si es correcto |
 | `HISTORIA: n asignaciones anteriores quedan como baja…` | Cuántos periodos anteriores entran al histórico | Debe ser cercano a los renglones de historia.dbf |
 | `HISTORIA: fecha de asignación = FE_ASIG · se conservan: …` | Qué campos se guardan de cada periodo | Revisar que salgan saldos, teléfonos y dirección |
-| `PURGA: n periodos del histórico con fecha de retiro` | Cuántos periodos quedan con fecha de retiro | Si es 0, revisar el campo de fecha de PURGA |
+| `PURGA: no se usa (no trae fecha de retiro)…` | La purga no tiene fecha de retiro | Nada: los periodos anteriores quedan sin fecha de retiro |
+| `PURGA: n periodos del histórico con fecha de retiro` | Solo si algún día la purga trae fecha | Nada, es informativo |
 | `CONSECUTIVO: TAB7 (x) es menor que el folio más alto usado (y)` | El último folio de TAB7 está atrasado | Se toma el más alto; nada que hacer |
 | `PAGTOT: n registros omitidos por FE_PAG incompleta…` | Pagos viejos con fecha mal capturada | Nada, nunca coincidirían con un pago nuevo |
 | `EMAILMALO: n de m registros aplican al 486` | Solo se guardan los de cuentas del 486 | Nada, es informativo |
@@ -162,7 +163,7 @@ Desde ese día el operador solo sube SCBSDOS, SCBTEL y los gescar; correos, tel�
 
 | Situación | Qué hacer |
 |---|---|
-| Error 50900 a 50908 (`X.csv: faltan las columnas …`) | El CSV no trae un campo obligatorio. Revisar la ventana de FoxPro y la ruta del DBF |
+| Error 50900 a 50907 (`X.csv: faltan las columnas …`) | El CSV no trae un campo obligatorio. Revisar la ventana de FoxPro y la ruta del DBF |
 | Error 50910 a 50914 (`… ya tiene registros`) | Ya hay datos. Si se quiere sobrescribir, agregar `@reemplazar = 1` |
 | Aviso `X.csv no se encontró` aunque el archivo sí está | SQL Server no ve la carpeta desde el servidor. Ver el paso 3 |
 | Se cargó y algo no cuadra | Corregir el origen y volver a correr con `@reemplazar = 1`; reemplaza todo lo migrado |

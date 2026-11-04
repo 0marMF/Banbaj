@@ -157,7 +157,7 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [x] `RCVRY.JSP_VALIDADOR_TELEFONOS`: el script `TEL_BORRA` inserta el renglón del día con el total enviado y el procedimiento lo completa. [ ] Confirmar que la tabla no tiene otras columnas obligatorias además de CLIENTE, FECHA y TOTAL_TELS.
 - [x] `RCVRY.JSP_CORREOS_486`: regla acordada, solo queda activo el domicilio de la última base maestra. Nueva versión en `cyber/486/oracle/JSP_CORREOS_486.sql` (correos igual que hoy; domicilios contra `DELQMST.DMADDR1`). [ ] Instalarla en CYBER. [x] Confirmado (03/11): `DMADDR1` es la columna del domicilio en `DELQMST`.
 - [x] Los correos nuevos entran con `ops.sp_bajar_cyber 'CORREOS'` (`MAIL_INSERTA_NUEVOS.sql`), paso obligatorio del arribo; con el arribo automático lo hace el job.
-- [x] **Fecha de retiro en el histórico:** se migra de PURGA solo CUENTA, FOLIO y fecha (02/11). [ ] Confirmar el nombre del campo de fecha en PURGA.DBF (el programa de exportación avisa cuáles no existen).
+- [x] **Fecha de retiro en el histórico:** se migra de PURGA solo CUENTA, FOLIO y fecha (02/11). [x] (03/11) La purga no trae fecha de retiro: la migración avisa y la deja vacía (ya no se detiene).
 
 ## 8. Arribo automático a CYBER (02/11)
 
@@ -191,3 +191,8 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [x] Confirmado (03/11): hora límite del cuadre 17:00 (el SCBPAG llega temprano).
 - [ ] Sigue a mano subir los archivos de ancho fijo (SCBSDOS, SCBTEL, SCBPAG, gescar). Se puede quitar si el cargador de CYBER toma archivos de una carpeta o con la estructura de `PHONE_G1` y de las tablas que llena el SCBSDOS.
 - [x] (03/11) Correo ARCHIVOS_LISTOS_486 al equipo de asignaciones en cuanto están los planos para arribar.
+
+## 11. Por ahora solo archivos (03/11)
+
+- [x] Banbaj genera los archivos planos y los scripts y hasta ahí; las depuraciones en CYBER (stores de correos y teléfonos, scripts de la actualización, retiro en CYBER, blanqueo) y la confirmación se corren a mano. Todo queda programado y se prende con `ARRIBO_AUTOMATICO`, `ACT_CYBER_AUTOMATICO`, `RETIRO_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO` y `CONFIRMACION_AUTOMATICA`.
+- [ ] Columnas de la purga (486.txt) para confirmar que no hay otro campo útil.
