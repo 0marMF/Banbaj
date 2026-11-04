@@ -345,16 +345,28 @@ BEGIN
     SET @carpeta = CONCAT(@carpeta, CONVERT(CHAR(8), @fecha, 112), N'_corrida', @id_corrida, N'\');
     SET @tabla = mail.fn_tabla_html((SELECT NOMBRE AS [Archivo], CAST(LINEAS AS NVARCHAR(12)) AS [Líneas], DESCRIPCION AS [Qué es]
                                      FROM #a ORDER BY ORDEN FOR JSON PATH));
+    /* Qué sigue depende de qué está automático: hoy solo se generan archivos y las depuraciones en CYBER son manuales */
+    DECLARE @auto_arribo BIT = CASE WHEN cfg.fn_param(@cliente, 'ARRIBO_AUTOMATICO') = '1' THEN 1 ELSE 0 END,
+            @auto_act    BIT = CASE WHEN cfg.fn_param(@cliente, 'ACT_CYBER_AUTOMATICO') = '1' THEN 1 ELSE 0 END,
+            @auto_ret    BIT = CASE WHEN cfg.fn_param(@cliente, 'RETIRO_CYBER_AUTOMATICO') = '1' THEN 1 ELSE 0 END;
     SET @sigue = CASE
         WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO IN ('SCBSDOS', 'SCBTEL'))
-            THEN N'Subir primero SCBSDOS y SCBTEL con el cargador de CYBER y después los gescar. En cuanto suben, el job arriba solo correos y teléfonos, genera SCBACTH_SINTEL.TXT (llega otro aviso) y manda la confirmación de la asignación.'
+            THEN N'Subir primero SCBSDOS y SCBTEL con el cargador de CYBER y después los gescar. '
+               + CASE WHEN @auto_arribo = 1
+                      THEN N'En cuanto suben, el job arriba solo correos y teléfonos, genera SCBACTH_SINTEL.TXT (llega otro aviso) y manda la confirmación de la asignación.'
+                      ELSE CONCAT(N'Después correr las depuraciones a mano: EXEC ops.sp_arribar_cyber ', @id_corrida, N', ''CORREOS''; y EXEC ops.sp_arribar_cyber ', @id_corrida,
+                                  N', ''TELEFONOS''; (este último genera SCBACTH_SINTEL.TXT y llega otro aviso). Al terminar, EXEC ops.sp_avisar ', @id_corrida, N', ''CONFIRMACION_ASIG_486'';') END
         WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'SCBPAG')
-            THEN N'Subir SCBPAG con el cargador de CYBER. Los saldos, vencido, pago mínimo y PVS/REE ya se ejecutan solos; si a la hora límite algún pago no aparece en CYBER, llega un hallazgo.'
+            THEN N'Subir SCBPAG con el cargador de CYBER. '
+               + CASE WHEN @auto_act = 1 THEN N'Los saldos, vencido, pago mínimo y PVS/REE ya se ejecutan solos.'
+                      ELSE CONCAT(N'Correr los scripts de saldos, vencido, pago mínimo y PVS/REE: EXEC ops.sp_act_cyber ', @id_corrida, N'; (o los .sql de la carpeta cyber\).') END
+               + N' Si a la hora límite algún pago no aparece en CYBER, llega un hallazgo.'
         WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'GESCAR_SINTEL')
             THEN N'Subir SCBACTH_SINTEL.TXT (gescar de cuentas sin teléfono) con el cargador de CYBER.'
         ELSE N'Subir estos archivos con el cargador de CYBER.' END
-        + CASE WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'GESCAR_RETIRO')
-               THEN N' Hubo retiro: subir también SCBACTH_486.TXT; el retiro en CYBER y la copia de la devolución ya se hicieron solos.' ELSE N'' END;
+        + CASE WHEN NOT EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'GESCAR_RETIRO') THEN N''
+               WHEN @auto_ret = 1 THEN N' Hubo retiro: subir también SCBACTH_486.TXT; el retiro en CYBER y la copia de la devolución ya se hicieron solos.'
+               ELSE CONCAT(N' Hubo retiro: subir también SCBACTH_486.TXT y aplicar el retiro en CYBER con la copia de la devolución: EXEC ops.sp_retiro_cerrar ', @id_corrida, N', @con_cyber = 1;') END;
 
     SET @json = (SELECT @proceso AS PROCESO, @carpeta AS CARPETA, @lista AS ARCHIVOS, @sigue AS SIGUE, @tabla AS HTML_TABLA
                  FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);

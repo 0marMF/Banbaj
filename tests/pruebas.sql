@@ -46,6 +46,9 @@ UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'ASIG_REQ
 /* El retiro automático se prueba aparte (sql/77); el escenario usa @aplicar_retiro explícito */
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486'
    AND CLAVE IN ('RETIRO_AUTOMATICO', 'EXPORTAR_AUTOMATICO', 'ACT_CYBER_AUTOMATICO', 'BLANQUEO_AUTOMATICO', 'CONFIRMACION_AUTOMATICA', 'CUADRE_AUTOMATICO');
+/* El arribo automático y el retiro en CYBER están apagados de fábrica (03/11: por ahora solo se generan archivos);
+   las pruebas los prenden para probar su lógica */
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE IN ('ARRIBO_AUTOMATICO', 'RETIRO_CYBER_AUTOMATICO');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO) VALUES ('486', 'CUENTA', '20000008', 'Prueba de exclusión');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'TELEFONO', '5533333333', '486-104', 'Prueba de queja (TELBAJ)');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'CORREO', 'malo@correo.com', '20000009', 'Prueba de EMAILMALO');

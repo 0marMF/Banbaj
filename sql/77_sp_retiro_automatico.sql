@@ -9,7 +9,9 @@
    Si lo superan, quedan en ops.DEVOLUCION para revisión y se manda el correo
    de hallazgos (HALLAZGO_486) solo al equipo de asignaciones.
 
-   Después de aplicar un retiro, ops.sp_retiro_cerrar hace sin intervención:
+   Después de aplicar un retiro, ops.sp_retiro_cerrar hace sin intervención
+   (2 y 3 solo con RETIRO_CYBER_AUTOMATICO = 1; de momento se hacen a mano con
+   EXEC ops.sp_retiro_cerrar <corrida>, @con_cyber = 1;):
      1. Escribe los archivos de la corrida, arma el ZIP con contraseña y manda
         el correo único de devolución (Operación con el ZIP, AEM en copia oculta).
      2. Ejecuta el script RETIRO en CYBER (dmstatus = 'R') por el servidor vinculado.
@@ -76,6 +78,7 @@ GO
 CREATE OR ALTER PROCEDURE ops.sp_retiro_cerrar
     @id_corrida   INT,
     @solo_mostrar BIT = 0,
+    @con_cyber    BIT = NULL,          -- NULL = parámetro RETIRO_CYBER_AUTOMATICO; 1 = también RETIRO en CYBER y copia de la devolución
     @resultado    NVARCHAR(400) = NULL OUTPUT
 AS
 BEGIN
@@ -87,8 +90,10 @@ BEGIN
     SET @srv = ISNULL(cfg.fn_param(@cliente, 'CYBER_LINKED_SERVER'), 'CYBER');
     SET @ruta = NULLIF(LTRIM(RTRIM(cfg.fn_param(@cliente, 'RUTA_DEVOLUCION_CYBER'))), N'');
     SET @ok_a = CASE WHEN EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'RETIRO ARCHIVOS' AND ESTATUS = 'OK') THEN 1 ELSE 0 END;
-    SET @ok_c = CASE WHEN EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'RETIRO CYBER' AND ESTATUS = 'OK') THEN 1 ELSE 0 END;
-    SET @ok_d = CASE WHEN @ruta IS NULL OR EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'RETIRO DEVOL CYBER' AND ESTATUS = 'OK') THEN 1 ELSE 0 END;
+    /* Mientras las depuraciones en CYBER sean manuales (RETIRO_CYBER_AUTOMATICO = 0) solo se escriben archivos, ZIP y correo */
+    SET @con_cyber = ISNULL(@con_cyber, CASE WHEN ISNULL(cfg.fn_param(@cliente, 'RETIRO_CYBER_AUTOMATICO'), '0') = '1' THEN 1 ELSE 0 END);
+    SET @ok_c = CASE WHEN @con_cyber = 0 OR EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'RETIRO CYBER' AND ESTATUS = 'OK') THEN 1 ELSE 0 END;
+    SET @ok_d = CASE WHEN @con_cyber = 0 OR @ruta IS NULL OR EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'RETIRO DEVOL CYBER' AND ESTATUS = 'OK') THEN 1 ELSE 0 END;
 
     IF NOT EXISTS (SELECT 1 FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id_corrida AND PROCESADA = 1)
     BEGIN
@@ -103,10 +108,10 @@ BEGIN
                CASE WHEN @ok_a = 1 THEN 'HECHO' ELSE 'PENDIENTE' END AS ESTADO
         UNION ALL
         SELECT 2, 'RETIRO CYBER', CONCAT(N'Script RETIRO en CYBER por [', @srv, N'] (', (SELECT COUNT(*) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id_corrida AND SCRIPT = 'RETIRO'), N' líneas)'),
-               CASE WHEN @ok_c = 1 THEN 'HECHO' ELSE 'PENDIENTE' END
+               CASE WHEN @con_cyber = 0 THEN 'MANUAL' WHEN @ok_c = 1 THEN 'HECHO' ELSE 'PENDIENTE' END
         UNION ALL
         SELECT 3, 'RETIRO DEVOL CYBER', ISNULL(N'Copia de MX_G1MCT_DVBJIG_* en ' + @ruta, N'Sin RUTA_DEVOLUCION_CYBER: no se copia'),
-               CASE WHEN @ruta IS NULL THEN 'NO APLICA' WHEN @ok_d = 1 THEN 'HECHO' ELSE 'PENDIENTE' END;
+               CASE WHEN @con_cyber = 0 THEN 'MANUAL' WHEN @ruta IS NULL THEN 'NO APLICA' WHEN @ok_d = 1 THEN 'HECHO' ELSE 'PENDIENTE' END;
         RETURN;
     END;
     IF @@TRANCOUNT > 0 THROW 50771, 'El cierre del retiro no puede correr dentro de una transacción.', 1;
