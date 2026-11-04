@@ -195,4 +195,4 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 ## 11. Por ahora solo archivos (03/11)
 
 - [x] Banbaj genera los archivos planos y los scripts y hasta ahí; las depuraciones en CYBER (stores de correos y teléfonos, scripts de la actualización, retiro en CYBER, blanqueo) y la confirmación se corren a mano. Todo queda programado y se prende con `ARRIBO_AUTOMATICO`, `ACT_CYBER_AUTOMATICO`, `RETIRO_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO` y `CONFIRMACION_AUTOMATICA`.
-- [ ] Columnas de la purga (486.txt) para confirmar que no hay otro campo útil.
+- [x] (03/11) Las fechas de asignación, reasignación y retiro de los periodos migrados del histórico quedan vacías; se llenan con las corridas de Banbaj. PURGA no se usa.

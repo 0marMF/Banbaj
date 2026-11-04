@@ -44,7 +44,7 @@ El programa escribe 13 archivos en `C:\MIGRA486\`, solo con los campos que se us
 | DAT | `O:\DAT\GPO1\486\DAT.DBF` | todos | 6,851 |
 | TAB7 | `O:\DAT\GPO1\486\TAB7.DBF` | FOLIO | 880 |
 | HISTORIA | `O:\HISTORIA\GPO1\486\HISTORIA.DBF` | CUENTA, FOLIO, CUENTA2, RIESGO, SEGMENTO, STATUS, TRAMO, ETIQUETA, FE\_ASIG, SDO\_ACT, CAPITAL, TEL1-TEL16, DIRECC1-DIRECC5, ESTADO, EDO | 1,804,213 |
-| PURGA | `O:\HISTORIA\GPO1\486\PURGA.DBF` | CUENTA, FOLIO, fecha de retiro, MOTIVO | — |
+| PURGA | `O:\HISTORIA\GPO1\486\PURGA.DBF` | No se usa (03/11); si se exporta, la migración solo avisa | — |
 | PAGTOT | `O:\PRG\GPO1\486\PAGOS\PAGTOT.DBF` | CUENTA, MONT, FE\_PAG, FE\_REG | 543,700 |
 | ETI | `O:\PRG\MEXGPO1\ASI486\ETI.DBF` | CUENTA, ETIQUETA | 25,423 |
 | DM1 | `O:\PRG\MEXGPO1\ASI486\DM1.DBF` | CUENTA, ETIQUETA | 1,368 |
@@ -62,7 +62,7 @@ Los conteos de referencia son de la exportación de prueba; el día de la migrac
 - Que ningún archivo diga "NO SE ENCONTRÓ". Si pasa, corregir su ruta en el programa y volver a correr.
 - En HISTORIA es normal que diga que no existen campos como SEGMENTO2 o FE\_REA: historia.dbf no los tiene.
 - En BLACKLIST es normal que diga que no existe STATUS: el DBF no lo tiene y todo cuenta como X.
-- En PURGA es normal que diga que no existen los campos de fecha (FE\_BAJA, FE\_PURGA, FE\_RET, FECHA…): la purga del 486 no los trae. La migración avisa *PURGA: no se usa* y los periodos anteriores quedan sin fecha de retiro.
+- PURGA ya no se usa: si se exporta, la migración solo avisa *PURGA: no se usa*.
 
 No se exportan DEVOL, TELBAJ, PNC ni LADA. TELBAJ y PNC se leen de CYBER en cada asignación.
 
@@ -93,9 +93,8 @@ No escribe nada. Regresa tres resultados:
 | `DAT: columnas del archivo que no existen en dat.DAT_486 (se ignoran)` | Campos del DAT de FoxPro que Banbaj no usa | Nada, es informativo |
 | `DAT: n registros sin CUENTA omitidos` / `con CUENTA repetida` | Registros del DAT que no se cargan | Revisar en FoxPro si es correcto |
 | `HISTORIA: n asignaciones anteriores quedan como baja…` | Cuántos periodos anteriores entran al histórico | Debe ser cercano a los renglones de historia.dbf |
-| `HISTORIA: fecha de asignación = FE_ASIG · se conservan: …` | Qué campos se guardan de cada periodo | Revisar que salgan saldos, teléfonos y dirección |
-| `PURGA: no se usa (no trae fecha de retiro)…` | La purga no tiene fecha de retiro | Nada: los periodos anteriores quedan sin fecha de retiro |
-| `PURGA: n periodos del histórico con fecha de retiro` | Solo si algún día la purga trae fecha | Nada, es informativo |
+| `HISTORIA: las fechas de asignación, reasignación y retiro de los periodos anteriores quedan vacías … se conservan: …` | Los periodos anteriores entran sin fechas (decisión 03/11); se llenan con las corridas de Banbaj | Revisar que salgan saldos, teléfonos y dirección |
+| `PURGA: no se usa…` | La purga no aporta nada a la migración | Nada |
 | `CONSECUTIVO: TAB7 (x) es menor que el folio más alto usado (y)` | El último folio de TAB7 está atrasado | Se toma el más alto; nada que hacer |
 | `PAGTOT: n registros omitidos por FE_PAG incompleta…` | Pagos viejos con fecha mal capturada | Nada, nunca coincidirían con un pago nuevo |
 | `EMAILMALO: n de m registros aplican al 486` | Solo se guardan los de cuentas del 486 | Nada, es informativo |
@@ -126,7 +125,7 @@ EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1, @reemplazar =
 ```sql
 SELECT COUNT(*) AS DAT FROM dat.DAT_486;                                   -- ≈ registros de DAT.DBF
 SELECT ESTATUS, COUNT(*) FROM dat.HISTORIA_FOLIO WHERE CLIENTE = '486' GROUP BY ESTATUS;   -- A = activas del DAT, B = periodos anteriores
-SELECT COUNT(*) FROM dat.HISTORIA_FOLIO WHERE CLIENTE = '486' AND FE_BAJA IS NOT NULL;     -- periodos con fecha de retiro (PURGA)
+SELECT COUNT(*) FROM dat.HISTORIA_FOLIO WHERE CLIENTE = '486' AND ESTATUS = 'B' AND FE_ALTA IS NULL;   -- periodos anteriores, sin fechas (03/11)
 SELECT ULTIMO_FOLIO FROM dat.FOLIO_CONSECUTIVO WHERE CLIENTE = '486';     -- ≥ último folio de TAB7
 SELECT COUNT(*) FROM dat.PAGO_ARRIBADO WHERE CLIENTE = '486' AND ORIGEN = 'PAGTOT';
 SELECT TIPO, COUNT(*) FROM cfg.ETIQUETA WHERE CLIENTE = '486' GROUP BY TIPO;

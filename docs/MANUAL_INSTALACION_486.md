@@ -311,8 +311,8 @@ Se hace **una sola vez**, justo antes de la primera corrida en SQL Server. El de
 | CSV (DBF de origen) | Campos que se usan | Destino en SQL Server |
 | --- | --- | --- |
 | DAT | todos los que existen en `dat.DAT_486` (los demás se ignoran) | `dat.DAT_486` y el periodo vigente en `dat.HISTORIA_FOLIO` |
-| HISTORIA | CUENTA, FOLIO, CUENTA2, RIESGO, SEGMENTO, STATUS, TRAMO, ETIQUETA, FE\_ASIG, SDO\_ACT, CAPITAL, TEL1-TEL16, DIRECC1-DIRECC5, ESTADO, EDO | `dat.HISTORIA_FOLIO`: cada asignación anterior como baja (la primera de la cuenta NVA, las siguientes REA); los datos van en `DATOS_BAJA` (JSON). historia.dbf no trae correos; la fecha de retiro sale de PURGA |
-| PURGA | CUENTA, FOLIO, fecha de retiro (FE\_BAJA, FE\_PURGA, FE\_RET o FECHA), MOTIVO | solo la fecha de retiro del periodo de esa cuenta y folio en `dat.HISTORIA_FOLIO` |
+| HISTORIA | CUENTA, FOLIO, CUENTA2, RIESGO, SEGMENTO, STATUS, TRAMO, ETIQUETA, FE\_ASIG, SDO\_ACT, CAPITAL, TEL1-TEL16, DIRECC1-DIRECC5, ESTADO, EDO | `dat.HISTORIA_FOLIO`: cada asignación anterior como baja (la primera de la cuenta NVA, las siguientes REA); los datos van en `DATOS_BAJA` (JSON). Las fechas de asignación, reasignación y retiro de esos periodos quedan **vacías** (decisión 03/11) y se llenan con las corridas de Banbaj; FE\_ASIG solo sirve para ordenar NVA/REA. historia.dbf no trae correos |
+| PURGA | — | **No se usa** (03/11): no trae fecha de retiro |
 | TAB7 | FOLIO | consecutivo de folios |
 | PAGTOT | CUENTA, MONT, FE\_PAG, FE\_REG | `dat.PAGO_ARRIBADO` (origen PAGTOT) |
 | ETI, DM1 | CUENTA, ETIQUETA | etiquetas (DMP2, DMP1 del SCBSDOS) |
@@ -323,7 +323,7 @@ Se hace **una sola vez**, justo antes de la primera corrida en SQL Server. El de
 | EMAILMALO | EMAIL, CUENTA | correos malos |
 | BLACKLIST | TEL, FE\_AGRE, OS, SOLICITUD | lista negra: OS = requerimiento, FE\_AGRE = fecha, SOLICITUD = quién lo pidió. STATUS X excluye y vacío no; el DBF no trae STATUS, así que todo cuenta como X |
 
-Ya no se migran: **TELBAJ** y **PNC** (se leen de CYBER en cada asignación), **LADA** (ningún proceso la usa) y DEVOL. De PURGA solo se toma la fecha de retiro. El programa de FoxPro exporta solo los campos de esta tabla; si alguno no existe en el DBF lo avisa al final.
+Ya no se migran: **TELBAJ** y **PNC** (se leen de CYBER en cada asignación), **LADA** (ningún proceso la usa) y DEVOL. PURGA tampoco se usa. El programa de FoxPro exporta solo los campos de esta tabla; si alguno no existe en el DBF lo avisa al final.
 
 ### Paso 1. Exportar desde FoxPro
 
