@@ -1,0 +1,527 @@
+commit: ecdda05b54a9364e0e29b0923ab2e116410b45de
+fecha: 2026-11-04T03:15:08Z
+estado del job: success
+
+== Banbaj sql/01_esquemas_tablas.sql
+== Banbaj sql/02_catalogos.sql
+== Banbaj sql/03_correo.sql
+== Banbaj sql/05_tabla_dat_486.sql
+== Banbaj sql/10_funciones.sql
+== Banbaj sql/12_credenciales.sql
+== Banbaj sql/20_sp_comunes.sql
+The module 'sp_validar' depends on the missing object 'mail.sp_enviar'. The module will still be created; however, it cannot run successfully until the object exists.
+== Banbaj sql/25_sp_correo.sql
+== Banbaj sql/27_sp_etiquetas.sql
+== Banbaj sql/30_sp_asignacion.sql
+The module 'sp_retiro' depends on the missing object 'ops.sp_generar_salidas'. The module will still be created; however, it cannot run successfully until the object exists.
+== Banbaj sql/32_sp_retiro_solicitud.sql
+The module 'sp_retiro_solicitud' depends on the missing object 'ops.sp_respaldo'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_retiro_solicitud' depends on the missing object 'ops.sp_retroceso_automatico'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_retiro_solicitud' depends on the missing object 'ops.sp_retiro_cerrar'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_retiro_solicitud' depends on the missing object 'ops.sp_exportar_auto'. The module will still be created; however, it cannot run successfully until the object exists.
+== Banbaj sql/35_sp_respaldo.sql
+== Banbaj sql/40_sp_actualizacion.sql
+== Banbaj sql/45_sp_telefonos.sql
+== Banbaj sql/46_sp_correos_cyber.sql
+== Banbaj sql/50_sp_salidas.sql
+== Banbaj sql/52_sp_exportar.sql
+The module 'sp_exportar_salidas' depends on the missing object 'ops.sp_aviso_devolucion'. The module will still be created; however, it cannot run successfully until the object exists.
+== Banbaj sql/60_sp_orquestadores.sql
+The module 'sp_asignacion_486' depends on the missing object 'ops.sp_retiro_decidir'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_asignacion_486' depends on the missing object 'ops.sp_arribo_base'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_asignacion_486' depends on the missing object 'ops.sp_retiro_cerrar'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_asignacion_486' depends on the missing object 'ops.sp_exportar_auto'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_actualizacion_486' depends on the missing object 'ops.sp_retiro_decidir'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_actualizacion_486' depends on the missing object 'ops.sp_retiro_cerrar'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_actualizacion_486' depends on the missing object 'ops.sp_exportar_auto'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_actualizacion_486' depends on the missing object 'ops.sp_act_cyber'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_diario_486' depends on the missing object 'ops.sp_cuadre_automatico'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_diario_486' depends on the missing object 'ops.sp_arribo_automatico'. The module will still be created; however, it cannot run successfully until the object exists.
+== Banbaj sql/70_sp_procesos_manuales.sql
+The module 'sp_regenerar_scbsdos' depends on the missing object 'ops.sp_exportar_auto'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_etiquetar_campo' depends on the missing object 'ops.sp_exportar_auto'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_exclusion_cargar' depends on the missing object 'ops.sp_mig_leer'. The module will still be created; however, it cannot run successfully until the object exists.
+== Banbaj sql/72_sp_seguimiento.sql
+== Banbaj sql/74_sp_cyber.sql
+== Banbaj sql/76_sp_arribo_cyber.sql
+The module 'sp_arribar_cyber' depends on the missing object 'ops.sp_aviso_archivos'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_arribo_automatico' depends on the missing object 'ops.sp_arribo_posterior'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_arribo_automatico' depends on the missing object 'ops.sp_arribo_posterior'. The module will still be created; however, it cannot run successfully until the object exists.
+== Banbaj sql/77_sp_retiro_automatico.sql
+The module 'sp_retiro_cerrar' depends on the missing object 'ops.sp_aviso_archivos'. The module will still be created; however, it cannot run successfully until the object exists.
+== Banbaj sql/78_sp_automatico.sql
+The module 'sp_exportar_auto' depends on the missing object 'ops.sp_aviso_archivos'. The module will still be created; however, it cannot run successfully until the object exists.
+== Banbaj sql/80_sp_migracion.sql
+== Banbaj sql/90_semilla_486.sql
+== BanbajMig sql/01_esquemas_tablas.sql
+== BanbajMig sql/02_catalogos.sql
+== BanbajMig sql/03_correo.sql
+== BanbajMig sql/05_tabla_dat_486.sql
+== BanbajMig sql/10_funciones.sql
+== BanbajMig sql/12_credenciales.sql
+== BanbajMig sql/20_sp_comunes.sql
+The module 'sp_validar' depends on the missing object 'mail.sp_enviar'. The module will still be created; however, it cannot run successfully until the object exists.
+== BanbajMig sql/25_sp_correo.sql
+== BanbajMig sql/27_sp_etiquetas.sql
+== BanbajMig sql/30_sp_asignacion.sql
+The module 'sp_retiro' depends on the missing object 'ops.sp_generar_salidas'. The module will still be created; however, it cannot run successfully until the object exists.
+== BanbajMig sql/32_sp_retiro_solicitud.sql
+The module 'sp_retiro_solicitud' depends on the missing object 'ops.sp_respaldo'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_retiro_solicitud' depends on the missing object 'ops.sp_retroceso_automatico'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_retiro_solicitud' depends on the missing object 'ops.sp_retiro_cerrar'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_retiro_solicitud' depends on the missing object 'ops.sp_exportar_auto'. The module will still be created; however, it cannot run successfully until the object exists.
+== BanbajMig sql/35_sp_respaldo.sql
+== BanbajMig sql/40_sp_actualizacion.sql
+== BanbajMig sql/45_sp_telefonos.sql
+== BanbajMig sql/46_sp_correos_cyber.sql
+== BanbajMig sql/50_sp_salidas.sql
+== BanbajMig sql/52_sp_exportar.sql
+The module 'sp_exportar_salidas' depends on the missing object 'ops.sp_aviso_devolucion'. The module will still be created; however, it cannot run successfully until the object exists.
+== BanbajMig sql/60_sp_orquestadores.sql
+The module 'sp_asignacion_486' depends on the missing object 'ops.sp_retiro_decidir'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_asignacion_486' depends on the missing object 'ops.sp_arribo_base'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_asignacion_486' depends on the missing object 'ops.sp_retiro_cerrar'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_asignacion_486' depends on the missing object 'ops.sp_exportar_auto'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_actualizacion_486' depends on the missing object 'ops.sp_retiro_decidir'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_actualizacion_486' depends on the missing object 'ops.sp_retiro_cerrar'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_actualizacion_486' depends on the missing object 'ops.sp_exportar_auto'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_actualizacion_486' depends on the missing object 'ops.sp_act_cyber'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_diario_486' depends on the missing object 'ops.sp_cuadre_automatico'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_diario_486' depends on the missing object 'ops.sp_arribo_automatico'. The module will still be created; however, it cannot run successfully until the object exists.
+== BanbajMig sql/70_sp_procesos_manuales.sql
+The module 'sp_regenerar_scbsdos' depends on the missing object 'ops.sp_exportar_auto'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_etiquetar_campo' depends on the missing object 'ops.sp_exportar_auto'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_exclusion_cargar' depends on the missing object 'ops.sp_mig_leer'. The module will still be created; however, it cannot run successfully until the object exists.
+== BanbajMig sql/72_sp_seguimiento.sql
+== BanbajMig sql/74_sp_cyber.sql
+== BanbajMig sql/76_sp_arribo_cyber.sql
+The module 'sp_arribar_cyber' depends on the missing object 'ops.sp_aviso_archivos'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_arribo_automatico' depends on the missing object 'ops.sp_arribo_posterior'. The module will still be created; however, it cannot run successfully until the object exists.
+The module 'sp_arribo_automatico' depends on the missing object 'ops.sp_arribo_posterior'. The module will still be created; however, it cannot run successfully until the object exists.
+== BanbajMig sql/77_sp_retiro_automatico.sql
+The module 'sp_retiro_cerrar' depends on the missing object 'ops.sp_aviso_archivos'. The module will still be created; however, it cannot run successfully until the object exists.
+== BanbajMig sql/78_sp_automatico.sql
+The module 'sp_exportar_auto' depends on the missing object 'ops.sp_aviso_archivos'. The module will still be created; however, it cannot run successfully until the object exists.
+== BanbajMig sql/80_sp_migracion.sql
+== BanbajMig sql/90_semilla_486.sql
+== tests/pruebas.sql
+ARRIBO CORRIDA CUENTAS_PENDIENTES_EN_CYBER DOMICILIOS_PENDIENTES_EN_CYBER TELEFONOS_PENDIENTES_EN_PHONE_G1
+------ ------- --------------------------- ------------------------------ --------------------------------
+ESPERANDO ARRIBO 2 0 de 8 0 de 0 0 de 7
+ARRIBO CORRIDA CUENTAS_PENDIENTES_EN_CYBER DOMICILIOS_PENDIENTES_EN_CYBER TELEFONOS_PENDIENTES_EN_PHONE_G1
+------ ------- --------------------------- ------------------------------ --------------------------------
+CORREOS ERROR 2 8 de 8 0 de 0 0 de 7
+ARRIBO CORRIDA CUENTAS_PENDIENTES_EN_CYBER DOMICILIOS_PENDIENTES_EN_CYBER TELEFONOS_PENDIENTES_EN_PHONE_G1
+------ ------- --------------------------- ------------------------------ --------------------------------
+ESPERANDO ARRIBO 2 8 de 8 0 de 0 0 de 7
+ARRIBO CORRIDA CUENTAS_PENDIENTES_EN_CYBER DOMICILIOS_PENDIENTES_EN_CYBER TELEFONOS_PENDIENTES_EN_PHONE_G1
+------ ------- --------------------------- ------------------------------ --------------------------------
+TELEFONOS ERROR 2 8 de 8 0 de 0 7 de 7
+ARRIBO CORRIDA
+------ -------
+ARRIBO AUTOMATICO TERMINADO 2
+ARRIBO CORRIDA CUENTAS_PENDIENTES_EN_CYBER DOMICILIOS_PENDIENTES_EN_CYBER TELEFONOS_PENDIENTES_EN_PHONE_G1
+------ ------- --------------------------- ------------------------------ --------------------------------
+TELEFONOS ERROR 2 0 de 0 0 de 1 0 de 0
+ARRIBO CORRIDA CUENTAS_PENDIENTES_EN_CYBER DOMICILIOS_PENDIENTES_EN_CYBER TELEFONOS_PENDIENTES_EN_PHONE_G1
+------ ------- --------------------------- ------------------------------ --------------------------------
+CORREOS ERROR 2 0 de 0 1 de 1 0 de 0
+Warning: Null value is eliminated by an aggregate or other SET operation.
+Vista previa: no se cambió nada. Ejecuta con @confirmar = 1 para retirar.
+VALOR TIPO RESULTADO CUENTA2 FOLIO
+----- ---- --------- ------- -----
+486-100003 FOLIO A RETIRAR 486-100003 100003
+1000000004 RIESGO A RETIRAR 486-100004 100004
+777777 NULL NO ESTA EN EL DAT NULL NULL
+486-100003 FOLIO REPETIDO NULL NULL
+100004 NULL AMBIGUO NULL NULL
+CONCEPTO REGISTROS
+-------- ---------
+DAT actual 2
+DAT en el respaldo 4
+Altas en el histórico a borrar 0
+Bajas en el histórico a reabrir 2
+Pagos arribados a borrar 0
+Consecutivo de folios: actual 100004 -> 100004 NULL
+Vista previa: no se cambió nada. Ejecuta con @confirmar = 1 para actualizar el DAT y generar SCBSDOS.
+CAMPO RESULTADO REGISTROS
+----- --------- ---------
+SALDO1 A ACTUALIZAR 1
+SALDO1 IMPORTE INVALIDO 1
+SALDO1 NO ESTA EN EL DAT 1
+SALDO1 SIN ETIQUETA 1
+MOTIVO REGISTROS
+------ ---------
+SE BLANQUEA 2
+NO ES NUEVA NI REASIGNADA EN LA CORRIDA 1
+OTRO CLIENTE 1
+SIN STATUS NI ACCION 1
+STATUS QUE NO SE BLANQUEA 1
+SIN_TELEFONO
+------------
+3
+ARRIBADOS EN_CYBER NO_SUBIERON
+--------- -------- -----------
+4 3 2
+CUENTA2 IMPORTE
+------- -------
+NULL 10.00
+486-102 1000.00
+CONCEPTO REGISTROS
+-------- ---------
+DAT actual 4
+DAT en el respaldo 4
+Altas en el histórico a borrar 0
+Bajas en el histórico a reabrir 0
+Pagos arribados a borrar 0
+Consecutivo de folios: actual 100004 -> 100004 NULL
+CONCEPTO REGISTROS
+-------- ---------
+DAT actual 4
+DAT en el respaldo 4
+Altas en el histórico a borrar 0
+Bajas en el histórico a reabrir 0
+Pagos arribados a borrar 0
+Consecutivo de folios: actual 100004 -> 100004 NULL
+CONCEPTO REGISTROS
+-------- ---------
+DAT actual 4
+DAT en el respaldo 4
+Altas en el histórico a borrar 0
+Bajas en el histórico a reabrir 0
+Pagos arribados a borrar 0
+Consecutivo de folios: actual 100004 -> 100004 NULL
+CONCEPTO REGISTROS
+-------- ---------
+DAT actual 4
+DAT en el respaldo 4
+Altas en el histórico a borrar 0
+Bajas en el histórico a reabrir 0
+Pagos arribados a borrar 0
+Consecutivo de folios: actual 100004 -> 100004 NULL
+CONCEPTO REGISTROS
+-------- ---------
+DAT actual 4
+DAT en el respaldo 4
+Altas en el histórico a borrar 0
+Bajas en el histórico a reabrir 0
+Pagos arribados a borrar 0
+Consecutivo de folios: actual 100004 -> 100004 NULL
+CONCEPTO REGISTROS
+-------- ---------
+DAT actual 4
+DAT en el respaldo 8
+Altas en el histórico a borrar 0
+Bajas en el histórico a reabrir 4
+Pagos arribados a borrar 4
+Consecutivo de folios: actual 100004 -> 100004 NULL
+CONCEPTO REGISTROS
+-------- ---------
+DAT actual 8
+DAT en el respaldo 5
+Altas en el histórico a borrar 5
+Bajas en el histórico a reabrir 2
+Pagos arribados a borrar 0
+Consecutivo de folios: actual 100004 -> 100000 NULL
+Vista previa: no se cambió nada. Ejecuta con @confirmar = 1 para revertir.
+CONCEPTO REGISTROS
+-------- ---------
+DAT actual 8
+DAT en el respaldo 5
+Altas en el histórico a borrar 5
+Bajas en el histórico a reabrir 2
+Pagos arribados a borrar 0
+Consecutivo de folios: actual 100004 -> 100000 NULL
+Warning: Null value is eliminated by an aggregate or other SET operation.
+Aviso: la corrida 2 está en estatus REVERTIDA.
+Se omiten por tener el mismo nombre que una salida posterior: DAT_MIS_RET (DAT486_20261102.csv)
+Warning: Null value is eliminated by an aggregate or other SET operation.
+Aviso: la corrida 3 está en estatus REVERTIDA.
+Se omiten por tener el mismo nombre que una salida posterior: DAT_MIS_RET (DAT486_20261103.csv)
+ACT_CYBER CORRIDA
+--------- -------
+ACTUALIZACION EN CYBER CON ERRORES 3
+R PRUEBA DETALLE
+- ------ -------
+OK    fn_importe con $ y miles esperado=[1234.50] obtenido=[1234.50]
+OK    fn_importe cero contable de Excel esperado=[0.00] obtenido=[0.00]
+OK    fn_importe con espacios esperado=[12345.67] obtenido=[12345.67]
+OK    fn_importe inválido -> NULL esperado=[] obtenido=[]
+OK    fn_fecha AAAA-MM-DD con hora esperado=[2026-10-25] obtenido=[2026-10-25]
+OK    fn_fecha AAAAMMDD esperado=[2026-11-02] obtenido=[2026-11-02]
+OK    fn_pad_importe legado (negativo sale positivo) esperado=[000000000012.50] obtenido=[000000000012.50]
+OK    fn_pad_importe con signo esperado=[-00000000012.50] obtenido=[-00000000012.50]
+OK    Negativos en cero (decisión 30/10: el saldo <= 0 se retira) esperado=[CERO|000000000000.00|000000000012.50] obtenido=[CERO|000000000000.00|000000000012.50]
+OK    fn_cp_estado esperado=[GTO] obtenido=[GTO]
+OK    fn_ruta: carpeta del día con mes en español esperado=[Q:\CYBER\C_486\2026\octubre\28\|Q:\CYBER\C_486\2027\enero\05\] obtenido=[Q:\CYBER\C_486\2026\octubre\28\|Q:\CYBER\C_486\2027\enero\05\]
+OK    fn_dia_habil_anterior (lunes -> viernes) y fin de semana esperado=[2026-10-30|2026-11-02|2026-11-06|1|0] obtenido=[2026-10-30|2026-11-02|2026-11-06|1|0]
+OK    Archivos presentes: 3 de actualización, 2 maestras 3|2
+OK    Diario: fin de semana no corre FIN DE SEMANA
+OK    Candado: asignación sin actualización del día se detiene (50110) sin abrir corrida Primero debe terminar OK la actualización del mismo día (parámetro ASIG_REQUIERE_ACT).
+OK    Correo: TO armado desde la tabla administrativo.mc4@sertec.com.mx;administrativo.mc5@sertec.com.mx;erika.ramos@sertec.com.mx;supervisor.mc4@sertec.com.mx;supervisorbackoffice.mc@sertec.com.mx
+OK    Correo: BCC armado desde la tabla asig.cdmx@sertec.com.mx;asignaciones.cdmx1@sertec.com.mx;asignaciones3@sertec.com.mx
+OK    Correo: firma y aviso insertados <html><body><font face='Book Antiqua'><p><b>Se realiza asignación BANCO BAJIO. Favor de revisar y confirmar misma vía.</b></p><p>Archivos: 2</p><p>Saludos.</p></font><p><font face='Book Antiqua' color='#1C3D7B'><b>Asignaciones</b></font> | <font face='Book Antiqua' color='#255BBF' size='2'>Especiali
+OK    Correo: alta de destinatario esperado=[nuevo.correo@sertec.com.mx] obtenido=[nuevo.correo@sertec.com.mx]
+OK    Correo: baja de destinatario esperado=[] obtenido=[]
+OK    Asignación con devolución masiva: error 50100 esperado=[50100] obtenido=[50100]
+OK    Asignación cancelada: estatus de la corrida esperado=[CANCELADA] obtenido=[CANCELADA]
+OK    Asignación cancelada: el DAT no cambió esperado=[5] obtenido=[5]
+OK    Retroceso automático: la corrida cancelada conserva su estatus y no deja base maestra esperado=[CANCELADA|1|1|0] obtenido=[CANCELADA|1|1|0]
+OK    Asignación termina OK NULL
+OK    ASIG: archivos cargados esperado=[2] obtenido=[2]
+OK    ASIG: rechazo por saldo inválido (abc) NULL
+OK    ASIG: rechazo por cuenta duplicada NULL
+OK    ASIG: cuenta excluida (exc486) NULL
+OK    ASIG: alerta por saldo <= 0 en Consumo NULL
+OK    ASIG: devoluciones por segmento (C2 y T2) esperado=[20000002,2222XAXX010101000] obtenido=[20000002,2222XAXX010101000]
+OK    ASIG: DAT final (3 existentes + 4 NVA + 1 REA) esperado=[8] obtenido=[8]
+OK    ASIG: folios NVA consecutivos esperado=[20000004:100001,20000005:100002,3333XAXX010101000:100003,4444XAXX010101000:100004] obtenido=[20000004:100001,20000005:100002,3333XAXX010101000:100003,4444XAXX010101000:100004]
+OK    ASIG: base maestra vigente y anterior por segmento esperado=[0|1] obtenido=[0|1]
+OK    ASIG: consecutivo actualizado esperado=[100004] obtenido=[100004]
+OK    ASIG: REA reutiliza folio del histórico esperado=[REA|486-500] obtenido=[REA|486-500]
+OK    ASIG: existente actualiza teléfono y etiqueta esperado=[5599999999|MORA 2] obtenido=[5599999999|MORA 2]
+OK    ASIG: existente sin cambios no se toca esperado=[] obtenido=[]
+OK    ASIG: TDC saldo <= 0 toma SDO_VDO y TIPO por tramo esperado=[750.00|TDC_VEN] obtenido=[750.00|TDC_VEN]
+OK    ASIG: TDC castigada y NAME2 "-" toma NAME1 (macro) esperado=[TDC_CAS|CLIENTE PRUEBA CUATRO] obtenido=[TDC_CAS|CLIENTE PRUEBA CUATRO]
+OK    ASIG: Consumo importe con $, CP de 4 dígitos, homologación esperado=[1234.50|06600|NOMINA|NOMINA_VIG|400.00] obtenido=[1234.50|06600|NOMINA|NOMINA_VIG|400.00]
+OK    ASIG: histórico de bajas (retiro) esperado=[2] obtenido=[2]
+OK    ASIG: archivo de devolución para CYBER (CUENTA2) esperado=[486-101,486-103] obtenido=[486-101,486-103]
+OK    ASIG: script de retiro para CYBER esperado=[update RCVRY.delqmst set dmstatus='R' where dmacctg='1' and dmacct='486-101';] obtenido=[update RCVRY.delqmst set dmstatus='R' where dmacctg='1' and dmacct='486-101';]
+OK    TEL: sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL) esperado=[486-100|01477|7001234|4,486-100|0155|99999999|1,486-100|045|4771234567|5,486-100003|045|4771234567|5,486-102|0155|77777777|1,486-104|0155|44445555|4,486-104|044|5511111111|5] obtenido=[486-100|01477|7001234|4,486-100|0155|99999999|1,486-100|045|4771234567|5,486-100003|045|4771234567|5,486-102|0155|77777777|1,486-104|0155|44445555|4,486-104|044|5511111111|5]
+OK    TEL: SCBTEL 7 líneas de 137 con fecha y gestor esperado=[7|0|11022026|HOSP] obtenido=[7|0|11022026|HOSP]
+OK    TEL: bitácora (quejas TELBAJ) y scripts de CYBER (vaciar remesa y procedimiento) esperado=[1|TRUNCATE TABLE RCVRY.JSP_TAB_TEL_REMESA_486;|EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;] obtenido=[1|TRUNCATE TABLE RCVRY.JSP_TAB_TEL_REMESA_486;|EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;]
+OK    TEL: renglón del día en JSP_VALIDADOR_TELEFONOS con el total enviado INSERT INTO RCVRY.JSP_VALIDADOR_TELEFONOS (CLIENTE, FECHA, TOTAL_TELS) SELECT '486', SYSDATE, 7 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM RCVRY.JSP_VALIDADOR_TELEFONOS WHERE CLIENTE = '486' AND FIN IS NULL AND TRUNC(FECHA) = TRUNC(SYSDATE));
+OK    ARRIBO TEL: TRUNCATE con EXECUTE IMMEDIATE, remesa con INSERT y procedimiento en bloque PL/SQL esperado=[1|1|1|7|1] obtenido=[1|1|1|7|1]
+OK    ARRIBO CORREOS: bandera, remesa y JSP_CORREOS_486 en orden esperado=[MAIL_ACTIVA_BANDERA,MAIL_BORRA,MAIL_REMESA,MAIL_ACTUALIZA,MAIL_INACTIVA_BANDERA|1] obtenido=[MAIL_ACTIVA_BANDERA,MAIL_BORRA,MAIL_REMESA,MAIL_ACTUALIZA,MAIL_INACTIVA_BANDERA|1]
+OK    ARRIBO BASE: pendientes = cuentas del SCBSDOS y teléfonos del SCBTEL que no están en CYBER esperado=[8|0|7] obtenido=[8|0|7]
+OK    ARRIBO AUTO: espera, detecta SCBSDOS (pendientes en DELQMST) y SCBTEL (pendientes en PHONE_G1), una vez cada uno esperado=[ESPERANDO ARRIBO,CORREOS ERROR,ESPERANDO ARRIBO,TELEFONOS ERROR,ARRIBO AUTOMATICO TERMINADO|1|1|2] obtenido=[ESPERANDO ARRIBO,CORREOS ERROR,ESPERANDO ARRIBO,TELEFONOS ERROR,ARRIBO AUTOMATICO TERMINADO|1|1|2]
+OK    ARRIBO AUTO sin cuentas nuevas: detecta por domicilio pendiente; sin teléfonos pendientes arriba de inmediato esperado=[0|1|0|TELEFONOS ERROR,CORREOS ERROR] obtenido=[0|1|0|TELEFONOS ERROR,CORREOS ERROR]
+OK    RETIRO AUTO: se aplica solo dentro del tope; con todo el segmento se detiene y avisa a asignaciones esperado=[1|0|3|1|1] obtenido=[1|0|3|1|1]
+OK    RETIRO CERRAR: archivos+ZIP+correo, RETIRO en CYBER y copia de la devolución, pendientes esperado=[RETIRO ARCHIVOS:PENDIENTE,RETIRO CYBER:PENDIENTE,RETIRO DEVOL CYBER:MANUAL|1] obtenido=[RETIRO ARCHIVOS:PENDIENTE,RETIRO CYBER:PENDIENTE,RETIRO DEVOL CYBER:MANUAL|1]
+OK    HALLAZGO: va a asignaciones (sin Operación ni AEM), asunto con el tipo y tabla HTML asig.486.cdmx@sertec.com.mx | Banbaj 486: Prueba de hallazgo (corrida 2) 04/11/2026
+OK    AVISO ARCHIVOS: a asignaciones con carpeta, SCBSDOS/SCBTEL/gescar (sin remesas) y qué sigue Banbaj 486: archivos listos para arribar (ASIG, corrida 2) 04/11/2026 | <html><body><font face='Book Antiqua'><p><b>Ya están los archivos planos para arribar a CYBER.</b></p><p>Carpeta: <b>C:\BANBAJ\486\SALIDA\20261102_corrida2\</b></p><table style="border-collapse:collapse;font-family:Arial;font-size:12px;margin:8px 0"><tr><th style="border:1px solid #999;padding:4px 8px;background:#e8eef7;text-align:left">Archivo</th><th style="border:1px solid #999;padding:4px 8px;background:#e8eef7;text-align:left">Líneas</th><th style="border:1px solid #999;padding:4px 8px;background:#e8eef7;text-align:left">Qué es</th></tr><tr><td style="border:1px solid #999;padding:4px 8px">SCBSDOS.TXT</td><td style="border:1px solid #999;padding:4px 8px">8</td><td style="border:1px solid #999;padding:4px 8px">Cuentas del DAT para CYBER (asi486.prg)</td></tr><tr><td style="border:1px solid #999;padding:4px 8px">SCBTEL.TXT</td><td style="border:1px solid #999;padding:4px 8px">7</td><td style="border:1px solid #999;padding:4px 8px">Teléfonos (TELSAN) de ancho fijo</td></tr><tr><td style="border:1px solid #999;padding:4px 8px">SCBACTH_486.TXT</td><td style="border:1px solid #999;padding:4px 8px">2</td><td style="border:1px solid #999;padding:4px 8px">Gescar de retiro (ges_retiro.prg)</td></tr><tr><td style="border:1px solid #999;padding:4px 8px">SCBACTH_486NU.TXT</td><td style="border:1px solid #999;padding:4px 8px">4</td><td style="border:1px solid #999;padding:4px 8px">Gescar de cuentas nuevas (ges_nuevas_rea.prg, REQ 2021-062065)</td></tr><tr><td style="border:1px solid #999;padding:4px 8px">SCBACTH_486REA.TXT</td><td style="border:1px solid #999;padding:4px 8px">1</td><td style="border:1px solid #999;padding:4px 8px">Gescar de cuentas reasignadas (ges_nuevas_rea.prg)</td></tr></table><p><b>Qué sigue:</b> Subir primero SCBSDOS y SCBTEL con el cargador de CYBER y después los gescar. En cuanto suben, el job arriba solo correos y teléfonos, genera SCBACTH_SINTEL.TXT (llega otro aviso) y manda la confirmación de la asignación. Hubo retiro: subir también SCBACTH_486.TXT; el retiro en CYBER y la copia de la devolución ya se hicieron solos. Copiar a mano el archivo MX_G1MCT_DVBJIG_* de la carpeta a \\192.168.50.1\Cyber_00\dev\ (el servidor no tiene acceso a esa carpeta).</p><p>Proceso ASIG · corrida 2 del 02/11/2026</p><p>Saludos.</p></font><p><font face='Book Antiqua' color='#1C3D7B'><b>Asignaciones</b></font> | <font face='Book Antiqua' color='#255BBF' size='2'>Especialista</font> | <font face='Book Antiqua' color='#1C3D5B'><b>SERTEC</b></font> | <font face='Book Antiqua' color='#255BBF' size='2'>CDMX | Tel. (55) 5276 8513 Ext. 1416 | asig.486.cdmx@sertec.com.mx</font></p><p><font size='1' color='#255BBF'>Este correo, así como los archivos adjuntos que pueda contener, es confidencial y únicamente para la persona o entidad a la que fue dirigido. Si usted lo recibe por error, destrúyalo de inmediato. Consulte nuestro sitio de internet en www.sertec.com.mx para conocer nuestro Aviso de Privacidad.</font></p></body></html>
+OK    TEL DAT: nueva normalizada (op9), existente tal como llega esperado=[0454771234567|5599999999] obtenido=[0454771234567|5599999999]
+OK    MAIL: sub_mail (CUENTA2|CORREO) y scripts de CYBER esperado=[486-100003|persona.tres@correo.com,486-102|uno@correo.com|TRUNCATE TABLE RCVRY.JSP_TAB_MAIL_REMESA_486;|EXECUTE RCVRY.JSP_CORREOS_486;] obtenido=[486-100003|persona.tres@correo.com,486-102|uno@correo.com|TRUNCATE TABLE RCVRY.JSP_TAB_MAIL_REMESA_486;|EXECUTE RCVRY.JSP_CORREOS_486;]
+OK    GESCAR sin teléfono: no sale en la asignación (espera lo que baja de CYBER) NULL
+OK    MAIL: banderas de CYBER (id_proc 416) al inicio y al final esperado=[UPDATE RCVRY.RPT_LOG_CYBER_REG SET STATUS=1, ETAPA='INICIA ACTUALIZACION ADDRESS 486', ACTIVADO=SYSDATE  where id_proc=416;|UPDATE RCVRY.RPT_LOG_CYBER_REG SET STATUS=0, ETAPA='FINALIZA ACTUALIZACION ADDRESS G1 486' where id_proc=416;] obtenido=[UPDATE RCVRY.RPT_LOG_CYBER_REG SET STATUS=1, ETAPA='INICIA ACTUALIZACION ADDRESS 486', ACTIVADO=SYSDATE  where id_proc=416;|UPDATE RCVRY.RPT_LOG_CYBER_REG SET STATUS=0, ETAPA='FINALIZA ACTUALIZACION ADDRESS G1 486' where id_proc=416;]
+OK    MIS: DAT en CSV con comillas esperado=[8|"100","486","] obtenido=[8|"100","486","]
+OK    BASE: maestras guardadas completas (renglones, encabezados y un valor; solo la última) esperado=[4|96|1000000001|7|107|1] obtenido=[4|96|1000000001|7|107|1]
+OK    GESCAR: nuevas, reasignadas y retiro (líneas y ancho) esperado=[4|1|2|0] obtenido=[4|1|2|0]
+OK    GESCAR: campos de la línea esperado=[2001486-100001|11022026|000RSR1|aaxrh|CUENTA NUEVA ASIGNADA.#2001486-500|CUENTA REASIGNADA.#2001486-101|RETIRO DE CUENTA.] obtenido=[2001486-100001|11022026|000RSR1|aaxrh|CUENTA NUEVA ASIGNADA.#2001486-500|CUENTA REASIGNADA.#2001486-101|RETIRO DE CUENTA.]
+OK    SCBSDOS: líneas generadas esperado=[8] obtenido=[8]
+OK    SCBSDOS: todas miden 1559 esperado=[0] obtenido=[0]
+OK    SCBSDOS: DMCURBAL esperado=[000000001234.50] obtenido=[000000001234.50]
+OK    SCBSDOS: DMZIP y DMSTATE esperado=[06600|CDMX] obtenido=[06600|CDMX]
+OK    SCBSDOS: U1ASIGDTE MMDDAAAA esperado=[11022026] obtenido=[11022026]
+OK    SCBSDOS: U1FTECAR y DMCOMPANY esperado=[BANCO BAJIO|486] obtenido=[BANCO BAJIO|486]
+OK    SCBSDOS: U1MINASIG con signo esperado=[000000000400.00] obtenido=[000000000400.00]
+OK    TOP: leídos|cargados|sin dato|repetidos|fuera del DAT esperado=[5|3|1|1|1] obtenido=[5|3|1|1|1]
+OK    TOP: U1EXT2 en SCBSDOS por folio (con y sin 486-) esperado=[REE|REE|] obtenido=[REE|REE|]
+OK    TOP: baja y alta sueltas esperado=[486-100001,486-100002,486-999999] obtenido=[486-100001,486-100002,486-999999]
+OK    Actualización termina OK NULL
+OK    ACT: no hay alerta de pagos T-1 (sí vienen pagos de ayer) NULL
+OK    ACT: saldo de cuenta que no está en el DAT va a rechazos NULL
+OK    ACT: devoluciones (T1 NORM, C3 tramo 0, C4 saldo 0, C5 DAT en 0) esperado=[1111XAXX010101000,20000003,20000004,20000005] obtenido=[1111XAXX010101000,20000003,20000004,20000005]
+OK    ACT: Consumo actualizado (saldo con miles, vencido, PVS) esperado=[12345.67|2000.00|120|90+] obtenido=[12345.67|2000.00|120|90+]
+OK    ACT: TDC actualiza saldo y conserva SDO_VDO (el archivo no lo trae) esperado=[900.50|750.00|VEN4] obtenido=[900.50|750.00|VEN4]
+OK    ACT: script DMCURBAL esperado=[update RCVRY.delqmst set DMCURBAL='000000012345.67' ,dmbphone='90+' Where dmacctg='1' And dmacct='486-102';] obtenido=[update RCVRY.delqmst set DMCURBAL='000000012345.67' ,dmbphone='90+' Where dmacctg='1' And dmacct='486-102';]
+OK    ACT: dmamtdlq solo para quien trae vencido (3 + commit + exit) esperado=[5] obtenido=[5]
+OK    ACT: cada script termina en commit y exit esperado=[commit;|exit;] obtenido=[commit;|exit;]
+OK    ACT: PVS y REE por script (ACT_PVS_REE) y sin SCBSDOS esperado=[update RCVRY.uda1 set u1arcod1='120' ,u1arcod3='' Where u1acct='486-102';|commit;|exit;|1|0] obtenido=[update RCVRY.uda1 set u1arcod1='120' ,u1arcod3='' Where u1acct='486-102';|commit;|exit;|1|0]
+OK    ACT: se arriban todos los pagos (iguales van los dos; crédito sin cruce va tal cual) esperado=[29999999:10.00,486-100001:500.00,486-100001:500.00,486-102:1000.00] obtenido=[29999999:10.00,486-100001:500.00,486-100001:500.00,486-102:1000.00]
+OK    SCBPAG: 4 líneas de 104 esperado=[4|0] obtenido=[4|0]
+OK    SCBPAG: línea completa (pagos.prg) esperado=[500120000001                 11022026000000001000.00pbank SERTEC  11032026PAGO           000000001000.00] obtenido=[500120000001                 11022026000000001000.00pbank SERTEC  11032026PAGO           000000001000.00]
+OK    ACT: REE (estructura.prg): TDC 60-89 = REEST, personal 90+ vacío esperado=[REEST|] obtenido=[REEST|]
+OK    ACT: DAT después del retiro esperado=[4] obtenido=[4]
+OK    ACT 2: pagos de cuentas retiradas se cruzan con el histórico Hay pagos de créditos que no están en el DAT ni en el histórico; se arriban con el crédito tal como llegó.
+OK    ACT 2: pagos ya arribados no se repiten esperado=[4|0] obtenido=[4|0]
+OK    Pagos negativos: no se arriban, quedan en rechazos y se avisa al equipo de asignaciones esperado=[OK|1|0|4|1] obtenido=[OK|1|0|4|1]
+OK    Pagos negativos: el correo va al equipo de asignaciones asig.486.cdmx@sertec.com.mx | asig.cdmx@sertec.com.mx;asignaciones.cdmx1@sertec.com.mx;asignaciones3@sertec.com.mx
+OK    RET: vista previa (folio, riesgo, no existe, repetido, ambiguo) esperado=[486-100003:FOLIO:A RETIRAR:486-100003|1000000004:RIESGO:A RETIRAR:486-100004|777777::NO ESTA EN EL DAT:|486-100003:FOLIO:REPETIDO:486-100003|100004::AMBIGUO:|4] obtenido=[486-100003:FOLIO:A RETIRAR:486-100003|1000000004:RIESGO:A RETIRAR:486-100004|777777::NO ESTA EN EL DAT:|486-100003:FOLIO:REPETIDO:486-100003|100004::AMBIGUO:|4]
+OK    RET: retira 2, rechaza 3, archivos de retiro y script de CYBER esperado=[OK|2|3|486-100003,486-100004|2|4|B,B] obtenido=[OK|2|3|486-100003,486-100004|2|4|B,B]
+OK    RET: lista de folios para operación (FOLIO,CUENTA2,MOTIVO) esperado=[100003,486-100003,SOLICITUD DE PRUEBA] obtenido=[100003,486-100003,SOLICITUD DE PRUEBA]
+OK    RET: retroceso devuelve las cuentas al DAT esperado=[4|A,A] obtenido=[4|A,A]
+OK    ETI: vista previa del etiquetado de un campo (FOLIO,ETIQUETA) esperado=[SALDO1:A ACTUALIZAR:1|SALDO1:IMPORTE INVALIDO:1|SALDO1:NO ESTA EN EL DAT:1|SALDO1:SIN ETIQUETA:1] obtenido=[SALDO1:A ACTUALIZAR:1|SALDO1:IMPORTE INVALIDO:1|SALDO1:NO ESTA EN EL DAT:1|SALDO1:SIN ETIQUETA:1]
+OK    ETI: SALDO1 etiquetado por folio, rechazos y SCBSDOS esperado=[OK|1500.00|3|1] obtenido=[OK|1500.00|3|1]
+OK    ETI: alias MORA -> ETIQUETA1, blanco con '-', repetidos y sin folio esperado=[ETIQUETA1:A ACTUALIZAR:2|ETIQUETA1:FOLIO REPETIDO:2|ETIQUETA1:SIN FOLIO:1|MORA 2|[]] obtenido=[ETIQUETA1:A ACTUALIZAR:2|ETIQUETA1:FOLIO REPETIDO:2|ETIQUETA1:SIN FOLIO:1|MORA 2|[]]
+OK    ETI: rechaza campos fuera de ETIQUETADO_CAMPOS y TOP 50602|50605
+OK    ASIG: detecta notación científica de Excel 1|0|0|3
+OK    SCBSDOS: DMPHONE = ETIQUETA1 recibida (sin eti486) esperado=[] obtenido=[]
+OK    EXCLUSION: lista negra solo 10 dígitos, con REQ y sin duplicar esperado=[1:1:2,1:0:2|REQ PRUEBA] obtenido=[1:1:2,1:0:2|REQ PRUEBA]
+OK    EXCLUSION: lista negra con STATUS (vacío desactiva, X da de alta con OS y fecha) esperado=[1:1:1|0|OS-51:2026-11-01:CARGA] obtenido=[1:1:1|0|OS-51:2026-11-01:CARGA]
+OK    STATUS: blanquea nuevas/reasignadas salvo PP y sin status esperado=[486-100003,486-100004|4|100003,486-100003,NC,CM|NO ES NUEVA NI REASIGNADA EN LA CORRIDA,OTRO CLIENTE,SIN STATUS NI ACCION,STATUS QUE NO SE BLANQUEA] obtenido=[486-100003,486-100004|4|100003,486-100003,NC,CM|NO ES NUEVA NI REASIGNADA EN LA CORRIDA,OTRO CLIENTE,SIN STATUS NI ACCION,STATUS QUE NO SE BLANQUEA]
+OK    STATUS: la tabla de paso queda vacía NULL
+OK    CORREOS NUEVOS: sin datos de CYBER se detiene (50642) stg.CYBER_CORREO está vacía: baja primero los correos de CYBER (ops.sp_bajar_cyber 'CORREOS').
+OK    CORREOS NUEVOS: INSERT en RCVRY.ADDRESS solo de lo que CYBER no tiene (formato email.sql) esperado=[1|1|3|INSERT INTO RCVRY.ADDRESS VALUES('3333XAXX010101000','3','','persona.tres@correo.com','','','','','','A','','1','486-100003',TO_DATE('02/11/26 |0] obtenido=[1|1|3|INSERT INTO RCVRY.ADDRESS VALUES('3333XAXX010101000','3','','persona.tres@correo.com','','','','','','A','','1','486-100003',TO_DATE('02/11/26 |0]
+OK    GESCAR sin teléfono: cuentas sin teléfono en CYBER (119, zzasg) esperado=[3|0|2001486-100002|zzasg|CUENTA SIN NUMERO TELEFONICO|486-100002,486-100004,486-500] obtenido=[3|0|2001486-100002|zzasg|CUENTA SIN NUMERO TELEFONICO|486-100002,486-100004,486-500]
+OK    CORREO: inicio de asignación al arrancar la corrida NULL
+OK    CORREO: devolución única, Operación con el ZIP y AEM en copia oculta sin él esperado=[2|1|1|1|1] obtenido=[2|1|1|1|1]
+OK    ARRIBO: horas de solicitud, autorización y fin esperado=[25|35|1] obtenido=[25|35|1]
+OK    PAGOS: cuadre contra CYBER detecta el que no subió esperado=[2|AVISO|1|0] obtenido=[2|AVISO|1|0]
+OK    Catálogo: perfil de correo asig.486.cdmx y sin COVID/Reestructura en las bases maestras 0|0|1
+OK    REGLAS: sin avisos de saldos no actualizados, saldos iguales ni pagos sin subir 0|0
+OK    ETI: retroceso deja el DAT como antes del etiquetado esperado=[900.00|REVERTIDA] obtenido=[900.00|REVERTIDA]
+OK    Retroceso fuera de orden se rechaza (50304) Hay corridas posteriores sin revertir: revierte primero la más reciente.
+OK    Retroceso de las tres actualizaciones NULL
+OK    Retroceso ACT: DAT como después de la asignación esperado=[8|0|1000.00|5000.00] obtenido=[8|0|1000.00|5000.00]
+OK    Retroceso de la asignación NULL
+OK    Retroceso ASIG: DAT, consecutivo e histórico como al inicio esperado=[5|100000|A|B|1|REVERTIDA] obtenido=[5|100000|A|B|1|REVERTIDA]
+OK    Retroceso ASIG: la base maestra anterior de TDC vuelve a ser la vigente esperado=[1|0] obtenido=[1|0]
+OK    EXPORTAR: archivos de la asignación con nombre, carpeta y líneas esperado=[8|7|4|1|2|7|1|1|9|1|1|windows-1252:CRLF] obtenido=[8|7|4|1|2|7|1|1|9|1|1|windows-1252:CRLF]
+OK    EXPORTAR: copia del DAT para MIS en \\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\ MIS:\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\DAT486_20261102.csv:9
+OK    EXPORTAR: ZIP de retiros en C:\ con 7-Zip y la contraseña oculta C:\RETIROS_PAG_486_11042026031506.zip | ""C:\Program Files\7-Zip\7z.exe" a -tzip -mem=ZipCrypto -p"********" -y "C:\RETIROS_PAG_486_11042026031506.zip" "C:\BANBAJ\486\SALIDA\20261102_corrida2\RETIROS_486_20261102.csv""
+OK    EXPORTAR: SCBPAG y scripts de saldos de la actualización esperado=[4|3] obtenido=[4|3]
+OK    CREDENCIAL: se guarda cifrada, se reemplaza y no se muestra esperado=[1|usuario_nuevo|1|********|0|50800] obtenido=[1|usuario_nuevo|1|********|0|50800]
+OK    CYBER: consultas por servidor vinculado (BAJ.sql, STATUS.SQL) y aviso si no está configurado esperado=[1|1|1|50823] obtenido=[1|1|1|50823]
+OK    TEL: fuera del plan de numeración y número basura (5555555555) no salen esperado=[1|0] obtenido=[1|0]
+OK    TEL: con TEL_EXIGIR_PNM = 0 sale como fijo (como telbnx.prg) esperado=[1|1] obtenido=[1|1]
+OK    TEL CYBER: plan de numeración de CAT_PNM (serie con ceros, MOVIL gana, inválidos fuera) esperado=[3|477-023-FIJO|55-1111-MOVIL|81-0050-MOVIL] obtenido=[3|477-023-FIJO|55-1111-MOVIL|81-0050-MOVIL]
+OK    TEL CYBER: quejas del grupo 1 por el servidor vinculado (últimos 10 dígitos de telo y telpho) esperado=[486-200|5511112222,486-201|5533334444] obtenido=[486-200|5511112222,486-201|5533334444]
+OK    TEL CYBER: sin fuentes avisa y conserva quejas y plan esperado=[2|3|2] obtenido=[2|3|2]
+OK    ACT CYBER: los cuatro scripts de la actualización pendientes esperado=[ACT_SALDOS:PENDIENTE,ACT_VENCIDO:PENDIENTE,ACT_PAGMIN:PENDIENTE,ACT_PVS_REE:PENDIENTE] obtenido=[ACT_SALDOS:PENDIENTE,ACT_VENCIDO:PENDIENTE,ACT_PAGMIN:PENDIENTE,ACT_PVS_REE:PENDIENTE]
+OK    ACT CYBER: sin CYBER quedan los cuatro en ERROR y llega un hallazgo esperado=[ACTUALIZACION EN CYBER CON ERRORES|4|1] obtenido=[ACTUALIZACION EN CYBER CON ERRORES|4|1]
+OK    CUADRE AUTO: espera al SCBPAG, a la hora límite avisa el pago que no subió y no repite esperado=[ESPERANDO PAGOS EN CYBER (0 de 2),ESPERANDO PAGOS EN CYBER (1 de 2),PAGOS SIN SUBIR: 1,CUADRE TERMINADO|1|1] obtenido=[ESPERANDO PAGOS EN CYBER (0 de 2),ESPERANDO PAGOS EN CYBER (1 de 2),PAGOS SIN SUBIR: 1,CUADRE TERMINADO|1|1]
+OK    CONFIRMACION AUTO: espera correos y teléfonos OK, marca el fin y manda el correo una sola vez esperado=[0|1|1|1] obtenido=[0|1|1|1]
+OK    BLANQUEO AUTO: respeta los días, sin CYBER queda en ERROR con hallazgo y no repite esperado=[OK|1|1] obtenido=[OK|1|1]
+OK    EXPORTAR AUTO: apagado no escribe; encendido deja constancia en la bitácora esperado=[1] obtenido=[1]
+PRUEBAS: 141 de 141 OK
+== tests/prueba_migracion.sql
+FUENTE FILAS_LEIDAS
+------ ------------
+BLACKLIST 3
+DAT 3
+DIRMAL NULL
+DM1 NULL
+EMAILMALO NULL
+ETI NULL
+EXC486 1
+HISTORIA 4
+PAGTOT 3
+PURGA 2
+STATUS NULL
+TAB7 2
+TOP 2
+DESTINO TABLA FILAS FUENTES
+------- ----- ----- -------
+DAT dat.DAT_486 2 DAT
+HISTORIA dat.HISTORIA_FOLIO 5 DAT, HISTORIA
+CONSECUTIVO dat.FOLIO_CONSECUTIVO 1 TAB7, DAT, HISTORIA
+PAGOS dat.PAGO_ARRIBADO 2 PAGTOT
+ETIQUETAS cfg.ETIQUETA 2 ETI, DM1, TOP, STATUS
+EXCLUSIONES cfg.EXCLUSION 3 EXC486, DIRMAL, EMAILMALO, BLACKLIST
+AVISO
+-----
+DAT: 1 registros con CUENTA repetida omitidos (se queda el primero)
+HISTORIA: 3 asignaciones anteriores quedan como baja en el histórico (de 4 renglones)
+HISTORIA: las fechas de asignación, reasignación y retiro de los periodos anteriores quedan vacías (FE_ASIG solo ordena NVA/REA) · se conservan: FE_ASIG]=FE_ASIG], FE_BAJA]=FE_BAJA], SDO_ACT]=SDO_ACT], CORREO1]=CORREO1], TEL1]=TEL1], DIRECC1]=DIRECC1]
+PURGA: no se usa; las fechas de retiro del histórico migrado quedan vacías
+CONSECUTIVO: TAB7 (150) es menor que el folio más alto usado (160); se toma 160
+PAGTOT: 1 registros omitidos por FE_PAG incompleta (no de 8 posiciones), monto ilegible o sin cuenta; pagos.prg compara FE_PAG de 8 posiciones, así que nunca coincidirían con un pago nuevo
+EXC486: 1 de 1 registros aplican al 486
+BLACKLIST: 2 de 3 registros aplican al 486
+BLACKLIST: 1 teléfonos omitidos por no tener 10 dígitos
+BLACKLIST: 2 con estatus X (se excluyen) y 0 con estatus vacío (no se excluyen); el archivo no trae STATUS: todos cuentan como X
+DIRMAL.csv no se encontró en /datos/migracion/
+DM1.csv no se encontró en /datos/migracion/
+EMAILMALO.csv no se encontró en /datos/migracion/
+ETI.csv no se encontró en /datos/migracion/
+STATUS.csv no se encontró en /datos/migracion/
+Solo revisión: no se escribió nada. Ejecuta con @confirmar = 1 para cargar.
+DESTINO TABLA FILAS_CARGADAS
+------- ----- --------------
+DAT dat.DAT_486 2
+HISTORIA dat.HISTORIA_FOLIO 5
+CONSECUTIVO dat.FOLIO_CONSECUTIVO 1
+PAGOS dat.PAGO_ARRIBADO 2
+ETIQUETAS cfg.ETIQUETA 2
+EXCLUSIONES cfg.EXCLUSION 3
+AVISO
+-----
+DAT: 1 registros con CUENTA repetida omitidos (se queda el primero)
+HISTORIA: 3 asignaciones anteriores quedan como baja en el histórico (de 4 renglones)
+HISTORIA: las fechas de asignación, reasignación y retiro de los periodos anteriores quedan vacías (FE_ASIG solo ordena NVA/REA) · se conservan: FE_ASIG]=FE_ASIG], FE_BAJA]=FE_BAJA], SDO_ACT]=SDO_ACT], CORREO1]=CORREO1], TEL1]=TEL1], DIRECC1]=DIRECC1]
+PURGA: no se usa; las fechas de retiro del histórico migrado quedan vacías
+CONSECUTIVO: TAB7 (150) es menor que el folio más alto usado (160); se toma 160
+PAGTOT: 1 registros omitidos por FE_PAG incompleta (no de 8 posiciones), monto ilegible o sin cuenta; pagos.prg compara FE_PAG de 8 posiciones, así que nunca coincidirían con un pago nuevo
+EXC486: 1 de 1 registros aplican al 486
+BLACKLIST: 2 de 3 registros aplican al 486
+BLACKLIST: 1 teléfonos omitidos por no tener 10 dígitos
+BLACKLIST: 2 con estatus X (se excluyen) y 0 con estatus vacío (no se excluyen); el archivo no trae STATUS: todos cuentan como X
+DIRMAL.csv no se encontró en /datos/migracion/
+DM1.csv no se encontró en /datos/migracion/
+EMAILMALO.csv no se encontró en /datos/migracion/
+ETI.csv no se encontró en /datos/migracion/
+STATUS.csv no se encontró en /datos/migracion/
+Listo: carga confirmada. Borra los CSV de la carpeta (traen datos de clientes).
+DESTINO TABLA FILAS_CARGADAS
+------- ----- --------------
+DAT dat.DAT_486 2
+HISTORIA dat.HISTORIA_FOLIO 5
+CONSECUTIVO dat.FOLIO_CONSECUTIVO 1
+PAGOS dat.PAGO_ARRIBADO 2
+ETIQUETAS cfg.ETIQUETA 2
+EXCLUSIONES cfg.EXCLUSION 3
+AVISO
+-----
+DAT: 1 registros con CUENTA repetida omitidos (se queda el primero)
+HISTORIA: 3 asignaciones anteriores quedan como baja en el histórico (de 4 renglones)
+HISTORIA: las fechas de asignación, reasignación y retiro de los periodos anteriores quedan vacías (FE_ASIG solo ordena NVA/REA) · se conservan: FE_ASIG]=FE_ASIG], FE_BAJA]=FE_BAJA], SDO_ACT]=SDO_ACT], CORREO1]=CORREO1], TEL1]=TEL1], DIRECC1]=DIRECC1]
+PURGA: no se usa; las fechas de retiro del histórico migrado quedan vacías
+CONSECUTIVO: TAB7 (150) es menor que el folio más alto usado (160); se toma 160
+PAGTOT: 1 registros omitidos por FE_PAG incompleta (no de 8 posiciones), monto ilegible o sin cuenta; pagos.prg compara FE_PAG de 8 posiciones, así que nunca coincidirían con un pago nuevo
+EXC486: 1 de 1 registros aplican al 486
+BLACKLIST: 2 de 3 registros aplican al 486
+BLACKLIST: 1 teléfonos omitidos por no tener 10 dígitos
+BLACKLIST: 2 con estatus X (se excluyen) y 0 con estatus vacío (no se excluyen); el archivo no trae STATUS: todos cuentan como X
+DIRMAL.csv no se encontró en /datos/migracion/
+DM1.csv no se encontró en /datos/migracion/
+EMAILMALO.csv no se encontró en /datos/migracion/
+ETI.csv no se encontró en /datos/migracion/
+STATUS.csv no se encontró en /datos/migracion/
+Listo: carga confirmada. Borra los CSV de la carpeta (traen datos de clientes).
+R PRUEBA DETALLE
+- ------ -------
+OK    Revisión sin confirmar no escribe NULL
+OK    Primera carga NULL
+OK    Segunda carga sin @reemplazar se rechaza y no cambia nada 50910
+OK    Carga con @reemplazar NULL
+OK    DAT: 2 cuentas (repetida omitida), folio sin espacios, vacío -> NULL 2|101|1
+OK    DAT: importe, fecha AAAAMMDD y texto 1500.50|2026-10-01|CLIENTE UNO
+OK    HISTORIA: activas del DAT y cada asignación anterior de historia.dbf como baja 20000001:A:NVA,20000002:A:REA,20000007:B:NVA,20000009:B:NVA,20000009:B:REA
+OK    HISTORIA: folio, CUENTA2 y crédito; fechas de asignación, reasignación y retiro vacías (03/11) 20000007:160:486-160:R7::,20000009:90:486-90:R9::,20000009:150:486-150:R9B::
+OK    PURGA no se usa: el periodo queda con el motivo de historia y sin fecha de retiro MIGRACION (historia.dbf)
+OK    HISTORIA: saldos, teléfonos, dirección y correos en DATOS_BAJA 1234.50|5511112222|CALLE FICTICIA 7|uno@correo.com|20240930
+OK    CONSECUTIVO: máximo de TAB7 / DAT / HISTORIA 160
+OK    PAGOS: PAGTOT con cuenta, fecha e importe (renglón corrido omitido, iguales se conservan) 2|20000001|2026-10-02|1000.00|PAGTOT|2026-10-03
+OK    ETIQUETAS: TOP TOP:486-100:REE,TOP:486-999:REE
+OK    EXCLUSIONES: 3 del banco (semilla) + exc486 + blacklist (10 dígitos); TELBAJ ya no se migra 6|0|0|1
+OK    BLACKLIST (TEL, FE_AGRE, OS, SOLICITUD; sin STATUS todo es X) 5500000000:1:OS-1:2026-01-01:Solicita: OPERACION,5511110000:1:OS-2:2026-02-01:Lista negra de teléfonos (blacklist_486)
+OK    LADA y PNC ya no se migran 0|0
+OK    Las tablas de paso con datos de clientes se borran NULL
+MIGRACION: 17 de 17 OK
+== sql/instalacion/04_accesos_remotos.sql
+Changed database context to 'master'.
+ci_operador: OPERADOR
+ci_consulta: CONSULTA
+sa: ya tiene acceso total (sa, sysadmin, dueño de la base o quien corre el script); se omite
+LOGIN                                                                                                                            TIPO                                                         SYSADMIN   
+-------------------------------------------------------------------------------------------------------------------------------- ------------------------------------------------------------ -----------
+sa                                                                                                                               SQL_LOGIN                                                              1
+ci_operador                                                                                                                      SQL_LOGIN                                                              0
+ci_consulta                                                                                                                      SQL_LOGIN                                                              0
+Changed database context to 'master'.
+ci_operador: OPERADOR
+ci_consulta: CONSULTA
+sa: ya tiene acceso total (sa, sysadmin, dueño de la base o quien corre el script); se omite
+LOGIN                                                                                                                            TIPO                                                         SYSADMIN   
+-------------------------------------------------------------------------------------------------------------------------------- ------------------------------------------------------------ -----------
+sa                                                                                                                               SQL_LOGIN                                                              1
+ci_operador                                                                                                                      SQL_LOGIN                                                              0
+ci_consulta                                                                                                                      SQL_LOGIN                                                              0
+OK  consulta lee ops.CORRIDA
+OK  consulta no puede escribir
+OK  consulta no ve cfg.CREDENCIAL
+OK  operador no ve cfg.CREDENCIAL
+OK  operador no puede leer credenciales
+OK  operador corre sp_diario_486
+ACCESOS: 6 de 6 OK
