@@ -31,12 +31,15 @@ BEGIN
             @proveedor NVARCHAR(100) = ISNULL(cfg.fn_param(@cliente, 'CYBER_ORACLE_PROVEEDOR'), 'OraOLEDB.Oracle'),
             @usuario NVARCHAR(128), @clave NVARCHAR(256);
     IF NULLIF(@origen, N'') IS NULL THROW 50810, 'Falta el parámetro CYBER_ORACLE_ORIGEN (host:puerto/servicio de Oracle).', 1;
+    /* Solo la IP no basta: Oracle contesta ORA-12504 (el listener no recibió el SERVICE_NAME) */
+    IF @origen LIKE N'%[0-9].[0-9]%' AND @origen NOT LIKE N'%/%'
+        THROW 50811, 'CYBER_ORACLE_ORIGEN debe llevar puerto y servicio: host:puerto/servicio (ej. 192.168.90.10:1521/NOMBRE_SERVICIO) o un alias de tnsnames.ora.', 1;
     EXEC cfg.sp_credencial_leer 'CYBER_ORACLE', @usuario OUTPUT, @clave OUTPUT;
 
-    IF NOT EXISTS (SELECT 1 FROM sys.servers WHERE name = @srv)
-        EXEC master.dbo.sp_addlinkedserver @server = @srv, @srvproduct = N'Oracle', @provider = @proveedor, @datasrc = @origen;
-    ELSE
-        EXEC master.dbo.sp_setnetname @server = @srv, @netname = @origen;
+    /* Si ya existe se borra y se vuelve a crear, para que tome el origen, el proveedor y la credencial nuevos */
+    IF EXISTS (SELECT 1 FROM sys.servers WHERE name = @srv)
+        EXEC master.dbo.sp_dropserver @server = @srv, @droplogins = 'droplogins';
+    EXEC master.dbo.sp_addlinkedserver @server = @srv, @srvproduct = N'Oracle', @provider = @proveedor, @datasrc = @origen;
     EXEC master.dbo.sp_serveroption @server = @srv, @optname = 'rpc out', @optvalue = 'true';
     EXEC master.dbo.sp_serveroption @server = @srv, @optname = 'remote proc transaction promotion', @optvalue = 'false';
     EXEC master.dbo.sp_addlinkedsrvlogin @rmtsrvname = @srv, @useself = 'FALSE', @locallogin = NULL, @rmtuser = @usuario, @rmtpassword = @clave;

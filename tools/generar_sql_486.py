@@ -426,7 +426,7 @@ PARAMETROS = [
     ("RETIRO_TOPE_PCT_ASIG", "50", "En la asignación, si la devolución de un segmento supera este % de sus cuentas en el DAT, el retiro queda manual y se manda HALLAZGO_486"),
     ("RETIRO_TOPE_PCT_ACT", "50", "En la actualización, si la devolución de un segmento supera este % de sus cuentas en el DAT, el retiro queda manual y se manda HALLAZGO_486"),
     ("RETIRO_CYBER_AUTOMATICO", "0", "0 (03/11) = el cierre del retiro solo escribe archivos, ZIP y correo; el RETIRO en CYBER y la copia de la devolución se hacen a mano (EXEC ops.sp_retiro_cerrar <id>, @con_cyber = 1); 1 = automáticos"),
-    ("RUTA_DEVOLUCION_CYBER", "\\\\192.168.50.1\\Cyber_00\\dev\\", "Carpeta donde CYBER toma el archivo de devolución MX_G1MCT_DVBJIG_* (antes se copiaba a mano); vacío = no se copia"),
+    ("RUTA_DEVOLUCION_CYBER", "", "Carpeta donde CYBER toma el archivo de devolución MX_G1MCT_DVBJIG_* (\\\\192.168.50.1\\Cyber_00\\dev\\). Vacío (03/11: el servidor no tiene acceso a Cyber_00) = se copia a mano desde la carpeta de la corrida"),
     ("AVISO_ARCHIVOS", "1", "1 = en cuanto se escriben los planos que se suben a CYBER se manda ARCHIVOS_LISTOS_486 al equipo de asignaciones (ops.sp_aviso_archivos)"),
     ("ARCHIVOS_ARRIBO", "SCBSDOS,SCBSDOS_ETI,SCBTEL,GESCAR_NVA,GESCAR_REA,GESCAR_SINTEL,GESCAR_RETIRO,SCBPAG", "Archivos planos que el equipo de asignaciones sube con el cargador de CYBER (van en el aviso de archivos listos)"),
     ("EXPORTAR_AUTOMATICO", "1", "1 = cada corrida escribe sus archivos y scripts al terminar OK (ops.sp_exportar_salidas); 0 = a mano"),

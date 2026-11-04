@@ -17,6 +17,8 @@
                  (sp_bajar_cyber) sí lo puede hacer un OPERADOR.
 
    Usuarios de Windows del dominio: 'DOMINIO\usuario' (recomendado, sin contraseña en SQL).
+   No pongas aquí a sa ni a quien corre el script: ya tienen acceso total y se omiten.
+   Cambia @base si la base no se llama Banbaj.
    Usuarios de SQL: requiere modo mixto; se crean con contraseña y CHECK_POLICY.
    ===================================================================== */
 SET NOCOUNT ON;
@@ -39,6 +41,17 @@ DECLARE c CURSOR LOCAL FAST_FORWARD FOR SELECT LOGIN, NIVEL, CLAVE FROM @accesos
 OPEN c; FETCH NEXT FROM c INTO @login, @nivel, @clave;
 WHILE @@FETCH_STATUS = 0
 BEGIN
+    /* sa, los sysadmin, el dueño de la base y quien corre el script ya tienen acceso total:
+       no se les puede dar ni negar permisos (errores 15405 y "Cannot grant… to yourself"). Se omiten. */
+    IF @login = N'sa' OR @login = SUSER_SNAME()
+       OR IS_SRVROLEMEMBER('sysadmin', @login) = 1
+       OR @login = (SELECT SUSER_SNAME(owner_sid) FROM sys.databases WHERE name = @base)
+    BEGIN
+        PRINT CONCAT(@login, N': ya tiene acceso total (sa, sysadmin, dueño de la base o quien corre el script); se omite');
+        FETCH NEXT FROM c INTO @login, @nivel, @clave;
+        CONTINUE;
+    END;
+
     /* Inicio de sesión en el servidor */
     IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = @login)
     BEGIN

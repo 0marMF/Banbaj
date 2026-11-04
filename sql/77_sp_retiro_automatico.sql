@@ -110,8 +110,8 @@ BEGIN
         SELECT 2, 'RETIRO CYBER', CONCAT(N'Script RETIRO en CYBER por [', @srv, N'] (', (SELECT COUNT(*) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id_corrida AND SCRIPT = 'RETIRO'), N' líneas)'),
                CASE WHEN @con_cyber = 0 THEN 'MANUAL' WHEN @ok_c = 1 THEN 'HECHO' ELSE 'PENDIENTE' END
         UNION ALL
-        SELECT 3, 'RETIRO DEVOL CYBER', ISNULL(N'Copia de MX_G1MCT_DVBJIG_* en ' + @ruta, N'Sin RUTA_DEVOLUCION_CYBER: no se copia'),
-               CASE WHEN @con_cyber = 0 THEN 'MANUAL' WHEN @ruta IS NULL THEN 'NO APLICA' WHEN @ok_d = 1 THEN 'HECHO' ELSE 'PENDIENTE' END;
+        SELECT 3, 'RETIRO DEVOL CYBER', ISNULL(N'Copia de MX_G1MCT_DVBJIG_* en ' + @ruta, N'Sin acceso a la carpeta de CYBER (RUTA_DEVOLUCION_CYBER vacía): MX_G1MCT_DVBJIG_* se copia a mano a \\192.168.50.1\Cyber_00\dev\'),
+               CASE WHEN @con_cyber = 0 OR @ruta IS NULL THEN 'MANUAL' WHEN @ok_d = 1 THEN 'HECHO' ELSE 'PENDIENTE' END;
         RETURN;
     END;
     IF @@TRANCOUNT > 0 THROW 50771, 'El cierre del retiro no puede correr dentro de una transacción.', 1;

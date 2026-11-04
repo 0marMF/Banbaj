@@ -76,7 +76,7 @@ jobs:
           import re, sys
           s = open('sql/instalacion/04_accesos_remotos.sql', encoding='utf-8').read()
           s = re.sub(r"INSERT INTO @accesos \(LOGIN, NIVEL, CLAVE\) VALUES.*?;\n",
-                     "INSERT INTO @accesos (LOGIN, NIVEL, CLAVE) VALUES (N'ci_operador', 'OPERADOR', N'%s'), (N'ci_consulta', 'CONSULTA', N'%s');\n" % (sys.argv[1], sys.argv[2]),
+                     "INSERT INTO @accesos (LOGIN, NIVEL, CLAVE) VALUES (N'ci_operador', 'OPERADOR', N'%s'), (N'ci_consulta', 'CONSULTA', N'%s'), (N'sa', 'OPERADOR', NULL);\n" % (sys.argv[1], sys.argv[2]),
                      s, count=1, flags=re.S)
           open('/tmp/04_ci.sql', 'w', encoding='utf-8').write(s)
           EOF

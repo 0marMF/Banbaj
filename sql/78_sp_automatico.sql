@@ -366,7 +366,10 @@ BEGIN
         ELSE N'Subir estos archivos con el cargador de CYBER.' END
         + CASE WHEN NOT EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'GESCAR_RETIRO') THEN N''
                WHEN @auto_ret = 1 THEN N' Hubo retiro: subir también SCBACTH_486.TXT; el retiro en CYBER y la copia de la devolución ya se hicieron solos.'
-               ELSE CONCAT(N' Hubo retiro: subir también SCBACTH_486.TXT y aplicar el retiro en CYBER con la copia de la devolución: EXEC ops.sp_retiro_cerrar ', @id_corrida, N', @con_cyber = 1;') END;
+               ELSE CONCAT(N' Hubo retiro: subir también SCBACTH_486.TXT y aplicar el retiro en CYBER: EXEC ops.sp_retiro_cerrar ', @id_corrida, N', @con_cyber = 1;') END
+        + CASE WHEN EXISTS (SELECT 1 FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id_corrida AND ARCHIVO = 'DEVOL_CYBER')
+                    AND NULLIF(cfg.fn_param(@cliente, 'RUTA_DEVOLUCION_CYBER'), N'') IS NULL
+               THEN N' Copiar a mano el archivo MX_G1MCT_DVBJIG_* de la carpeta a \\192.168.50.1\Cyber_00\dev\ (el servidor no tiene acceso a esa carpeta).' ELSE N'' END;
 
     SET @json = (SELECT @proceso AS PROCESO, @carpeta AS CARPETA, @lista AS ARCHIVOS, @sigue AS SIGUE, @tabla AS HTML_TABLA
                  FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);

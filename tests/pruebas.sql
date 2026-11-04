@@ -350,7 +350,7 @@ DECLARE @rc TABLE (PASO INT, QUE VARCHAR(30), DETALLE NVARCHAR(400), ESTADO VARC
 INSERT INTO @rc EXEC ops.sp_retiro_cerrar @id, @solo_mostrar = 1;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'RETIRO CERRAR: archivos+ZIP+correo, RETIRO en CYBER y copia de la devolución, pendientes' AS p,
-             N'RETIRO ARCHIVOS:PENDIENTE,RETIRO CYBER:PENDIENTE,RETIRO DEVOL CYBER:PENDIENTE|1' AS e,
+             N'RETIRO ARCHIVOS:PENDIENTE,RETIRO CYBER:PENDIENTE,RETIRO DEVOL CYBER:MANUAL|1' AS e,
              CONCAT((SELECT STRING_AGG(CONCAT(QUE, ':', ESTADO), ',') WITHIN GROUP (ORDER BY PASO) FROM @rc), '|',
                     (SELECT COUNT(*) FROM @rc WHERE PASO = 3 AND DETALLE LIKE N'%\\192.168.50.1\Cyber_00\dev\%')) AS o) x;
 
@@ -373,7 +373,7 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'AVISO ARCHIVOS: a asign
                  AND ASUNTO LIKE N'Banbaj 486: archivos listos para arribar (ASIG, corrida%'
                  AND CUERPO LIKE N'%_corrida%' AND CUERPO LIKE N'%>SCBSDOS.TXT</td>%' AND CUERPO LIKE N'%>SCBTEL.TXT</td>%'
                  AND CUERPO LIKE N'%>SCBACTH_486.TXT</td>%' AND CUERPO NOT LIKE N'%sub[_]mst%'
-                 AND CUERPO LIKE N'%Subir primero SCBSDOS y SCBTEL%' AND CUERPO LIKE N'%Hubo retiro%' THEN 1 ELSE 0 END,
+                 AND CUERPO LIKE N'%Subir primero SCBSDOS y SCBTEL%' AND CUERPO LIKE N'%Hubo retiro%' AND CUERPO LIKE N'%Copiar a mano el archivo MX[_]G1MCT[_]DVBJIG%' THEN 1 ELSE 0 END,
        LEFT(CONCAT(ASUNTO, ' | ', CUERPO), 4000)
 FROM @hz;
 

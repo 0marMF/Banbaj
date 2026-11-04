@@ -8,8 +8,13 @@
 *!*
 *!* Solo se exportan los campos que usa la migración (laF[n, 3]); si un campo
 *!* no existe en el DBF se omite y se avisa. "*" = todos los campos (DAT).
-*!* No se migran: DEVOL (decisión); de PURGA solo cuenta, folio y fecha de retiro; TELBAJ y PNC (se leen de CYBER en
+*!* No se migran: DEVOL (decisión); PURGA (03/11: no trae fecha de retiro); TELBAJ y PNC (se leen de CYBER en
 *!* cada asignación); LADA (ningún proceso la usa).
+*!*
+*!* FoxPro no escapa las comillas dobles dentro de un campo al hacer COPY TO ... TYPE CSV, y SQL Server
+*!* rechaza el archivo ("invalid column value in CSV data file"). Por eso cada tabla se copia primero a
+*!* un cursor y en los campos de texto se cambian las comillas dobles por sencillas y los saltos de
+*!* línea por espacios (03/11).
 *!* =====================================================================
 SET SAFETY OFF
 SET DELETED ON          && los registros borrados no se exportan
@@ -24,7 +29,7 @@ ENDIF
 
 *!* laF[n, 1] = nombre del CSV, laF[n, 2] = ruta del DBF (tomada de los .prg; ajústala si cambió),
 *!* laF[n, 3] = campos que se usan
-DIMENSION laF[13, 3]
+DIMENSION laF[12, 3]
 laF[1, 1]  = "DAT"
 laF[1, 2]  = "O:\DAT\GPO1\486\DAT.DBF"
 laF[1, 3]  = "*"
@@ -64,9 +69,6 @@ laF[11, 3] = "EMAIL,CUENTA"
 laF[12, 1] = "BLACKLIST"
 laF[12, 2] = "O:\PRG\MEXGPO1\ASI486\BLACKLIST_486.DBF"
 laF[12, 3] = "TEL,FE_AGRE,OS,SOLICITUD,STATUS"      && el DBF no trae STATUS: todo cuenta como X
-laF[13, 1] = "PURGA"
-laF[13, 2] = "O:\HISTORIA\GPO1\486\PURGA.DBF"
-laF[13, 3] = "CUENTA,FOLIO,FE_BAJA,FE_PURGA,FE_RET,FE_RETIRO,FE_DEV,FECHA,MOTIVO"      && solo la fecha de retiro (02/11)
 
 lcReporte = ""
 FOR i = 1 TO ALEN(laF, 1)
@@ -74,7 +76,7 @@ FOR i = 1 TO ALEN(laF, 1)
         USE (laF[i, 2]) IN 0 SHARED NOUPDATE ALIAS fuente
         SELECT fuente
         IF laF[i, 3] == "*"
-            COPY TO (lcDestino + laF[i, 1] + ".csv") TYPE CSV
+            lcCampos = "*"
             lcFaltan = ""
         ELSE
             *!* Solo los campos que existen en el DBF
@@ -93,10 +95,24 @@ FOR i = 1 TO ALEN(laF, 1)
                 USE IN fuente
                 LOOP
             ENDIF
-            COPY TO (lcDestino + laF[i, 1] + ".csv") FIELDS &lcCampos TYPE CSV
         ENDIF
-        lcReporte = lcReporte + PADR(laF[i, 1], 12) + TRANSFORM(RECCOUNT()) + " registros" ;
+        *!* Copia limpia: comillas dobles -> sencillas y saltos de línea -> espacio en los campos de texto
+        SELECT &lcCampos FROM fuente INTO CURSOR limpio READWRITE NOFILTER
+        lcRepl = ""
+        FOR j = 1 TO FCOUNT("limpio")
+            IF TYPE("limpio." + FIELD(j, "limpio")) == "C"
+                lcRepl = lcRepl + IIF(EMPTY(lcRepl), "", ", ") + FIELD(j, "limpio") ;
+                       + " WITH CHRTRAN(" + FIELD(j, "limpio") + ", CHR(34) + CHR(13) + CHR(10), CHR(39) + CHR(32) + CHR(32))"
+            ENDIF
+        ENDFOR
+        SELECT limpio
+        IF !EMPTY(lcRepl)
+            REPLACE ALL &lcRepl
+        ENDIF
+        COPY TO (lcDestino + laF[i, 1] + ".csv") TYPE CSV
+        lcReporte = lcReporte + PADR(laF[i, 1], 12) + TRANSFORM(RECCOUNT("limpio")) + " registros" ;
                   + IIF(EMPTY(lcFaltan), "", "  (no existen: " + lcFaltan + ")") + CHR(13)
+        USE IN limpio
         USE IN fuente
     ELSE
         lcReporte = lcReporte + PADR(laF[i, 1], 12) + "NO SE ENCONTRÓ " + laF[i, 2] + CHR(13)
