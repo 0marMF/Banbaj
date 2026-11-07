@@ -1,0 +1,36 @@
+flowchart LR
+    S(["ops.sp_asignacion_486"]) --> S0{"ASIG_REQUIERE_ACT:<br/>¿ACT del día OK?"}
+    S0 -- no --> SX["Error: falta la<br/>actualización"]
+    S0 -- sí --> S1["ops.sp_corrida_iniciar<br/>correo INICIO_ASIG_486"]
+    subgraph F1["1 · Carga y validación"]
+        direction TB
+        A1["ops.sp_respaldo<br/>copia del DAT"] --> A2["ops.sp_cargar_proceso<br/>BULK INSERT de Q:"]
+        A2 --> A3["ops.sp_homologar_entradas<br/>ops.sp_validar POST_CARGA"]
+        A3 --> A4["ops.sp_asig_unir_layout<br/>ops.sp_homologar stg.LAYOUT_486"]
+    end
+    subgraph F2["2 · Devoluciones y altas"]
+        direction TB
+        A5["ops.sp_asig_devolucion<br/>DAT que no vino → ops.DEVOLUCION"] --> A6["ops.sp_retiro_decidir<br/>tope 50 % por segmento"]
+        A6 --> A7["ops.sp_asig_existentes"]
+        A7 --> A8["ops.sp_telefonos_refrescar_cyber<br/>ops.sp_asig_normalizar_telefonos"]
+        A8 --> A9["ops.sp_validar PRE_ALTA<br/>ops.sp_asig_alta: NVA y REA"]
+        A9 --> A10["ops.sp_retiro<br/>(si se decidió)"]
+    end
+    subgraph F3["3 · Salidas"]
+        direction TB
+        A11["ops.sp_telefonos<br/>ops.sp_correos"] --> A12["ops.sp_generar_salidas 'ASIG'<br/>SCBSDOS, SCBTEL, gescar,<br/>remesas y scripts"]
+        A12 --> A13["ops.sp_corrida_finalizar OK"]
+    end
+    subgraph F4["4 · Al terminar OK (fuera de la corrida)"]
+        direction TB
+        P1["ops.sp_arribo_base<br/>foto de lo que le falta a CYBER"] --> P2{"¿Hubo retiro?"}
+        P2 -- sí --> P3["ops.sp_retiro_cerrar<br/>archivos + ZIP + devolución<br/>+ RETIRO en CYBER"]
+        P2 -- no --> P4["ops.sp_exportar_auto<br/>escribe los archivos"]
+        P3 --> P5["ops.sp_aviso_archivos<br/>ARCHIVOS_LISTOS_486"]
+        P4 --> P5
+    end
+    S1 --> A1
+    A4 --> A5
+    A10 --> A11
+    A13 --> P1
+    F1 -. "si algo falla: ERROR +<br/>ops.sp_retroceso_automatico" .-> R["DAT restaurado"]

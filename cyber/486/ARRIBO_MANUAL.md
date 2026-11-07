@@ -8,27 +8,38 @@ EXEC ops.sp_exportar_salidas <ID>;
 
 Eso crea `RUTA_SALIDA\<AAAAMMDD>_corrida<ID>\` (de fábrica `C:\BANBAJ\486\SALIDA\`) con los archivos y la carpeta `cyber\` con los `.sql`.
 
-## Qué hace Banbaj y qué se hace a mano (03/11)
+## Qué es automático y qué sigue a mano (proceso autónomo, 07/11)
 
-**Por ahora Banbaj genera los archivos planos y los scripts, y hasta ahí.** En cuanto están escritos llega al equipo de asignaciones el correo **ARCHIVOS_LISTOS_486** con la carpeta, la lista de archivos y los comandos exactos de la corrida. Las depuraciones en CYBER se corren a mano.
+Diagrama: `docs/flujo/05_arribo_cyber.md` (y su imagen en `docs/flujo/img/`).
 
 | Qué | Quién | Cómo |
 | --- | --- | --- |
 | Generar y escribir los archivos y scripts | **Job** | Al terminar cada corrida |
 | Aviso de archivos listos | **Job** | ARCHIVOS_LISTOS_486 a asignaciones |
 | Subir SCBSDOS, SCBTEL, SCBPAG y gescar | Asignaciones | Cargador de CYBER |
-| Depuración de correos (correos nuevos, bandera 416, remesa, `JSP_CORREOS_486`) | Asignaciones | `EXEC ops.sp_arribar_cyber <ID>, 'CORREOS';` |
-| Depuración de teléfonos (remesa, validador, `JSP_TELEFONOS_REMESA_486`) y `SCBACTH_SINTEL.TXT` | Asignaciones | `EXEC ops.sp_arribar_cyber <ID>, 'TELEFONOS';` |
-| Scripts de la actualización (`ACT_*`) | Asignaciones | `EXEC ops.sp_act_cyber <ID>;` |
-| Retiro en CYBER | Asignaciones | `EXEC ops.sp_retiro_cerrar <ID>, @con_cyber = 1;` |
+| Depuración de correos (correos nuevos, bandera 416, remesa, `JSP_CORREOS_486`) | **Job** | En cuanto detecta que subió el SCBSDOS |
+| Depuración de teléfonos (remesa, validador, `JSP_TELEFONOS_REMESA_486`) y `SCBACTH_SINTEL.TXT` | **Job** | En cuanto detecta que subió el SCBTEL |
+| Blanqueo de status (días 1 a 10) | **Job** | Después de la depuración de correos |
+| Fin del arribo y `CONFIRMACION_ASIG_486` | **Job** | Con correos y teléfonos OK |
+| Scripts de la actualización (`ACT_*`) | **Job** | Al terminar la actualización |
+| Retiro en CYBER | **Job** | Al cerrar el retiro |
 | Copiar `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` | Asignaciones | A mano: el servidor no tiene acceso a esa carpeta |
-| Blanqueo de status (días 1 a 10) | Asignaciones | `EXEC ops.sp_blanqueo_automatico <ID>, @forzar = 1;` |
-| Confirmación de la asignación | Asignaciones | `EXEC ops.sp_avisar <ID>, 'CONFIRMACION_ASIG_486';` |
 | Cuadre de pagos (solo lee y avisa) | **Job** | Hallazgo si a las 17:00 falta algún pago |
 
-Los procedimientos ejecutan en CYBER, por el servidor vinculado `[CYBER]`, las mismas sentencias que quedan en la carpeta `cyber\` (`sql/76_sp_arribo_cyber.sql`), sin sqlldr. Si se prefiere, los `.sql` se pueden seguir corriendo en Oracle como se describe abajo. `@solo_mostrar = 1` enseña los bloques sin ejecutar. Si algo falla queda `ERROR` en la bitácora y se repite con el mismo comando.
+**Cómo detecta que ya subieron los planos:** al terminar la asignación se toma una foto de lo que le falta a CYBER (`ops.sp_arribo_base`: cuentas del SCBSDOS no activas en `DELQMST`, domicilios distintos en `DMADDR1` y teléfonos del SCBTEL que no están en `PHONE_G1`). Cada 30 minutos, el job da por subido cada archivo cuando ya llegó al menos el 95 % (`ARRIBO_MIN_PCT`) de lo pendiente, y corre la depuración sola, una vez por corrida. Funciona aunque no haya cuentas nuevas.
 
-**Cuando se automaticen** (`ARRIBO_AUTOMATICO = 1`): al terminar la asignación se toma una foto de lo que le falta a CYBER (`ops.sp_arribo_base`: cuentas del SCBSDOS no activas en `DELQMST`, domicilios distintos en `DMADDR1` y teléfonos del SCBTEL que no están en `PHONE_G1`) y, cada 30 minutos, el job da por subido cada archivo cuando ya llegó al menos el 95 % (`ARRIBO_MIN_PCT`) de lo pendiente y corre la depuración sola, una vez por corrida. Funciona aunque no haya cuentas nuevas. Con `ACT_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO`, `CONFIRMACION_AUTOMATICA` y `RETIRO_CYBER_AUTOMATICO` en 1 también corren solos los scripts de la actualización, el blanqueo, la confirmación y el retiro en CYBER.
+Los procedimientos ejecutan en CYBER, por el servidor vinculado `[CYBER]`, las mismas sentencias que quedan en la carpeta `cyber\` (`sql/76_sp_arribo_cyber.sql`), sin sqlldr. Si algo falla queda `ERROR` en la bitácora, llega el correo de hallazgos y no se reintenta solo. Se corrige y se corre a mano:
+
+```sql
+EXEC ops.sp_arribar_cyber <ID>, 'CORREOS', @solo_mostrar = 1;   -- ver los bloques sin ejecutar
+EXEC ops.sp_arribar_cyber <ID>, 'CORREOS';                      -- o 'TELEFONOS'
+EXEC ops.sp_act_cyber <ID>;                                     -- scripts de la actualización
+EXEC ops.sp_retiro_cerrar <ID>;                                 -- pasos del retiro
+EXEC ops.sp_blanqueo_automatico <ID>, @forzar = 1;              -- blanqueo
+```
+
+Para volver a correr todo a mano: `UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE IN ('ARRIBO_AUTOMATICO', 'ACT_CYBER_AUTOMATICO', 'BLANQUEO_AUTOMATICO', 'CONFIRMACION_AUTOMATICA', 'RETIRO_CYBER_AUTOMATICO');`. Los pasos de abajo explican qué hace cada script y sirven para correrlos en Oracle si hiciera falta.
+
 
 
 **Permisos del usuario de Oracle** (el de la credencial `CYBER_ORACLE`): `TRUNCATE`/`INSERT` en `RCVRY.JSP_TAB_TEL_REMESA_486` y `RCVRY.JSP_TAB_MAIL_REMESA_486`, `INSERT` en `RCVRY.ADDRESS` y `RCVRY.JSP_VALIDADOR_TELEFONOS`, `UPDATE` en `RCVRY.RPT_LOG_CYBER_REG` y `EXECUTE` de `RCVRY.JSP_TELEFONOS_REMESA_486` y `RCVRY.JSP_CORREOS_486`. Sin ellos el arribo queda en `ERROR` con el mensaje de Oracle.
@@ -67,9 +78,9 @@ Qué hace `JSP_CORREOS_486` (revisado 02/11): inactiva (`HIAS`) lo que está en 
 
 **Gescar de cuentas sin teléfono.** Después de arribar los teléfonos: `EXEC ops.sp_bajar_cyber 'TELEFONOS', @id_corrida = <ID>;`, volver a exportar y arribar `SCBACTH_SINTEL.TXT`. Con el arribo automático este archivo aparece solo en la carpeta de la corrida; solo falta subirlo.
 
-**Después de arribar:** `EXEC ops.sp_avisar <corrida>, 'CONFIRMACION_ASIG_486'` (sale solo si se prende `CONFIRMACION_AUTOMATICA`; el correo Express se retiró el 30/10).
+**Después de arribar:** `EXEC ops.sp_avisar <corrida>, 'CONFIRMACION_ASIG_486'` (sale solo al terminar las depuraciones, `CONFIRMACION_AUTOMATICA`; el correo Express se retiró el 30/10).
 
-**Blanqueo de status (día 1 al 10).** Por ahora a mano: `EXEC ops.sp_blanqueo_automatico <ID>, @forzar = 1;` baja los status, ejecuta el blanqueo en CYBER y deja `BLANQUEA_486_<fecha>.csv` en la carpeta de la corrida. Como antes: `EXEC ops.sp_bajar_cyber 'STATUS', @id_corrida = <ID>;`, volver a exportar, revisar el CSV y correr `cyber\BLANQUEO_STATUS.sql`. Con `BLANQUEO_AUTOMATICO = 1` corre solo después del arribo de correos.
+**Blanqueo de status (día 1 al 10).** Automático después de la depuración de correos (`BLANQUEO_AUTOMATICO`): baja los status, ejecuta el blanqueo en CYBER y deja `BLANQUEA_486_<fecha>.csv` en la carpeta de la corrida. A mano: `EXEC ops.sp_blanqueo_automatico <ID>, @forzar = 1;`. Como antes: `EXEC ops.sp_bajar_cyber 'STATUS', @id_corrida = <ID>;`, volver a exportar, revisar el CSV y correr `cyber\BLANQUEO_STATUS.sql`. 
 
 **DAT para MIS.** En cada proceso sale `DAT486_<fecha>.csv` (CUENTA = 486-folio, CUENTA3 = crédito), con encabezado.
 
@@ -83,7 +94,7 @@ Qué hace `JSP_CORREOS_486` (revisado 02/11): inactiva (`HIAS`) lo que está en 
 
 Ya no se genera ni se arriba SCBSDOS en la actualización (decisión 30/10): lo que sólo subía por el SCBSDOS (PVS y REE) va en `ACT_PVS_REE.sql`.
 
-Por ahora los cuatro scripts se corren a mano: `EXEC ops.sp_act_cyber <corrida>;` (o los `.sql` en Oracle); con `ACT_CYBER_AUTOMATICO = 1` los ejecuta el job al terminar la actualización. El operador sube `SCBPAG.TXT`. El cuadre de pagos sí es automático: en cada vuelta compara contra `RCVRY.pmtfil` y, si a las 17:00 falta alguno, lo manda en el correo de hallazgos. `ops.sp_act_cyber` solo repite lo pendiente.
+Los cuatro scripts los ejecuta el job en CYBER al terminar la actualización (`ops.sp_act_cyber`, `ACT_CYBER_AUTOMATICO`); a mano: `EXEC ops.sp_act_cyber <corrida>;` o los `.sql` en Oracle. El operador sube `SCBPAG.TXT`. El cuadre de pagos sí es automático: en cada vuelta compara contra `RCVRY.pmtfil` y, si a las 17:00 falta alguno, lo manda en el correo de hallazgos. `ops.sp_act_cyber` solo repite lo pendiente.
 
 Si hubo retiro: `EXEC ops.sp_exportar_salidas <corrida>, @zip = 'RETIROS', @enviar_zip = 1` (correo único de devolución).
 
@@ -93,7 +104,7 @@ Los pagos negativos no salen en `SCBPAG.TXT`: quedan en `ops.RECHAZO` (origen `P
 
 **Automático desde el 02/11** (`sql/77_sp_retiro_automatico.sql`, parámetro `RETIRO_AUTOMATICO = 1`):
 - La asignación y la actualización aplican solas sus devoluciones, salvo que en algún segmento superen el 50 % de las cuentas que ese segmento tiene en el DAT (`RETIRO_TOPE_PCT_ASIG` y `RETIRO_TOPE_PCT_ACT`). En ese caso no se aplica nada, quedan en `ops.DEVOLUCION` y llega el correo de hallazgos al equipo de asignaciones con la tabla por segmento.
-- Después de aplicar, `ops.sp_retiro_cerrar` escribe los archivos de la corrida, arma el ZIP y manda el correo único de devolución. Por ahora el retiro en CYBER (`cyber\RETIRO.sql`) y la copia de `MX_G1MCT_DVBJIG_*` a `RUTA_DEVOLUCION_CYBER` (`\\192.168.50.1\Cyber_00\dev\`) se hacen a mano con `EXEC ops.sp_retiro_cerrar <ID>, @con_cyber = 1;` (automáticos con `RETIRO_CYBER_AUTOMATICO = 1`).
+- Después de aplicar, `ops.sp_retiro_cerrar` escribe los archivos de la corrida, arma el ZIP y manda el correo único de devolución. También ejecuta el retiro en CYBER (`cyber\RETIRO.sql`, `RETIRO_CYBER_AUTOMATICO`). La copia de `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` se hace a mano porque el servidor no tiene acceso (`RUTA_DEVOLUCION_CYBER` vacío).
 - El retiro por solicitud hace lo mismo al confirmarlo (`@confirmar = 1`).
 - El operador sube `SCBACTH_486.TXT` (gescar de retiro).
 - Si un paso falla, queda `ERROR` en la bitácora (`RETIRO ARCHIVOS`, `RETIRO CYBER`, `RETIRO DEVOL CYBER`), llega el correo de hallazgos y se repite con `EXEC ops.sp_retiro_cerrar <ID>;` (solo repite lo que no quedó OK; `@solo_mostrar = 1` muestra qué falta).

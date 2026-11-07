@@ -1,0 +1,15 @@
+flowchart TD
+    D0(["Devoluciones detectadas<br/>asignación: DAT que no vino en la base<br/>actualización: reglas de retiro"]) --> D1[("ops.DEVOLUCION<br/>PROCESADA = 0")]
+    D1 --> R1{"ops.sp_retiro_decidir<br/>RETIRO_AUTOMATICO = 1?"}
+    R1 -- no --> M["Queda para revisión<br/>EXEC ops.sp_retiro id"]
+    R1 -- sí --> R2{"¿Algún segmento supera el tope?<br/>RETIRO_TOPE_PCT_ASIG / _ACT (50 %)<br/>de sus cuentas en el DAT"}
+    R2 -- sí --> R3["No se aplica nada<br/>bitácora RETIRO AUTOMATICO AVISO<br/>HALLAZGO_486 con tabla por segmento"]
+    R3 --> M
+    R2 -- no --> R4["ops.sp_retiro dentro de la corrida<br/>baja en DAT e histórico + archivos de retiro"]
+    M -. "a mano" .-> R4
+    R4 --> C0(["Corrida OK → ops.sp_retiro_cerrar"])
+    C0 --> C1["1. RETIRO ARCHIVOS<br/>sp_exportar_salidas + ZIP + DEVOLUCION_486 / _AEM<br/>+ ARCHIVOS_LISTOS_486"]
+    C0 --> C2["2. RETIRO CYBER<br/>script RETIRO por servidor vinculado<br/>(RETIRO_CYBER_AUTOMATICO)"]
+    C0 --> C3["3. RETIRO DEVOL CYBER<br/>copia MX_G1MCT_DVBJIG_* a RUTA_DEVOLUCION_CYBER<br/>vacía = a mano (sin acceso a Cyber_00)"]
+    C1 -. error .-> H["ERROR + HALLAZGO_486<br/>EXEC ops.sp_retiro_cerrar id"]
+    C2 -. error .-> H

@@ -11,7 +11,7 @@ Todos llevan la firma de Asignaciones y el aviso de confidencialidad.
 | Correo | Plantilla | Cuándo | Para | Copia oculta |
 |---|---|---|---|---|
 | **Inicio de asignación** (nuevo) | `INICIO_ASIG_486` | Solo, al arrancar la asignación. Dice la hora en que llegó la base | erika.ramos, administrativo.mc4, administrativo.mc5, supervisor.mc4, supervisorbackoffice.mc | asignaciones.cdmx1, asignaciones3, asig.cdmx |
-| **Fin de asignación** (antes MAIL.prg) | `CONFIRMACION_ASIG_486` | A mano, después de arribar a CYBER: `EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486'` | Los mismos del inicio | Los mismos del inicio |
+| **Fin de asignación** (antes MAIL.prg) | `CONFIRMACION_ASIG_486` | Solo, al terminar OK la depuración de correos y teléfonos en CYBER (`ops.sp_confirmar_asignacion`). A mano: `EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486'` | Los mismos del inicio | Los mismos del inicio |
 | **Asignación grande** (antes aem_alerta.prg) | `ALERTA_NUEVAS_486` | Solo, si llegan más de 100 cuentas nuevas (parámetro) | supervisor.aem.cdmx4, aem.control1, aem.proyectos1, aem.consultoria1, supervisor.aem.cdmx2 | asig.cdmx |
 
 ### Devolución (un solo correo)
@@ -26,7 +26,16 @@ Uno para cualquier retiro: asignación, actualización o retiro por solicitud. S
 - **Asunto:** `Devolucion del cliente BANCO BAJIO dd/mm/aaaa`
 - **Texto:** "Archivo de devolución actualizado (asignación / actualización / retiro por solicitud), favor de verificar." Incluye cuántas cuentas se devolvieron.
 - **Por qué son dos envíos:** el correo de SQL Server (Database Mail) manda el mismo adjunto a todos los destinatarios de un correo. Para que AEM no reciba el ZIP, sale una copia igual sin adjunto y con AEM solo en copia oculta.
-- **Cómo se manda:** al exportar los archivos de la corrida: `EXEC ops.sp_exportar_salidas @id, @zip = 'RETIROS', @enviar_zip = 1`. O suelto: `EXEC ops.sp_aviso_devolucion @id, N'C:\RETIROS_PAG_486_….zip'`.
+- **Cómo se manda:** solo, al cerrar el retiro (`ops.sp_retiro_cerrar`). A mano: `EXEC ops.sp_exportar_salidas @id, @zip = 'RETIROS', @enviar_zip = 1`. O suelto: `EXEC ops.sp_aviso_devolucion @id, N'C:\RETIROS_PAG_486_….zip'`.
+
+### Al equipo de asignaciones (salen solos, 02 y 03/11)
+
+| Correo | Plantilla | Cuándo |
+|---|---|---|
+| Archivos listos para arribar | `ARCHIVOS_LISTOS_486` | En cuanto se escriben los planos que se suben a CYBER: carpeta, archivos con sus líneas y qué sigue. Otro aviso cuando aparece `SCBACTH_SINTEL.TXT` |
+| Hallazgos | `HALLAZGO_486` | Lo que el proceso no resolvió solo: retiro sobre el tope de 50 %, pagos que no subieron a las 17:00, cualquier paso automático con error. Trae una tabla con el detalle y el comando para resolverlo |
+
+Diagrama de todos los correos: `docs/flujo/07_correos.md`.
 
 ### Validaciones (salen solas)
 

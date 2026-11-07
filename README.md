@@ -7,8 +7,11 @@ Levantamiento de requerimientos de los procesos de **asignación** y **actualiza
 - [`docs/Como funciona Banbaj 486.docx`](docs/) — cómo funciona por dentro: flujo diario, actualización, asignación, retiro, teléfonos, exclusiones, salidas, correos, respaldo, tablas y procedimientos.
 - [`docs/Migracion paso a paso Banbaj 486.docx`](docs/) — cómo ejecutar la migración desde FoxPro, con lo que hay que revisar en cada paso.
 - [`docs/Manual de migracion, instalacion y operacion Banbaj 486.docx`](docs/) — requisitos, instalación de la base, configuración del servidor, migración desde FoxPro, operación diaria, respaldo y retroceso, salida a producción.
+- [`docs/Flujo y diagramas Banbaj 486.docx`](docs/) — diagramas de cada flujo (vista general, día, asignación, actualización, arribo a CYBER, retiro, correos, migración) y dónde se cambia cada parte.
 
 Al abrirlos, Word pide actualizar los campos: di que sí para que se llene el índice. Los `.md` de `docs/` son la fuente; los `.docx` se regeneran con `tools/generar_docs_word.sh`.
+
+**Para modificar el proceso con Claude Code:** [`CLAUDE.md`](CLAUDE.md) explica la estructura, las convenciones y cómo probar; [`docs/flujo/`](docs/flujo/README.md) tiene un diagrama por flujo (fuente Mermaid en `docs/flujo/mmd/`, imágenes con `tools/generar_diagramas.sh`) con los procedimientos, parámetros y pruebas de cada parte.
 
 ## Contenido
 

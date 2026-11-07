@@ -192,7 +192,13 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [ ] Sigue a mano subir los archivos de ancho fijo (SCBSDOS, SCBTEL, SCBPAG, gescar). Se puede quitar si el cargador de CYBER toma archivos de una carpeta o con la estructura de `PHONE_G1` y de las tablas que llena el SCBSDOS.
 - [x] (03/11) Correo ARCHIVOS_LISTOS_486 al equipo de asignaciones en cuanto están los planos para arribar.
 
-## 11. Por ahora solo archivos (03/11)
+## 11. Solo archivos (03/11, reemplazado el 07/11)
 
 - [x] Banbaj genera los archivos planos y los scripts y hasta ahí; las depuraciones en CYBER (stores de correos y teléfonos, scripts de la actualización, retiro en CYBER, blanqueo) y la confirmación se corren a mano. Todo queda programado y se prende con `ARRIBO_AUTOMATICO`, `ACT_CYBER_AUTOMATICO`, `RETIRO_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO` y `CONFIRMACION_AUTOMATICA`.
 - [x] (03/11) Las fechas de asignación, reasignación y retiro de los periodos migrados del histórico quedan vacías; se llenan con las corridas de Banbaj. PURGA no se usa.
+
+## 12. Proceso autónomo con diagramas (07/11)
+
+- [x] De vuelta al proceso autónomo: depuraciones de correos y teléfonos, scripts de la actualización, retiro en CYBER, blanqueo y confirmación automáticos (parámetros en 1).
+- [x] La copia de `MX_G1MCT_DVBJIG_*` a `Cyber_00` sigue a mano (sin acceso).
+- [x] Diagramas de cada flujo (`docs/flujo/`, fuente Mermaid en `mmd/`, imágenes en `img/`), documento *Flujo y diagramas Banbaj 486* y guía `CLAUDE.md` para modificar el proceso con Claude Code.

@@ -1,0 +1,33 @@
+flowchart LR
+    S(["ops.sp_actualizacion_486"]) --> S1["ops.sp_corrida_iniciar"]
+    subgraph F1["1 · Carga y validación"]
+        direction TB
+        A1["ops.sp_respaldo"] --> A2["ops.sp_cargar_proceso<br/>ops.sp_homologar_entradas"]
+        A2 --> A3["ops.sp_validar POST_CARGA<br/>pagos negativos → PAGOS_NEGATIVOS_486"]
+        A3 --> A4["ops.sp_act_preparar"]
+    end
+    subgraph F2["2 · Retiro, saldos y pagos"]
+        direction TB
+        A5["ops.sp_validar RETIRO<br/>→ ops.DEVOLUCION"] --> A6["ops.sp_retiro_decidir<br/>tope 50 % por segmento"]
+        A6 --> A7["ops.sp_act_aplicar<br/>saldos al DAT + scripts<br/>ACT_SALDOS, ACT_VENCIDO, ACT_PAGMIN"]
+        A7 --> A8["ops.sp_act_pagos<br/>dat.PAGO_ARRIBADO"]
+        A8 --> A9["ops.sp_homologar dat.DAT_486<br/>ops.sp_retiro (si se decidió)"]
+    end
+    subgraph F3["3 · Salidas"]
+        direction TB
+        A10["ops.sp_act_script_pvs_ree<br/>script ACT_PVS_REE"] --> A11["ops.sp_generar_salidas 'ACT'<br/>SCBPAG"]
+        A11 --> A12["ops.sp_corrida_finalizar OK"]
+    end
+    subgraph F4["4 · Al terminar OK (fuera de la corrida)"]
+        direction TB
+        P1{"¿Hubo retiro?"} -- sí --> P2["ops.sp_retiro_cerrar"]
+        P1 -- no --> P3["ops.sp_exportar_auto"]
+        P2 --> P4["ops.sp_aviso_archivos<br/>ARCHIVOS_LISTOS_486"]
+        P3 --> P4
+        P4 --> P5["ops.sp_act_cyber<br/>los 4 scripts ACT_* en CYBER"]
+        P5 --> P6["Vueltas siguientes:<br/>ops.sp_cuadre_automatico<br/>hallazgo si a las 17:00 falta un pago"]
+    end
+    S1 --> A1
+    A4 --> A5
+    A9 --> A10
+    A12 --> P1

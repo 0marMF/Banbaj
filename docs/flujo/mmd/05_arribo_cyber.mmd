@@ -1,0 +1,20 @@
+flowchart TD
+    B0(["Al terminar la asignación<br/>ops.sp_arribo_base"]) --> B1[("ops.ARRIBO_PENDIENTE<br/>CUENTA · DOMICILIO · TELEFONO")]
+    J(["Cada vuelta del job (día completo)<br/>ops.sp_arribo_automatico"]) --> J1{"ARRIBO_AUTOMATICO = 1<br/>y asignación OK del día"}
+    J1 -- no --> JX["Termina"]
+    J1 -- sí --> J2["ops.sp_arribo_bajar<br/>DELQMST activas + DMADDR1<br/>PHONE_G1 del 486"]
+    J2 --> J3{"¿Hay foto?"}
+    J3 -- no --> J4["Toma la foto ahora<br/>(compara en la siguiente vuelta)"]
+    J3 -- sí --> J5
+    J4 --> J5["Compara contra lo pendiente"]
+    B1 -.-> J5
+    J5 --> C1{"Correos listos:<br/>≥ 95 % de cuentas y domicilios<br/>pendientes ya en DELQMST"}
+    C1 -- sí, una vez --> C2["ops.sp_arribar_cyber 'CORREOS'<br/>sp_bajar_cyber CORREOS → MAIL_INSERTA_NUEVOS<br/>bandera 416 → remesa → JSP_CORREOS_486"]
+    J5 --> T1{"Teléfonos listos:<br/>≥ 95 % de teléfonos pendientes en PHONE_G1<br/>y cuentas pendientes activas"}
+    T1 -- sí, una vez --> T2["ops.sp_arribar_cyber 'TELEFONOS'<br/>remesa → validador → JSP_TELEFONOS_REMESA_486<br/>→ SCBACTH_SINTEL.TXT + aviso"]
+    C2 --> P["ops.sp_arribo_posterior"]
+    T2 --> P
+    P --> P1["ops.sp_blanqueo_automatico<br/>días 1 a 10, después de correos OK"]
+    P --> P2["ops.sp_confirmar_asignacion<br/>correos y teléfonos OK → ARRIBO FIN<br/>+ CONFIRMACION_ASIG_486"]
+    C2 -. error .-> H["Bitácora ERROR + HALLAZGO_486<br/>no se reintenta solo"]
+    T2 -. error .-> H

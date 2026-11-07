@@ -1,0 +1,11 @@
+flowchart LR
+    F["Visual FoxPro<br/>EXPORTAR_MIGRACION.prg"] -- "12 CSV sin comillas dobles<br/>C:\MIGRA486\" --> M["ops.sp_migrar_486<br/>@confirmar = 0: solo revisa"]
+    M --> L["ops.sp_mig_leer<br/>BULK INSERT → stg.MIG_*"]
+    L --> V["Avisos y conteos"]
+    V --> C{"@confirmar = 1"}
+    C --> T1[("dat.DAT_486")]
+    C --> T2[("dat.HISTORIA_FOLIO<br/>activas del DAT + periodos anteriores<br/>sin fechas (03/11)")]
+    C --> T3[("dat.FOLIO_CONSECUTIVO")]
+    C --> T4[("dat.PAGO_ARRIBADO")]
+    C --> T5[("cfg.ETIQUETA")]
+    C --> T6[("cfg.EXCLUSION<br/>lista negra, correos y domicilios malos")]

@@ -92,8 +92,10 @@ BEGIN
                           CASE WHEN ISNULL(@aplicar_retiro, 0) = 0 AND EXISTS (SELECT 1 FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id_corrida AND PROCESADA = 0)
                                THEN N' (pendientes de aplicar con ops.sp_retiro)' ELSE N'' END);
         EXEC ops.sp_corrida_finalizar @id_corrida, 'OK', @msg;
-        /* Fin de asignación: se manda después de arribar a CYBER con EXEC ops.sp_avisar @id_corrida, 'CONFIRMACION_ASIG_486'
-           Si hubo devolución: EXEC ops.sp_exportar_salidas @id_corrida, @zip = 'RETIROS', @enviar_zip = 1 (correo único de devolución) */
+        /* Lo que sigue (después del CATCH, ya con la corrida en OK): foto de CYBER para el arribo automático,
+           archivos + aviso a asignaciones (o cierre del retiro con ZIP y correo de devolución).
+           La depuración en CYBER y la confirmación las hace ops.sp_arribo_automatico en las vueltas siguientes.
+           Diagrama: docs/flujo/02_asignacion.md */
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;

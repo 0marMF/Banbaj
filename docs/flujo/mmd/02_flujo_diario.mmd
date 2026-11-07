@@ -1,0 +1,17 @@
+flowchart TD
+    A(["Job cada 30 min<br/>ops.sp_diario_486 @fecha"]) --> B{"¿Fin de semana?"}
+    B -- sí --> B1["FIN DE SEMANA"]
+    B -- no --> C{"¿Ya hay ACT del día?"}
+    C -- no --> D{"¿Llegaron los archivos de ACT?<br/>ops.sp_archivos_presentes"}
+    D -- no --> D1["ESPERANDO ACTUALIZACION"]
+    D -- sí --> E["ops.sp_actualizacion_486<br/>(diagrama 04)"]
+    E --> F
+    C -- sí --> F{"¿ACT del día en OK?"}
+    F -- no --> F1["ACTUALIZACION DEL DIA SIN TERMINAR OK<br/>(error: se revirtió sola)"]
+    F -- sí --> G["ops.sp_cuadre_automatico<br/>pagos del SCBPAG contra PMTFIL"]
+    G --> H{"¿Ya hay ASIG del día?"}
+    H -- sí --> I["DIA COMPLETO<br/>ops.sp_arribo_automatico<br/>(diagrama 05)"]
+    H -- no --> J{"¿Llegaron las bases maestras?"}
+    J -- no --> J1["ACTUALIZACION OK · SIN ASIGNACION"]
+    J -- sí --> K["ops.sp_asignacion_486<br/>(diagrama 03)"]
+    K --> K1["ACTUALIZACION Y ASIGNACION OK"]

@@ -1,0 +1,29 @@
+flowchart LR
+    subgraph OPER["Operación (OPERACION_ASIG_486)"]
+        I["INICIO_ASIG_486<br/>al arrancar la asignación"]
+        CF["CONFIRMACION_ASIG_486<br/>al terminar la depuración"]
+        SC["ALERTA_SDO_ACT_CONS_486<br/>Consumo con saldo ≤ 0"]
+    end
+    subgraph AEM["AEM (AEM_486)"]
+        AN["ALERTA_NUEVAS_486<br/>más de 100 nuevas"]
+    end
+    subgraph DEV["Devolución"]
+        D1["DEVOLUCION_486<br/>Operación con ZIP"]
+        D2["DEVOLUCION_486_AEM<br/>sin ZIP"]
+    end
+    subgraph ASI["Equipo de asignaciones (ASIGNACIONES_486)"]
+        AL["ARCHIVOS_LISTOS_486<br/>planos listos para subir"]
+        HZ["HALLAZGO_486<br/>lo que no se resolvió solo"]
+        PN["PAGOS_NEGATIVOS_486"]
+        MX["MAESTRA_NUMEROS_EXCEL_486"]
+    end
+    ASIG["ops.sp_asignacion_486"] --> I
+    ASIG --> AN
+    ASIG --> SC
+    ASIG --> MX
+    ACT["ops.sp_actualizacion_486"] --> PN
+    EXP["ops.sp_exportar_auto<br/>ops.sp_retiro_cerrar<br/>arribo de teléfonos"] --> AL
+    RC["ops.sp_retiro_cerrar"] --> D1
+    RC --> D2
+    CONF["ops.sp_confirmar_asignacion"] --> CF
+    HAL["mail.sp_hallazgo<br/>retiro sobre el tope, pagos sin subir,<br/>pasos automáticos con error"] --> HZ

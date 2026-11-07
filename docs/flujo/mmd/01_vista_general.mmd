@@ -1,0 +1,48 @@
+flowchart TB
+    subgraph BANCO["Banco Bajío"]
+        BM["Base maestra por segmento<br/>(asignación)"]
+        SAL["Saldos y pagos<br/>(actualización)"]
+    end
+    subgraph Q["Carpeta Q: \\192.168.50.13\q"]
+        ENT["Archivos de entrada<br/>cfg.ARCHIVO"]
+    end
+    subgraph SQL["SQL Server · base Banbaj"]
+        JOB["Job 'Banbaj 486 diario'<br/>cada 30 min<br/>ops.sp_diario_486"]
+        ACT["Actualización<br/>ops.sp_actualizacion_486"]
+        ASIG["Asignación<br/>ops.sp_asignacion_486"]
+        DAT[("dat.DAT_486<br/>dat.HISTORIA_FOLIO")]
+        OUT["Salidas<br/>ops.SALIDA_LINEA<br/>ops.CYBER_SCRIPT"]
+        ARR["Arribo automático<br/>ops.sp_arribo_automatico"]
+        CUA["Cuadre de pagos<br/>ops.sp_cuadre_automatico"]
+    end
+    subgraph DISCO["Carpeta de la corrida"]
+        TXT["Planos: SCBSDOS, SCBTEL,<br/>SCBPAG, gescar"]
+        SCR["cyber\*.sql"]
+        ZIP["ZIP de devolución"]
+    end
+    subgraph CYB["CYBER (Oracle)"]
+        CARG["Cargador de archivos"]
+        TAB[("DELQMST, PHONE_G1,<br/>PHONE, ADDRESS, UDA1, PMTFIL")]
+        JSP["Stores de depuración<br/>JSP_CORREOS_486<br/>JSP_TELEFONOS_REMESA_486"]
+    end
+    ASIGN(["Equipo de asignaciones"])
+
+    BM --> ENT
+    SAL --> ENT
+    ENT --> JOB
+    JOB --> ACT --> DAT
+    JOB --> ASIG --> DAT
+    ACT --> OUT
+    ASIG --> OUT
+    OUT --> TXT
+    OUT --> SCR
+    OUT --> ZIP
+    TXT -. "correo ARCHIVOS_LISTOS_486" .-> ASIGN
+    ASIGN -- "sube los planos" --> CARG --> TAB
+    JOB --> ARR
+    ARR -- "servidor vinculado [CYBER]<br/>remesas + EXEC" --> JSP
+    JSP --> TAB
+    ARR -- "lee DELQMST / PHONE_G1" --> TAB
+    JOB --> CUA
+    CUA -- "lee PMTFIL" --> TAB
+    ARR -. "HALLAZGO_486 si falla" .-> ASIGN
