@@ -298,6 +298,11 @@ GO
 IF OBJECT_ID('stg.CYBER_PHONE_G1') IS NULL
 CREATE TABLE stg.CYBER_PHONE_G1 (CUENTA NVARCHAR(28) NULL, AREA NVARCHAR(10) NULL, TELEFONO NVARCHAR(20) NULL);
 GO
+/* Validación de saldos del equipo (15/11): cuentas activas del 486 por fecha de DMHOSTUP.
+   Si la fecha cambia al día y el número coincide con el SCBSDOS, ya se subieron los saldos. */
+IF OBJECT_ID('stg.CYBER_HOSTUP') IS NULL
+CREATE TABLE stg.CYBER_HOSTUP (FECHA NVARCHAR(30) NULL, CUENTAS INT NULL);
+GO
 /* Pagos que CYBER registró en el día (BAJ.sql: RCVRY.pmtfil), para cuadrar contra lo arribado */
 IF OBJECT_ID('stg.CYBER_PAGO') IS NULL
 CREATE TABLE stg.CYBER_PAGO (CUENTA NVARCHAR(28) NULL, MONTO NVARCHAR(30) NULL, FECHA NVARCHAR(20) NULL);

@@ -78,7 +78,7 @@ def main(destino):
             correo1="Malo@Correo.com", correo2="notiene@hotmail.com"),
     ])
 
-    escribir(destino / "act_ok" / "SERTEC_Saldos_tdc.csv",
+    escribir(destino / "act_ok" / "SERTEC_Saldos_tdc.txt",
              ["ACCT_NUM", "CYBER", "ACC_NUM", "SALDO", "ESTATUS", "PAGO-MIN", "FECHA_CORTE", "DESPACHO"], [
         {"ACCT_NUM": "4000000000011111", "CYBER": "10000000011111", "ACC_NUM": "1000000001", "SALDO": "500.00",
          "ESTATUS": "NORM", "PAGO-MIN": "50.00", "FECHA_CORTE": "2026-10-25 00:00:00.0", "DESPACHO": "SERTEC"},
@@ -94,19 +94,19 @@ def main(destino):
         return {"": str(i), "CREDITO": credito, "CYBER": f"9{credito[1:]}-CRN-{credito}", "MONTO_VENCIDO": vencido,
                 "SALDO_DEUDOR": deudor, "FECHA-PAGO": "20261030", "PROX_AMOR_A_VEN": "", "PAGO-MIN": pagmin,
                 "DIAS_MORA": dias, "TRAMO": tramo, "DESPACHO": "SERTEC", "FECHA": "20261102"}
-    escribir(destino / "act_ok" / "SERTEC_Saldos_Cons.csv", cons_h, [
+    escribir(destino / "act_ok" / "SERTEC_Saldos_Cons.txt", cons_h, [
         sc(1, "20000001", " 2,000.00 ", " 12,345.67 ", "700.5", "120", "90+"),
         sc(2, "20000003", " 300.00 ", " 5,000.00 ", "100", "96", "0"),
         sc(3, "20000004", " -   ", " -   ", "0", "0", "30-59"),
     ])
     pagos_h = ["CREDITO", "IMPORTE", "FECHA", "TRX", "EMPRESA", "DESPACHO"]
-    escribir(destino / "act_ok" / "SERTEC_Pagos.csv", pagos_h, [
+    escribir(destino / "act_ok" / "SERTEC_Pagos.txt", pagos_h, [
         {"CREDITO": "20000001", "IMPORTE": "$1,000.00", "FECHA": "2026-11-02", "TRX": "RECUPERACION", "EMPRESA": "CONSUMO", "DESPACHO": "SERTEC"},
         {"CREDITO": "20000004", "IMPORTE": "500.00", "FECHA": "2026-11-02", "TRX": "RECUPERACION", "EMPRESA": "CONSUMO", "DESPACHO": "SERTEC"},
         {"CREDITO": "20000004", "IMPORTE": "500.00", "FECHA": "2026-11-02", "TRX": "RECUPERACION", "EMPRESA": "CONSUMO", "DESPACHO": "SERTEC"},
         {"CREDITO": "29999999", "IMPORTE": "10.00", "FECHA": "2026-11-02", "TRX": "RECUPERACION", "EMPRESA": "CONSUMO", "DESPACHO": "SERTEC"},
     ])
-    escribir(destino / "act_neg" / "SERTEC_Pagos.csv", pagos_h, [
+    escribir(destino / "act_neg" / "SERTEC_Pagos.txt", pagos_h, [
         {"CREDITO": "20000001", "IMPORTE": "-100.00", "FECHA": "2026-11-02", "TRX": "AJUSTE", "EMPRESA": "CONSUMO", "DESPACHO": "SERTEC"},
     ])
     # Etiquetas TOP que comparte Operación: folio + etiqueta

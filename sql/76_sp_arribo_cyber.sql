@@ -203,6 +203,7 @@ BEGIN
     SET NOCOUNT ON;
     DECLARE @srv SYSNAME = ISNULL(cfg.fn_param(@cliente, 'CYBER_LINKED_SERVER'), 'CYBER'),
             @dom NVARCHAR(128) = NULLIF(LTRIM(RTRIM(cfg.fn_param(@cliente, 'CYBER_COLUMNA_DOMICILIO'))), N''),
+            @hostup NVARCHAR(200) = NULLIF(LTRIM(RTRIM(cfg.fn_param(@cliente, 'CYBER_HOSTUP_EXPR'))), N''),
             @q NVARCHAR(MAX), @sql NVARCHAR(MAX), @msg NVARCHAR(400);
     IF NOT EXISTS (SELECT 1 FROM sys.servers WHERE name = @srv)
     BEGIN
@@ -210,6 +211,18 @@ BEGIN
         THROW 50823, @msg, 1;
     END;
     IF @dom LIKE N'%[^A-Za-z0-9_]%' THROW 50768, 'CYBER_COLUMNA_DOMICILIO inválida (solo el nombre de la columna de DELQMST).', 1;
+    IF @hostup LIKE N'%;%' OR @hostup LIKE N'%--%' OR @hostup LIKE N'%/*%'
+        THROW 50775, 'CYBER_HOSTUP_EXPR inválida: solo una expresión sobre DMHOSTUP, sin ; ni comentarios.', 1;
+
+    /* Validación de saldos del equipo (val.txt, 15/11): cuentas activas del 486 por fecha de DMHOSTUP */
+    TRUNCATE TABLE stg.CYBER_HOSTUP;
+    IF @hostup IS NOT NULL
+    BEGIN
+        SET @q = N'select ' + @hostup + N', count(*) from RCVRY.delqmst where DMACCTG = ''1'' and DMCOMPANY = ''' + @cliente
+               + N''' and DMSTATUS is null group by ' + @hostup;
+        SET @sql = N'INSERT INTO stg.CYBER_HOSTUP (FECHA, CUENTAS) EXEC (N''' + REPLACE(@q, N'''', N'''''') + N''') AT ' + QUOTENAME(@srv) + N';';
+        EXEC (@sql);
+    END;
 
     TRUNCATE TABLE stg.CYBER_DELQMST_ACT;
     SET @q = N'select DMACCT, ' + ISNULL(@dom, N'cast(null as varchar2(80))') + N' from RCVRY.delqmst where DMACCTG = ''1'' and DMCOMPANY = '''
@@ -289,7 +302,10 @@ GO
 /* Detecta si el operador ya subió el SCBSDOS y el SCBTEL de la asignación del día y arriba lo que falte.
    Se compara contra lo que estaba pendiente (ops.ARRIBO_PENDIENTE, foto de ops.sp_arribo_base), no contra
    las altas, para que funcione aunque no haya cuentas nuevas:
-     SCBSDOS subido = al menos ARRIBO_MIN_PCT % de las cuentas y domicilios pendientes ya están en DELQMST.
+     SCBSDOS subido = validación de saldos del equipo (15/11): las cuentas activas del 486 con DMHOSTUP del día
+                      (CYBER_HOSTUP_EXPR) son al menos ARRIBO_SDOS_MIN_PCT % (100 = coinciden) de las cuentas del
+                      SCBSDOS. Con CYBER_HOSTUP_EXPR vacío: al menos ARRIBO_MIN_PCT % de las cuentas y domicilios
+                      pendientes ya están en DELQMST.
      SCBTEL subido  = al menos ARRIBO_MIN_PCT % de los teléfonos pendientes ya están en PHONE_G1, y las cuentas
                       pendientes ya están activas (JSP_TELEFONOS_REMESA_486 solo trabaja cuentas activas).
      Sin pendientes = CYBER ya tiene todo lo que necesita el procedimiento: se arriba en la siguiente vuelta.
@@ -371,11 +387,29 @@ BEGIN
     SELECT @p_c = ISNULL(@p_c, 0), @r_c = ISNULL(@r_c, 0), @p_d = ISNULL(@p_d, 0), @r_d = ISNULL(@r_d, 0), @p_t = ISNULL(@p_t, 0), @r_t = ISNULL(@r_t, 0);
     SET @fin = CASE WHEN EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO FIN') THEN 1 ELSE 0 END;
 
+    /* Saldos del día: DMHOSTUP con la fecha del día en tantas cuentas como manda el SCBSDOS */
+    DECLARE @usa_hostup BIT = CASE WHEN NULLIF(LTRIM(RTRIM(cfg.fn_param(@cliente, 'CYBER_HOSTUP_EXPR'))), N'') IS NULL THEN 0 ELSE 1 END,
+            @pct_sdos DECIMAL(5,2) = ISNULL(TRY_CONVERT(DECIMAL(5,2), cfg.fn_param(@cliente, 'ARRIBO_SDOS_MIN_PCT')), 100),
+            @n_sdos INT, @n_hoy INT, @ok_sdos BIT;
+    SET @n_sdos = (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS');
+    SET @n_hoy = ISNULL((SELECT SUM(CUENTAS) FROM stg.CYBER_HOSTUP
+                         WHERE TRY_CONVERT(DATE, LEFT(LTRIM(FECHA), 8), 112) >= @fecha
+                            OR TRY_CONVERT(DATE, LEFT(LTRIM(FECHA), 10), 23) >= @fecha), 0);
+    SET @ok_sdos = CASE WHEN @n_sdos > 0 AND 100.0 * @n_hoy >= @pct_sdos * @n_sdos THEN 1 ELSE 0 END;
+
     SET @ok_c = CASE WHEN @p_c = 0 OR 100.0 * @r_c / @p_c >= @min THEN 1 ELSE 0 END;
     SET @ok_d = CASE WHEN @p_d = 0 OR 100.0 * @r_d / @p_d >= @min THEN 1 ELSE 0 END;
     SET @ok_t = CASE WHEN @p_t = 0 OR 100.0 * @r_t / @p_t >= @min THEN 1 ELSE 0 END;
-    SET @listo_c = CASE WHEN @fin = 1 OR (@ok_c = 1 AND @ok_d = 1) THEN 1 ELSE 0 END;
-    SET @listo_t = CASE WHEN @fin = 1 OR (@ok_t = 1 AND @ok_c = 1) THEN 1 ELSE 0 END;
+    IF @usa_hostup = 1
+    BEGIN
+        SET @listo_c = CASE WHEN @fin = 1 OR @ok_sdos = 1 THEN 1 ELSE 0 END;
+        SET @listo_t = CASE WHEN @fin = 1 OR (@ok_t = 1 AND @ok_sdos = 1) THEN 1 ELSE 0 END;
+    END
+    ELSE
+    BEGIN
+        SET @listo_c = CASE WHEN @fin = 1 OR (@ok_c = 1 AND @ok_d = 1) THEN 1 ELSE 0 END;
+        SET @listo_t = CASE WHEN @fin = 1 OR (@ok_t = 1 AND @ok_c = 1) THEN 1 ELSE 0 END;
+    END;
 
     IF @listo_c = 1 AND @hecho_c = 0
     BEGIN
@@ -407,6 +441,7 @@ BEGIN
     EXEC ops.sp_arribo_posterior @id;              -- blanqueo de status y confirmación de la asignación
     SET @resultado = CASE WHEN @res = N'' THEN N'ESPERANDO ARRIBO' ELSE RTRIM(LEFT(@res, LEN(@res) - 1)) END;
     SELECT @resultado AS ARRIBO, @id AS CORRIDA,
+           CASE WHEN @usa_hostup = 1 THEN CONCAT(@n_hoy, N' de ', @n_sdos) END AS SALDOS_DEL_DIA_EN_CYBER,
            CONCAT(@r_c, N' de ', @p_c) AS CUENTAS_PENDIENTES_EN_CYBER, CONCAT(@r_d, N' de ', @p_d) AS DOMICILIOS_PENDIENTES_EN_CYBER,
            CONCAT(@r_t, N' de ', @p_t) AS TELEFONOS_PENDIENTES_EN_PHONE_G1;
 END;

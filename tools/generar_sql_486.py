@@ -103,6 +103,8 @@ GO
 
 # ---------------------------------------------------------------- archivos de entrada
 # (CODIGO, PROCESO, SEGMENTO2, PATRON_NOMBRE, NUM_COLUMNAS, TABLA, LLAVE_DAT, OBLIG, ORDEN, ACTIVO, COMENTARIO)
+# Decisión 15/11: la asignación toma las bases maestras en .csv y la actualización sus archivos en .txt
+# (los .txt del banco vienen separados por comas, con comillas opcionales, igual que un CSV).
 ARCHIVOS = [
     ("MAESTRA_TDC", "ASIG", "TDC", "BASE MAESTRA[_]TARJETA%.csv", 96, "stg.ENT_MAESTRA_TDC", "RIESGO", 0, 10, 1,
      "Base maestra TDC guardada como CSV. Devolución por RIESGO (asig_bases)."),
@@ -110,13 +112,13 @@ ARCHIVOS = [
      "Base maestra Consumo guardada como CSV. Devolución por DES_PROD (asig_bases)."),
     ("MAESTRA_HIPO", "ASIG", "HIPOTECARIO", "BASE MAESTRA[_]HIPOTECARIO%.csv", 118, "stg.ENT_MAESTRA_HIPO", "DES_PROD", 0, 30, 1,
      "Sin archivo de ejemplo: columnas tomadas de la hoja RAW, confirmar NUM_COLUMNAS y encabezados."),
-    ("SALDOS_TDC", "ACT", "TDC", "SERTEC[_]Saldos[_]tdc%", 8, "stg.ENT_SALDOS_TDC", "RIESGO", 0, 10, 1,
+    ("SALDOS_TDC", "ACT", "TDC", "SERTEC[_]Saldos[_]tdc%.txt", 8, "stg.ENT_SALDOS_TDC", "RIESGO", 0, 10, 1,
      "Cruce por ACC_NUM = DAT.RIESGO."),
-    ("SALDOS_CONS", "ACT", "CONSUMO", "SERTEC[_]Saldos[_]Cons%", 12, "stg.ENT_SALDOS_CONS", "DES_PROD", 0, 20, 1,
+    ("SALDOS_CONS", "ACT", "CONSUMO", "SERTEC[_]Saldos[_]Cons%.txt", 12, "stg.ENT_SALDOS_CONS", "DES_PROD", 0, 20, 1,
      "Cruce por CYBER = DAT.DES_PROD. La primera columna viene sin nombre."),
-    ("SALDOS_HIP", "ACT", "HIPOTECARIO", "SERTEC[_]Saldos[_]Hip%", 12, "stg.ENT_SALDOS_HIP", "CUENTA", 0, 30, 0,
+    ("SALDOS_HIP", "ACT", "HIPOTECARIO", "SERTEC[_]Saldos[_]Hip%.txt", 12, "stg.ENT_SALDOS_HIP", "CUENTA", 0, 30, 0,
      "PENDIENTE: no hay ejemplo del archivo; activar cuando se defina su mapeo (A-06)."),
-    ("PAGOS", "ACT", None, "SERTEC[_]Pagos%", 6, "stg.ENT_PAGOS", "RIESGO", 0, 40, 1,
+    ("PAGOS", "ACT", None, "SERTEC[_]Pagos%.txt", 6, "stg.ENT_PAGOS", "RIESGO", 0, 40, 1,
      "Pagos del día. Importes con '$' y miles."),
 ]
 
@@ -421,6 +423,8 @@ PARAMETROS = [
     ("ARRIBO_MIN_PCT", "95", "% de lo pendiente al terminar la asignación (cuentas y domicilios en DELQMST, teléfonos en PHONE_G1) que ya debe estar en CYBER para dar por subido el SCBSDOS o el SCBTEL"),
     ("CYBER_REMESA_TEL_COLUMNAS", "CUENTA,AREA,TELEFONO,TIPOTEL", "Columnas de RCVRY.JSP_TAB_TEL_REMESA_486 en el orden de sub_mst.TXT (confirmar con LOAD_TEL_REMESA.CTL)"),
     ("CYBER_REMESA_MAIL_COLUMNAS", "CUENTA,CORREO", "Columnas de RCVRY.JSP_TAB_MAIL_REMESA_486 en el orden de sub_mail.TXT (confirmar con LOAD_MAIL_REMESA.CTL)"),
+    ("CYBER_HOSTUP_EXPR", "to_char(DMHOSTUP, 'YYYYMMDD')", "Validación de saldos del equipo (val.txt, 15/11): expresión de Oracle con la fecha de DMHOSTUP en AAAAMMDD; el arribo agrupa las cuentas activas del 486 por ella. Si DMHOSTUP no es DATE, ajustarla (ej. DMHOSTUP si ya viene como texto AAAAMMDD). Vacío = se detecta el SCBSDOS por cuentas y domicilios pendientes"),
+    ("ARRIBO_SDOS_MIN_PCT", "100", "% de las cuentas del SCBSDOS que deben tener DMHOSTUP del día para dar por subidos los saldos (100 = que el número coincida)"),
     ("CYBER_COLUMNA_DOMICILIO", "DMADDR1", "Columna de RCVRY.DELQMST con el domicilio del SCBSDOS; el arribo automático la usa para saber si ya subió el SCBSDOS aunque no haya cuentas nuevas (vacío = no se compara)"),
     ("RETIRO_AUTOMATICO", "1", "1 = las devoluciones de la asignación y la actualización se aplican solas si no superan el tope, y después se escriben los archivos, ZIP y correo, se ejecuta RETIRO en CYBER y se copia la devolución a RUTA_DEVOLUCION_CYBER; 0 = manual"),
     ("RETIRO_TOPE_PCT_ASIG", "50", "En la asignación, si la devolución de un segmento supera este % de sus cuentas en el DAT, el retiro queda manual y se manda HALLAZGO_486"),

@@ -283,7 +283,7 @@ FROM (SELECT N'ARRIBO CORREOS: bandera, remesa y JSP_CORREOS_486 en orden' AS p,
 
 DECLARE @ar NVARCHAR(400), @ars NVARCHAR(2000) = N'';
 /* Foto de pendientes con CYBER vacío: todas las cuentas del SCBSDOS y todos los teléfonos del SCBTEL faltan */
-TRUNCATE TABLE stg.CYBER_DELQMST_ACT; TRUNCATE TABLE stg.CYBER_PHONE_G1;
+TRUNCATE TABLE stg.CYBER_DELQMST_ACT; TRUNCATE TABLE stg.CYBER_PHONE_G1; TRUNCATE TABLE stg.CYBER_HOSTUP;
 EXEC ops.sp_arribo_base @id, @sin_bajar = 1;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'ARRIBO BASE: pendientes = cuentas del SCBSDOS y teléfonos del SCBTEL que no están en CYBER' AS p,
@@ -292,23 +292,33 @@ FROM (SELECT N'ARRIBO BASE: pendientes = cuentas del SCBSDOS y teléfonos del SC
                     (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'DOMICILIO'), '|',
                     (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'TELEFONO')) AS o) x;
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- nada subido
+/* Validación de saldos del equipo (val.txt): cuentas activas del 486 por fecha de DMHOSTUP */
+DECLARE @nsdos INT = (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS');
 INSERT INTO stg.CYBER_DELQMST_ACT (CUENTA, DOMICILIO)
 SELECT pru.fn_campo(LINEA, 'CUENTA'), pru.fn_campo(LINEA, 'DMADDR1') FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS';
-EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- SCBSDOS subido: correos (sin servidor vinculado -> ERROR)
+TRUNCATE TABLE stg.CYBER_HOSTUP;
+INSERT INTO stg.CYBER_HOSTUP (FECHA, CUENTAS) VALUES (N'20261030', 1), (N'20261102', @nsdos - 1);       -- todavía no coincide
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- saldos incompletos: espera
+TRUNCATE TABLE stg.CYBER_HOSTUP;
+INSERT INTO stg.CYBER_HOSTUP (FECHA, CUENTAS) VALUES (N'20261102', @nsdos);                            -- fecha del día y número igual al SCBSDOS
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- saldos subidos: correos (sin servidor vinculado -> ERROR)
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- correos ya intentados; teléfonos esperando
 INSERT INTO stg.CYBER_PHONE_G1 (CUENTA, AREA, TELEFONO) SELECT CUENTA2, AREA, TELEFONO FROM ops.TELEFONO WHERE ID_CORRIDA = @id;
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- SCBTEL subido: teléfonos
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar;           -- ya no repite
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'ARRIBO AUTO: espera, detecta SCBSDOS (pendientes en DELQMST) y SCBTEL (pendientes en PHONE_G1), una vez cada uno' AS p,
-             N'ESPERANDO ARRIBO,CORREOS ERROR,ESPERANDO ARRIBO,TELEFONOS ERROR,ARRIBO AUTOMATICO TERMINADO|1|1|2' AS e,
+FROM (SELECT N'ARRIBO AUTO: saldos del día por DMHOSTUP (el número debe coincidir con el SCBSDOS), SCBTEL por PHONE_G1, una vez cada uno' AS p,
+             N'ESPERANDO ARRIBO,ESPERANDO ARRIBO,CORREOS ERROR,ESPERANDO ARRIBO,TELEFONOS ERROR,ARRIBO AUTOMATICO TERMINADO|1|1|2' AS e,
              CONCAT(@ars, '|',
                     (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO CORREOS' AND ESTATUS = 'ERROR'), '|',
                     (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO TELEFONOS' AND ESTATUS = 'ERROR'), '|',
                     (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'HALLAZGO' AND MENSAJE LIKE N'Arribo de % a CYBER con error:%')) AS o) x;
 
-/* Día sin cuentas nuevas ni teléfonos nuevos: CYBER ya tiene todo salvo un domicilio que cambió.
+/* Sin validación por DMHOSTUP (CYBER_HOSTUP_EXPR vacío): se detecta por lo pendiente.
+   Día sin cuentas nuevas ni teléfonos nuevos: CYBER ya tiene todo salvo un domicilio que cambió.
    Los teléfonos se arriban de inmediato; los correos esperan a que el SCBSDOS suba el domicilio nuevo. */
+UPDATE cfg.PARAMETRO SET VALOR = N'' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_HOSTUP_EXPR';
+TRUNCATE TABLE stg.CYBER_HOSTUP;
 DELETE FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO IN ('ARRIBO CORREOS', 'ARRIBO TELEFONOS', 'ARRIBO BASE', 'HALLAZGO');
 DECLARE @cta_dom NVARCHAR(28) = (SELECT MIN(CUENTA) FROM stg.CYBER_DELQMST_ACT WHERE ISNULL(DOMICILIO, N'') <> N'');
 UPDATE stg.CYBER_DELQMST_ACT SET DOMICILIO = N'DOMICILIO ANTERIOR' WHERE CUENTA = @cta_dom;
@@ -319,12 +329,13 @@ FROM stg.CYBER_DELQMST_ACT s JOIN ops.SALIDA_LINEA l ON l.ID_CORRIDA = @id AND l
 WHERE s.CUENTA = @cta_dom;
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar;           -- SCBSDOS con el domicilio nuevo: correos
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'ARRIBO AUTO sin cuentas nuevas: detecta por domicilio pendiente; sin teléfonos pendientes arriba de inmediato' AS p,
+FROM (SELECT N'ARRIBO AUTO sin DMHOSTUP y sin cuentas nuevas: detecta por domicilio pendiente; sin teléfonos pendientes arriba de inmediato' AS p,
              N'0|1|0|TELEFONOS ERROR,CORREOS ERROR' AS e,
              CONCAT((SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'CUENTA'), '|',
                     (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'DOMICILIO'), '|',
                     (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'TELEFONO'), '|', @ars) AS o) x;
 TRUNCATE TABLE stg.CYBER_DELQMST_ACT; TRUNCATE TABLE stg.CYBER_PHONE_G1;
+UPDATE cfg.PARAMETRO SET VALOR = N'to_char(DMHOSTUP, ''YYYYMMDD'')' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_HOSTUP_EXPR';
 
 /* Retiro automático (sql/77): tope por segmento y hallazgo al equipo de asignaciones */
 DECLARE @rap BIT, @rap1 BIT, @cta1 VARCHAR(20), @ntdc INT = (SELECT COUNT(*) FROM dat.DAT_486 WHERE SEGMENTO2 = 'TDC');
