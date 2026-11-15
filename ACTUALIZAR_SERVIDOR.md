@@ -15,6 +15,7 @@ Tiempo aproximado: 20 minutos, sin contar la migración.
 | Histórico migrado sin fechas; PURGA sin usarse | `01_esquemas_tablas.sql`, `80_sp_migracion.sql` |
 | Exportación de FoxPro sin comillas dobles (el error de `HISTORIA.csv`, renglón 151946) | `cyber/486/EXPORTAR_MIGRACION.prg` |
 | Accesos: se saltan `sa`, los sysadmin, el dueño de la base y quien corre el script | `sql/instalacion/04_accesos_remotos.sql` |
+| `10_funciones.sql` ya se puede volver a correr sobre una base existente (antes daba `Msg 3729 … referenced by object 'fn_fecha'`) | `10_funciones.sql` |
 
 ## 0. Antes de empezar
 
@@ -52,7 +53,15 @@ Get-ChildItem .\sql\*.sql | Sort-Object Name | ForEach-Object {
 }
 ```
 
-Al terminar, `SELECT COUNT(*) FROM sys.procedures;` debe dar al menos 74.
+Si un script marca error, el ciclo se detiene ahí y **los siguientes no se instalan**: corrige y vuelve a correr el ciclo completo (todos se pueden repetir). Si te sale `Msg 3729 … fn_texto … referenced by object 'fn_fecha'`, tienes una copia vieja de `10_funciones.sql`: baja otra vez `main`.
+
+Al terminar, comprueba que quedó la versión nueva:
+
+```sql
+SELECT COUNT(*) AS PROCEDIMIENTOS FROM sys.procedures;                                       -- al menos 74
+SELECT VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'CYBER_HOSTUP_EXPR';       -- to_char(DMHOSTUP, 'YYYYMMDD')
+SELECT CASE WHEN OBJECT_DEFINITION(OBJECT_ID('ops.sp_arribo_bajar')) LIKE '%CYBER_HOSTUP%' THEN 'nuevo' ELSE 'VIEJO' END AS SP_ARRIBO_BAJAR;
+```
 
 ## 3. Reponer tus parámetros
 
@@ -94,6 +103,7 @@ EXEC ops.sp_arribo_bajar;                                -- baja DELQMST, DMHOST
 SELECT FECHA, CUENTAS FROM stg.CYBER_HOSTUP ORDER BY FECHA DESC;   -- lo mismo que val.txt, con la fecha en AAAAMMDD
 ```
 
+- Si sale vacío, revisa primero el final del paso 2: con el parámetro vacío o el procedimiento viejo no se baja nada.
 - Debe mostrar lo mismo que `val.txt` (por ejemplo `20261113` con 6,855 cuentas): `DMHOSTUP` es fecha sin hora (confirmado el 15/11) y no hay que hacer nada.
 - Si `ops.sp_arribo_bajar` marcara error en `to_char`, pon `UPDATE cfg.PARAMETRO SET VALOR = N'DMHOSTUP' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_HOSTUP_EXPR';` y repite (también se leen fechas `DD/MM/AA`).
 
@@ -103,7 +113,7 @@ Quita a `sa` y a `acfvm` de la lista de `sql/instalacion/04_accesos_remotos.sql`
 
 ## 6. Migración
 
-1. Copia el `cyber/486/EXPORTAR_MIGRACION.prg` nuevo a la PC de FoxPro y córrelo (`DO EXPORTAR_MIGRACION.prg`). En la ventana final ya no debe aparecer PURGA, y en BLACKLIST ya no debe decir que faltan TELEFONO ni FECHA.
+1. Copia el `cyber/486/EXPORTAR_MIGRACION.prg` nuevo a la PC de FoxPro y córrelo (`DO EXPORTAR_MIGRACION.prg`). En la ventana final ya no debe aparecer PURGA, y en BLACKLIST ya no debe decir que faltan TELEFONO ni FECHA. Si todavía aparecen, corriste el `.prg` viejo, y sus CSV vuelven a dar el error de `HISTORIA.csv` en el renglón 151946: el nuevo cambia las comillas dobles de los textos por sencillas. **Vuelve a exportar siempre con el nuevo**; los CSV anteriores no sirven.
 2. Copia los CSV a `C:\MIGRA486\` del servidor y revisa sin escribir:
 
 ```sql
