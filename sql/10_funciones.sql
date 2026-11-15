@@ -5,6 +5,12 @@
 SET NOCOUNT ON;
 GO
 
+/* Las funciones con SCHEMABINDING que usan a otras (fn_fecha usa fn_texto, fn_entero usa fn_importe)
+   impiden el ALTER de esas otras en una base existente (Msg 3729). Se borran aquí y se vuelven a crear abajo. */
+IF OBJECT_ID('cfg.fn_fecha', 'FN') IS NOT NULL DROP FUNCTION cfg.fn_fecha;
+IF OBJECT_ID('cfg.fn_entero', 'FN') IS NOT NULL DROP FUNCTION cfg.fn_entero;
+GO
+
 /* Texto limpio: quita espacios de no separación, tabuladores, CR/LF y
    espacios a los lados. Vacío o valores de Excel sin dato -> NULL. */
 CREATE OR ALTER FUNCTION cfg.fn_texto (@t NVARCHAR(4000))

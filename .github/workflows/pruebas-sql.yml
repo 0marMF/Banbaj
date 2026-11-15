@@ -49,6 +49,12 @@ jobs:
                 -i "/tmp/$f" 2>&1 | tee -a resultado.txt
             done
           done
+          # Segunda pasada sobre la base ya instalada: así se actualiza un servidor, y debe correr sin errores
+          for f in $(ls sql/*.sql | sort); do
+            echo "== reinstalacion Banbaj $f" | tee -a resultado.txt
+            docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d Banbaj -I -b -f 65001 \
+              -i "/tmp/$f" 2>&1 | tee -a resultado.txt
+          done
 
       - name: Pruebas de punta a punta
         run: |
