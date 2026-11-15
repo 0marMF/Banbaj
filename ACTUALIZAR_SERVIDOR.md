@@ -9,7 +9,7 @@ Tiempo aproximado: 20 minutos, sin contar la migración.
 | Cambio | Scripts |
 |---|---|
 | Proceso autónomo: depuraciones de correos y teléfonos, scripts de la actualización, retiro en CYBER, blanqueo y confirmación automáticos (la copia de la devolución a `Cyber_00` sigue a mano) | `90_semilla_486.sql`, `60`, `77`, `78` |
-| Saldos del día detectados con la consulta de `val.txt` (`DMHOSTUP` del día = cuentas del SCBSDOS) | `01_esquemas_tablas.sql` (tabla `stg.CYBER_HOSTUP`), `76_sp_arribo_cyber.sql`, semilla |
+| Saldos del día detectados con la consulta de `val.txt` (`DMHOSTUP` del día = cuentas del SCBSDOS). `DMHOSTUP` quedó confirmado como fecha sin hora (`13/11/26`, 6,855 cuentas) | `01_esquemas_tablas.sql` (tabla `stg.CYBER_HOSTUP`), `76_sp_arribo_cyber.sql`, semilla |
 | Archivos de la actualización solo en `.txt`; bases maestras solo en `.csv` | semilla (`cfg.ARCHIVO`) |
 | `cfg.sp_cyber_conectar` vuelve a crear el servidor vinculado y avisa si el origen de Oracle trae solo la IP | `74_sp_cyber.sql` |
 | Histórico migrado sin fechas; PURGA sin usarse | `01_esquemas_tablas.sql`, `80_sp_migracion.sql` |
@@ -40,7 +40,7 @@ Las credenciales (Oracle y ZIP) **no** se borran: viven cifradas en otra tabla.
 
 ## 2. Correr todos los scripts de `sql/` en orden
 
-En SSMS, conectado a `BNABAJ_486`, abre y ejecuta uno por uno, en orden de nombre, todos los `.sql` de la carpeta `sql/` (de `01_esquemas_tablas.sql` a `90_semilla_486.sql`). **No** los de `sql/instalacion/`.
+En SSMS, conectado a `BNABAJ_486`, abre y ejecuta uno por uno, en orden de nombre, todos los `.sql` de la carpeta `sql/` (de `01_esquemas_tablas.sql` a `90_semilla_486.sql`). **No** los de `sql/instalacion/`. Los archivos están en UTF-8: si al abrir uno en SSMS los acentos se ven raros (por ejemplo `Ã©`), ciérralo sin guardar y usa el comando de PowerShell de abajo, que los lee bien.
 
 O, desde PowerShell en la carpeta del repositorio (se detiene en el primer error):
 
@@ -123,7 +123,7 @@ Detalle de cada aviso: *Migración paso a paso Banbaj 486*.
 ## 7. El job
 
 - Si todavía no lo creas, corre `sql/instalacion/02_crear_job_486.sql` con `@base = N'BNABAJ_486'`.
-- **Durante el paralelo con FoxPro** apaga lo que escribe en CYBER o manda correos, para que solo FoxPro toque CYBER:
+- **Durante el paralelo con FoxPro, o mientras no funcione la conexión a CYBER del paso 4,** apaga lo que escribe en CYBER o manda correos, para que solo FoxPro toque CYBER y no lleguen hallazgos por falta de conexión:
 
 ```sql
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486'
