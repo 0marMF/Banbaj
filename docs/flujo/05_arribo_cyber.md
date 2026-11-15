@@ -18,8 +18,8 @@ Se compara contra lo pendiente y no contra las altas, para que funcione aunque u
 
 **Detección** (`ops.sp_arribo_automatico`, en cada vuelta con el día completo). Baja de CYBER el estado actual (`ops.sp_arribo_bajar` → `stg.CYBER_DELQMST_ACT`, `stg.CYBER_PHONE_G1`) y calcula:
 
-- **Correos listos:** ya llegó al menos `ARRIBO_MIN_PCT` (95 %) de las cuentas y los domicilios pendientes.
-- **Teléfonos listos:** ya llegó al menos 95 % de los teléfonos pendientes y las cuentas pendientes ya están activas.
+- **Correos listos (saldos del día):** es la validación que hace el equipo (`val.txt`): `select dmhostup, count(*) from rcvry.delqmst where dmacctg='1' and dmcompany='486' and dmstatus is null group by dmhostup`. Si las cuentas con `DMHOSTUP` del día son tantas como las del SCBSDOS (`ARRIBO_SDOS_MIN_PCT`, 100 = que coincidan), ya se subieron los saldos. La bajada queda en `stg.CYBER_HOSTUP`; la expresión de la fecha es `CYBER_HOSTUP_EXPR` (`to_char(DMHOSTUP, 'YYYYMMDD')`). Si se deja vacía, se usa lo pendiente: al menos `ARRIBO_MIN_PCT` (95 %) de las cuentas y los domicilios.
+- **Teléfonos listos:** ya llegó al menos 95 % de los teléfonos pendientes y los saldos del día ya subieron (el store de teléfonos solo trabaja cuentas activas).
 - Si no había nada pendiente, se arriba en la siguiente vuelta. `EXEC ops.sp_marcar_arribo <id>, 'FIN';` da todo por subido.
 
 **Depuración** (`ops.sp_arribar_cyber`), una vez por corrida cada una:
@@ -35,6 +35,6 @@ Se compara contra lo pendiente y no contra las altas, para que funcione aunque u
 
 **Errores:** quedan `ARRIBO CORREOS` / `ARRIBO TELEFONOS` en ERROR con el mensaje de Oracle y llega un hallazgo. No se reintenta solo; se corrige y se corre `EXEC ops.sp_arribar_cyber <id>, 'CORREOS';` (con `@solo_mostrar = 1` se ven los bloques PL/SQL sin ejecutar).
 
-**Parámetros:** `ARRIBO_AUTOMATICO`, `ARRIBO_MIN_PCT`, `CYBER_COLUMNA_DOMICILIO`, `CYBER_REMESA_TEL_COLUMNAS`, `CYBER_REMESA_MAIL_COLUMNAS`, `CYBER_SENTENCIAS_POR_BLOQUE`, `CYBER_VALIDADOR_TELEFONOS`, `BLANQUEO_AUTOMATICO`, `CONFIRMACION_AUTOMATICA`.
+**Parámetros:** `ARRIBO_AUTOMATICO`, `CYBER_HOSTUP_EXPR`, `ARRIBO_SDOS_MIN_PCT`, `ARRIBO_MIN_PCT`, `CYBER_COLUMNA_DOMICILIO`, `CYBER_REMESA_TEL_COLUMNAS`, `CYBER_REMESA_MAIL_COLUMNAS`, `CYBER_SENTENCIAS_POR_BLOQUE`, `CYBER_VALIDADOR_TELEFONOS`, `BLANQUEO_AUTOMATICO`, `CONFIRMACION_AUTOMATICA`.
 
 **Para cambiar:** la regla de detección está en `ops.sp_arribo_automatico` (variables `@ok_c`, `@ok_d`, `@ok_t`, `@listo_c`, `@listo_t`); lo que se manda a CYBER, en los scripts que arma la asignación (`sql/45_sp_telefonos.sql`, `sql/46_sp_correos_cyber.sql`) y en `ops.sp_arribar_cyber`. Los stores de Oracle están en `cyber/486/oracle/`. Pruebas: `ARRIBO BASE: …`, `ARRIBO AUTO: …` y `CONFIRMACION AUTO: …` en `tests/pruebas.sql`.

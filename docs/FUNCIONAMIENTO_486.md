@@ -20,12 +20,14 @@ Este documento explica cómo funciona por dentro. La instalación, la migración
 
 | Entra | De dónde | Cuándo |
 |---|---|---|
-| Saldos de TDC, Consumo e Hipotecario | Banco, `Q:\CYBER\C_486\<año>\<mes>\<día>\` | Lunes a viernes |
-| Pagos del día | Banco, misma carpeta | Lunes a viernes |
-| Bases maestras completas de TDC, Consumo e Hipotecario (CSV) | Banco, misma carpeta | Algunos días, siempre después de la actualización |
+| Saldos de TDC, Consumo e Hipotecario (`SERTEC_Saldos_*.txt`) | Banco, `Q:\CYBER\C_486\<año>\<mes>\<día>\` | Lunes a viernes |
+| Pagos del día (`SERTEC_Pagos*.txt`) | Banco, misma carpeta | Lunes a viernes |
+| Bases maestras completas de TDC, Consumo e Hipotecario (`BASE MAESTRA_*.csv`) | Banco, misma carpeta | Algunos días, siempre después de la actualización |
 | Solicitudes de retiro y etiquetas | Operación (CSV) | A mano |
 | Quejas de teléfonos y plan de numeración | CYBER (SQL Server) | En cada asignación |
 | Status, correos, teléfonos y pagos de CYBER | CYBER (Oracle) | A mano |
+
+Decisión 15/11: la actualización toma sus archivos solo en `.txt` y la asignación las bases maestras solo en `.csv` (el patrón de cada uno está en `cfg.ARCHIVO.PATRON_NOMBRE`). Los `.txt` del banco vienen separados por comas, con comillas opcionales, y se leen igual que un CSV.
 
 `Q:` es `\\192.168.50.13\q`.
 
@@ -114,7 +116,7 @@ En cada vuelta con el día completo, `ops.sp_arribo_automatico` revisa:
 
 | Detecta | Cómo | Hace |
 |---|---|---|
-| El SCBSDOS ya subió | Ya llegó al menos el 95 % (`ARRIBO_MIN_PCT`) de lo que le faltaba a `DELQMST` al terminar la asignación: cuentas no activas y domicilios distintos | **Correos:** baja los correos de CYBER, inserta los nuevos en `ADDRESS`, bandera 416, remesa `JSP_TAB_MAIL_REMESA_486`, `JSP_CORREOS_486` y apaga la bandera |
+| El SCBSDOS ya subió | **Validación de saldos del equipo:** las cuentas activas del 486 con `DMHOSTUP` del día son tantas como las del SCBSDOS (`ARRIBO_SDOS_MIN_PCT` = 100: que coincidan) | **Correos:** baja los correos de CYBER, inserta los nuevos en `ADDRESS`, bandera 416, remesa `JSP_TAB_MAIL_REMESA_486`, `JSP_CORREOS_486` y apaga la bandera |
 | El SCBTEL ya subió | Ya llegó al menos el 95 % de los teléfonos que le faltaban a `PHONE_G1`, y las cuentas pendientes ya están activas | **Teléfonos:** remesa `JSP_TAB_TEL_REMESA_486`, renglón del validador, `JSP_TELEFONOS_REMESA_486`, y escribe `SCBACTH_SINTEL.TXT` |
 
 Lo pendiente sale de una foto que se toma al terminar la asignación, antes de que existan los TXT (`ops.sp_arribo_base`, tabla `ops.ARRIBO_PENDIENTE`); por eso funciona aunque no haya cuentas nuevas. Si la remesa saliera vacía no se ejecuta el procedimiento de CYBER, para no inactivar todo el 486. Detalle en el diagrama 05.

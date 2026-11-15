@@ -202,3 +202,10 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [x] De vuelta al proceso autónomo: depuraciones de correos y teléfonos, scripts de la actualización, retiro en CYBER, blanqueo y confirmación automáticos (parámetros en 1).
 - [x] La copia de `MX_G1MCT_DVBJIG_*` a `Cyber_00` sigue a mano (sin acceso).
 - [x] Diagramas de cada flujo (`docs/flujo/`, fuente Mermaid en `mmd/`, imágenes en `img/`), documento *Flujo y diagramas Banbaj 486* y guía `CLAUDE.md` para modificar el proceso con Claude Code.
+
+## 13. Validación de saldos y formato de archivos (15/11)
+
+- [x] El arribo da por subidos los saldos con la validación del equipo (`val.txt`): cuentas activas del 486 con `DMHOSTUP` del día = cuentas del SCBSDOS.
+- [x] La actualización toma sus archivos en `.txt` y la asignación en `.csv`.
+- [ ] Confirmar el tipo de `DELQMST.DMHOSTUP` (si es DATE, queda `to_char(DMHOSTUP, 'YYYYMMDD')`; si es texto o número, ajustar `CYBER_HOSTUP_EXPR`).
+- [x] Columnas de PURGA (486.txt): no trae fecha de retiro; sigue sin usarse.

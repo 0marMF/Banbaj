@@ -171,6 +171,8 @@ SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clav
 | RETROCESO\_AUTOMATICO | 1 | 0 para apagarlo |
 | NEGATIVO\_MODO | CERO | Saldos negativos suben como cero |
 | ARRIBO\_AUTOMATICO | 1 | El job corre las depuraciones de correos y teléfonos al detectar el SCBSDOS y el SCBTEL (0 = a mano) |
+| CYBER\_HOSTUP\_EXPR | to\_char(DMHOSTUP, 'YYYYMMDD') | Validación de saldos del equipo: fecha de `DMHOSTUP` con la que se cuentan las cuentas activas del 486. Si `DMHOSTUP` no es DATE, ajustarla; vacío = se detecta por lo pendiente |
+| ARRIBO\_SDOS\_MIN\_PCT | 100 | % de las cuentas del SCBSDOS que deben tener `DMHOSTUP` del día (100 = que el número coincida) |
 | ARRIBO\_MIN\_PCT | 95 | Porcentaje de lo pendiente al terminar la asignación que ya debe estar en CYBER para dar por subido el SCBSDOS o el SCBTEL |
 | CYBER\_COLUMNA\_DOMICILIO | DMADDR1 | Columna de `DELQMST` con el domicilio del SCBSDOS; sirve para detectar el SCBSDOS aunque no haya cuentas nuevas (vacío = no se compara) |
 | RETIRO\_AUTOMATICO | 1 | Las devoluciones se aplican solas y se cierran (archivos, ZIP, correo, CYBER) si no superan el tope (0 = manual) |
@@ -437,7 +439,7 @@ Todo lo escribe `ops.sp_exportar_salidas`, con la cuenta del servicio de SQL Ser
 
 | Qué | Ruta | Parámetro |
 |---|---|---|
-| Archivos del banco (entrada) | `\\192.168.50.13\q\CYBER\C_486\<año>\<mes>\<día>\` (ej. `...\2026\noviembre\03\`) | `cfg.ARCHIVO.RUTA` |
+| Archivos del banco (entrada) | `\\192.168.50.13\q\CYBER\C_486\<año>\<mes>\<día>\` (ej. `...\2026\noviembre\03\`). Actualización en `.txt` (`SERTEC_Saldos_*.txt`, `SERTEC_Pagos*.txt`), asignación en `.csv` (`BASE MAESTRA_*.csv`) | `cfg.ARCHIVO.RUTA` y `PATRON_NOMBRE` |
 | Archivos planos de cada corrida | `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\` | `RUTA_SALIDA` |
 | Scripts de Oracle de esa corrida | `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\cyber\` | `RUTA_SALIDA` |
 | Copia del DAT para MIS | `\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\DAT486_<aaaammdd>.csv` | `RUTA_MIS` |
@@ -690,7 +692,7 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 | 50763–50765 | Arribo pedido sobre una corrida que no es ASIG, con un tipo que no es CORREOS/TELEFONOS o dentro de una transacción abierta | Pasar el número de la asignación y correrlo fuera de `BEGIN TRAN` |
 | 50766–50767 | La remesa salió vacía | No se ejecuta para no inactivar todos los teléfonos o correos del 486. Revisar la asignación |
 | `ARRIBO CORREOS` / `ARRIBO TELEFONOS` en ERROR (llega el correo de hallazgos) | Oracle rechazó un bloque (permisos, columnas, tabla bloqueada) | El mensaje trae el error de Oracle. Corregir y correr `EXEC ops.sp_arribar_cyber <id>, '<CORREOS\|TELEFONOS>';` |
-| El arribo se queda en `ESPERANDO ARRIBO` | No se ha subido el SCBSDOS o el SCBTEL, o llegó menos del `ARRIBO_MIN_PCT` de lo pendiente | `EXEC ops.sp_arribo_automatico;` muestra cuántas cuentas, domicilios y teléfonos pendientes ya están en CYBER. Revisar el cargador. Para darlo por subido: `EXEC ops.sp_marcar_arribo <id>, 'FIN';` |
+| El arribo se queda en `ESPERANDO ARRIBO` | No se han subido los saldos (las cuentas con `DMHOSTUP` del día no coinciden con el SCBSDOS) o el SCBTEL | `EXEC ops.sp_arribo_automatico;` muestra `SALDOS_DEL_DIA_EN_CYBER` (x de y) y los teléfonos pendientes. Si faltan pocas cuentas por un rechazo del cargador, bajar `ARRIBO_SDOS_MIN_PCT` o dar todo por subido con `EXEC ops.sp_marcar_arribo <id>, 'FIN';` |
 | Correo de hallazgos: retiro detenido por el tope | La devolución de un segmento supera el 50 % de sus cuentas | Revisar la base maestra o el archivo de saldos. Si es correcto: `EXEC ops.sp_retiro <id>; EXEC ops.sp_retiro_cerrar <id>;` |
 | Correo de hallazgos: actualización en CYBER con error | Oracle rechazó un script `ACT_*` | Corregir y `EXEC ops.sp_act_cyber <id>;` |
 | Correo de hallazgos: pagos que no subieron a CYBER | A la hora límite hay pagos del SCBPAG que no están en `PMTFIL` | Revisar si se subió el SCBPAG o si CYBER lo rechazó; la lista completa está en `ops.RECHAZO` (`CUADRE_PAGOS`) |

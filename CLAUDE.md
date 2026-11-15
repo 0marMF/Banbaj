@@ -70,9 +70,10 @@ Cada cambio de comportamiento lleva su prueba en `tests/pruebas.sql` (`INSERT IN
 2. Si cambió un flujo, actualiza su diagrama en `docs/flujo/mmd/*.mmd` y su explicación en `docs/flujo/*.md`, y corre `./tools/generar_diagramas.sh`.
 3. Regenera los Word: `./tools/generar_docs_word.sh` (pandoc con `tools/plantilla_word.docx`).
 
-## Estado actual (07/11/2026)
+## Estado actual (15/11/2026)
 
-- **Proceso autónomo:** el job corre la actualización y la asignación, escribe los archivos, avisa a asignaciones (`ARCHIVOS_LISTOS_486`), aplica las devoluciones con tope de 50 % por segmento, ejecuta en CYBER los scripts de la actualización, detecta cuándo se subieron el SCBSDOS y el SCBTEL para correr las depuraciones de correos y teléfonos, hace el blanqueo de status, manda la confirmación y cuadra los pagos.
+- **Proceso autónomo:** el job corre la actualización y la asignación, escribe los archivos, avisa a asignaciones (`ARCHIVOS_LISTOS_486`), aplica las devoluciones con tope de 50 % por segmento, ejecuta en CYBER los scripts de la actualización, detecta cuándo se subieron los saldos (cuentas con `DMHOSTUP` del día = SCBSDOS, la validación del equipo) y el SCBTEL para correr las depuraciones de correos y teléfonos, hace el blanqueo de status, manda la confirmación y cuadra los pagos.
 - **Sigue a mano:** subir los planos de ancho fijo con el cargador de CYBER (SCBSDOS, SCBTEL, SCBPAG, gescar), copiar `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` (el servidor no tiene acceso; `RUTA_DEVOLUCION_CYBER` vacío) y atender el correo de hallazgos.
 - Cada parte automática se apaga con su parámetro: `ARRIBO_AUTOMATICO`, `ACT_CYBER_AUTOMATICO`, `RETIRO_AUTOMATICO`, `RETIRO_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO`, `CONFIRMACION_AUTOMATICA`, `CUADRE_AUTOMATICO`, `EXPORTAR_AUTOMATICO`, `AVISO_ARCHIVOS`.
+- Entradas: la actualización en `.txt` y la asignación en `.csv` (`cfg.ARCHIVO.PATRON_NOMBRE`, desde `ARCHIVOS` en `tools/generar_sql_486.py`).
 - Pendientes con el equipo: `docs/FALTANTES_486.md`.
