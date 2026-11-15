@@ -13,7 +13,7 @@ Tiempo aproximado: 20 minutos, sin contar la migración.
 | Archivos de la actualización solo en `.txt`; bases maestras solo en `.csv` | semilla (`cfg.ARCHIVO`) |
 | `cfg.sp_cyber_conectar` vuelve a crear el servidor vinculado y avisa si el origen de Oracle trae solo la IP | `74_sp_cyber.sql` |
 | Histórico migrado sin fechas; PURGA sin usarse | `01_esquemas_tablas.sql`, `80_sp_migracion.sql` |
-| Exportación de FoxPro sin comillas dobles (el error de `HISTORIA.csv`, renglón 151946) | `cyber/486/EXPORTAR_MIGRACION.prg` |
+| Exportación de FoxPro sin comillas dobles ni caracteres de control (nulos, tabuladores, saltos de línea) en los campos de texto `C` y `V`: el error de `HISTORIA.csv`, renglón 151946, columna 29 (`DIRECC2`) | `cyber/486/EXPORTAR_MIGRACION.prg` (versión del 15/11 en la tarde) |
 | Accesos: se saltan `sa`, los sysadmin, el dueño de la base y quien corre el script | `sql/instalacion/04_accesos_remotos.sql` |
 | `10_funciones.sql` ya se puede volver a correr sobre una base existente (antes daba `Msg 3729 … referenced by object 'fn_fecha'`) | `10_funciones.sql` |
 
@@ -113,7 +113,23 @@ Quita a `sa` y a `acfvm` de la lista de `sql/instalacion/04_accesos_remotos.sql`
 
 ## 6. Migración
 
-1. Copia el `cyber/486/EXPORTAR_MIGRACION.prg` nuevo a la PC de FoxPro y córrelo (`DO EXPORTAR_MIGRACION.prg`). En la ventana final ya no debe aparecer PURGA, y en BLACKLIST ya no debe decir que faltan TELEFONO ni FECHA. Si todavía aparecen, corriste el `.prg` viejo, y sus CSV vuelven a dar el error de `HISTORIA.csv` en el renglón 151946: el nuevo cambia las comillas dobles de los textos por sencillas. **Vuelve a exportar siempre con el nuevo**; los CSV anteriores no sirven.
+1. Copia el `cyber/486/EXPORTAR_MIGRACION.prg` nuevo a la PC de FoxPro y córrelo (`DO EXPORTAR_MIGRACION.prg`). En la ventana final ya no debe aparecer PURGA, y en BLACKLIST ya no debe decir que faltan TELEFONO ni FECHA. Usa la versión de esta tarde: además de las comillas dobles, ahora quita los caracteres de control (nulos, tabuladores, saltos de línea) de los campos `C` y `V`. Con la anterior, `HISTORIA.csv` seguía fallando en el renglón 151946, columna 29 (`DIRECC2`). **Vuelve a exportar todo**: los CSV anteriores no sirven.
+
+   Si `HISTORIA.csv` vuelve a fallar, corre esto en PowerShell en el servidor. Muestra los renglones alrededor del error **enmascarados**: cada letra sale como `x`, cada dígito como `9` y cada carácter de control como `<NN>`, así que no aparece ningún dato del banco. Mándame lo que salga.
+
+   ```powershell
+   $err = 151946                                   # el renglón que dice el error
+   $n = 0
+   foreach ($l in [IO.File]::ReadLines('C:\MIGRA486\HISTORIA.csv', [Text.Encoding]::GetEncoding(1252))) {
+       $n++
+       if ($n -ge $err - 2) {
+           $m = $l -replace '\p{L}', 'x' -replace '\d', '9'
+           $m = [regex]::Replace($m, '[\x00-\x1F\x7F-\x9F]', { param($c) '<{0:X2}>' -f [int][char]$c.Value })
+           '{0}  comillas={1}  {2}' -f $n, ($l.Split('"').Count - 1), $m
+       }
+       if ($n -ge $err + 2) { break }
+   }
+   ```
 2. Copia los CSV a `C:\MIGRA486\` del servidor y revisa sin escribir:
 
 ```sql

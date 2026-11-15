@@ -699,7 +699,7 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 | Correo de hallazgos: blanqueo o escritura de archivos con error | Falló bajar status, ejecutar el blanqueo o escribir en `RUTA_SALIDA` | Corregir y `EXEC ops.sp_blanqueo_automatico <id>, @forzar = 1;` o `EXEC ops.sp_exportar_salidas <id>;` |
 | Correo de hallazgos: retiro con pasos pendientes | Falló escribir archivos/ZIP/correo, el retiro en CYBER o la copia de la devolución | Corregir lo que dice la tabla y `EXEC ops.sp_retiro_cerrar <id>;` |
 | ORA-12504 (el listener no recibió el SERVICE\_NAME) o 50811 | `CYBER_ORACLE_ORIGEN` trae solo la IP | Ponerlo como `IP:1521/NOMBRE_SERVICIO` (el servicio está en el `tnsnames.ora` de la PC que hoy corre sqlldr, o lo da el DBA con `lsnrctl status`) y volver a correr `EXEC cfg.sp_cyber_conectar;` |
-| `Bulk load failed due to invalid column value in CSV data file …HISTORIA.csv` | Un campo de texto del DBF trae comillas dobles o un salto de línea (FoxPro no los escapa) | Volver a exportar con la versión actual de `EXPORTAR_MIGRACION.prg`, que los limpia |
+| `Bulk load failed due to invalid column value in CSV data file …HISTORIA.csv` | Un campo de texto del DBF (`C` o `V`) trae comillas dobles o un carácter de control: nulo, tabulador o salto de línea (FoxPro no los escapa) | Volver a exportar con la versión actual de `EXPORTAR_MIGRACION.prg`, que los limpia. Si sigue, revisar el renglón enmascarado con el comando de `ACTUALIZAR_SERVIDOR.md`, paso 6 |
 | Error de proveedor OraOLEDB | Sin *Allow inprocess* o sin cliente de Oracle | Ver *Proveedor de Oracle* en la configuración |
 | No llegan correos | Falla de Database Mail | `SELECT * FROM msdb.dbo.sysmail_event_log ORDER BY log_date DESC;` y `sysmail_faileditems` |
 
