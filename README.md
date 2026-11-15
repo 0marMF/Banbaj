@@ -11,6 +11,8 @@ Levantamiento de requerimientos de los procesos de **asignación** y **actualiza
 
 Al abrirlos, Word pide actualizar los campos: di que sí para que se llene el índice. Los `.md` de `docs/` son la fuente; los `.docx` se regeneran con `tools/generar_docs_word.sh`.
 
+**Para actualizar un servidor ya instalado:** [`ACTUALIZAR_SERVIDOR.md`](ACTUALIZAR_SERVIDOR.md) dice qué volver a ejecutar y en qué orden.
+
 **Para modificar el proceso con Claude Code:** [`CLAUDE.md`](CLAUDE.md) explica la estructura, las convenciones y cómo probar; [`docs/flujo/`](docs/flujo/README.md) tiene un diagrama por flujo (fuente Mermaid en `docs/flujo/mmd/`, imágenes con `tools/generar_diagramas.sh`) con los procedimientos, parámetros y pruebas de cada parte.
 
 ## Contenido
