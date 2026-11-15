@@ -94,8 +94,8 @@ EXEC ops.sp_arribo_bajar;                                -- baja DELQMST, DMHOST
 SELECT FECHA, CUENTAS FROM stg.CYBER_HOSTUP ORDER BY FECHA DESC;   -- lo mismo que val.txt, con la fecha en AAAAMMDD
 ```
 
-- Si la última consulta muestra fechas como `20261114` con sus conteos, `DMHOSTUP` es fecha y no hay que hacer nada.
-- Si `ops.sp_arribo_bajar` marca error de tipo en `to_char`, `DMHOSTUP` no es fecha. Pon la expresión adecuada, por ejemplo `UPDATE cfg.PARAMETRO SET VALOR = N'DMHOSTUP' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_HOSTUP_EXPR';`, y repite.
+- Debe mostrar lo mismo que `val.txt` (por ejemplo `20261113` con 6,855 cuentas): `DMHOSTUP` es fecha sin hora (confirmado el 15/11) y no hay que hacer nada.
+- Si `ops.sp_arribo_bajar` marcara error en `to_char`, pon `UPDATE cfg.PARAMETRO SET VALOR = N'DMHOSTUP' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_HOSTUP_EXPR';` y repite (también se leen fechas `DD/MM/AA`).
 
 ## 5. Accesos
 

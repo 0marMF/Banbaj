@@ -393,8 +393,10 @@ BEGIN
             @n_sdos INT, @n_hoy INT, @ok_sdos BIT;
     SET @n_sdos = (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS');
     SET @n_hoy = ISNULL((SELECT SUM(CUENTAS) FROM stg.CYBER_HOSTUP
-                         WHERE TRY_CONVERT(DATE, LEFT(LTRIM(FECHA), 8), 112) >= @fecha
-                            OR TRY_CONVERT(DATE, LEFT(LTRIM(FECHA), 10), 23) >= @fecha), 0);
+                         WHERE TRY_CONVERT(DATE, LEFT(LTRIM(FECHA), 8), 112) >= @fecha      -- AAAAMMDD (to_char de fábrica)
+                            OR TRY_CONVERT(DATE, LEFT(LTRIM(FECHA), 10), 23) >= @fecha     -- AAAA-MM-DD
+                            OR TRY_CONVERT(DATE, LEFT(LTRIM(FECHA), 10), 103) >= @fecha    -- DD/MM/AAAA
+                            OR TRY_CONVERT(DATE, LEFT(LTRIM(FECHA), 8), 3) >= @fecha), 0); -- DD/MM/AA, como lo muestra val.txt
     SET @ok_sdos = CASE WHEN @n_sdos > 0 AND 100.0 * @n_hoy >= @pct_sdos * @n_sdos THEN 1 ELSE 0 END;
 
     SET @ok_c = CASE WHEN @p_c = 0 OR 100.0 * @r_c / @p_c >= @min THEN 1 ELSE 0 END;

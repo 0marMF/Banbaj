@@ -300,7 +300,7 @@ TRUNCATE TABLE stg.CYBER_HOSTUP;
 INSERT INTO stg.CYBER_HOSTUP (FECHA, CUENTAS) VALUES (N'20261030', 1), (N'20261102', @nsdos - 1);       -- todavía no coincide
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- saldos incompletos: espera
 TRUNCATE TABLE stg.CYBER_HOSTUP;
-INSERT INTO stg.CYBER_HOSTUP (FECHA, CUENTAS) VALUES (N'20261102', @nsdos);                            -- fecha del día y número igual al SCBSDOS
+INSERT INTO stg.CYBER_HOSTUP (FECHA, CUENTAS) VALUES (N'02/11/26', @nsdos);                            -- fecha del día (DD/MM/AA, como val.txt) y número igual al SCBSDOS
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- saldos subidos: correos (sin servidor vinculado -> ERROR)
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- correos ya intentados; teléfonos esperando
 INSERT INTO stg.CYBER_PHONE_G1 (CUENTA, AREA, TELEFONO) SELECT CUENTA2, AREA, TELEFONO FROM ops.TELEFONO WHERE ID_CORRIDA = @id;

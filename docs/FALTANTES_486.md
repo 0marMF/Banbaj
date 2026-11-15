@@ -207,5 +207,5 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 
 - [x] El arribo da por subidos los saldos con la validación del equipo (`val.txt`): cuentas activas del 486 con `DMHOSTUP` del día = cuentas del SCBSDOS.
 - [x] La actualización toma sus archivos en `.txt` y la asignación en `.csv`.
-- [ ] Confirmar el tipo de `DELQMST.DMHOSTUP` (si es DATE, queda `to_char(DMHOSTUP, 'YYYYMMDD')`; si es texto o número, ajustar `CYBER_HOSTUP_EXPR`).
+- [x] (15/11) `DELQMST.DMHOSTUP` es fecha sin hora: `val.txt` da un solo renglón (`13/11/26`, 6,855 cuentas activas del 486). Queda `to_char(DMHOSTUP, 'YYYYMMDD')`; también se acepta `DD/MM/AA`.
 - [x] Columnas de PURGA (486.txt): no trae fecha de retiro; sigue sin usarse.
