@@ -415,7 +415,7 @@ FROM (SELECT N'MIS: DAT en CSV con comillas' AS p, N'8|"100","486","' AS e,
 
 /* Bases maestras completas (todas las columnas) */
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'BASE: maestras guardadas completas (renglones, encabezados y un valor; solo la última)' AS p, N'4|96|1000000001|7|107|1' AS e,
+FROM (SELECT N'BASE: maestras guardadas completas (renglones, encabezados y un valor; solo la última)' AS p, N'4|100|1000000001|7|115|1' AS e,
              CONCAT((SELECT REGISTROS FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @id AND CODIGO = 'MAESTRA_TDC'), '|',
                     (SELECT COUNT(*) FROM dat.BASE_RECIBIDA_ARCHIVO a CROSS APPLY OPENJSON(a.ENCABEZADOS) j WHERE a.ID_CORRIDA = @id AND a.CODIGO = 'MAESTRA_TDC'), '|',
                     (SELECT JSON_VALUE(DATOS, '$."ACC_NUM"') FROM dat.BASE_RECIBIDA WHERE ID_CORRIDA = @id AND CODIGO = 'MAESTRA_TDC' AND FILA = 2), '|',
