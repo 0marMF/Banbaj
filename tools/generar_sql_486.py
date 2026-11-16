@@ -106,9 +106,9 @@ GO
 # Decisión 15/11: la asignación toma las bases maestras en .csv y la actualización sus archivos en .txt
 # (los .txt del banco vienen separados por comas, con comillas opcionales, igual que un CSV).
 ARCHIVOS = [
-    ("MAESTRA_TDC", "ASIG", "TDC", "BASE MAESTRA[_]TARJETA%.csv", 96, "stg.ENT_MAESTRA_TDC", "RIESGO", 0, 10, 1,
+    ("MAESTRA_TDC", "ASIG", "TDC", "BASE MAESTRA[_]TARJETA%.csv", 100, "stg.ENT_MAESTRA_TDC", "RIESGO", 0, 10, 1,
      "Base maestra TDC guardada como CSV. Devolución por RIESGO (asig_bases)."),
-    ("MAESTRA_CONSUMO", "ASIG", "CONSUMO", "BASE MAESTRA[_]CONSUMO%.csv", 107, "stg.ENT_MAESTRA_CONSUMO", "DES_PROD", 0, 20, 1,
+    ("MAESTRA_CONSUMO", "ASIG", "CONSUMO", "BASE MAESTRA[_]CONSUMO%.csv", 115, "stg.ENT_MAESTRA_CONSUMO", "DES_PROD", 0, 20, 1,
      "Base maestra Consumo guardada como CSV. Devolución por DES_PROD (asig_bases)."),
     ("MAESTRA_HIPO", "ASIG", "HIPOTECARIO", "BASE MAESTRA[_]HIPOTECARIO%.csv", 118, "stg.ENT_MAESTRA_HIPO", "DES_PROD", 0, 30, 1,
      "Sin archivo de ejemplo: columnas tomadas de la hoja RAW, confirmar NUM_COLUMNAS y encabezados."),
@@ -165,7 +165,7 @@ COLUMNAS = {
         ("SDO_VDO", "Saldo PRIME total asignado al 00/00/0000", N, 0, True, None),
         ("SDO_ACT", "Saldo actualizado VEN4/CCAS al 00/00/0000", N, 1, True, None),
         ("SALDO1", "MONTO A CUBRIR 1 PAGO LIQUIDACION", N, 0, False, None),
-        ("SALDO2", "MONTO A CUBRIR PLAZOS PAGO <= 6 LIQUIDACION", N, 0, False, None),
+        ("SALDO2", "MONTO A CUBRIR PLAZOS PAGO LIQUIDACION", N, 0, False, "Layout del 11/11/2026: antes 'MONTO A CUBRIR PLAZOS PAGO <= 6 LIQUIDACION'"),
         ("ENFOQUE", "ENFOQUE_LIQUIDACION_1_PAGO", C(60), 0, False, "Lo usa la regla de TRAMO 90+ (CAS / VEN). ETIQUETA y REE ya no salen de la base: llegan por etiquetado y estructura (30/10)"),
         ("CORREO1", "EMAIL 1", C(100), 0, False, None),
         ("CORREO2", "EMAIL 2", C(100), 0, False, None),
@@ -191,7 +191,7 @@ COLUMNAS = {
         ("SDO_ACT", "ADEUDO TOTAL AL 00/00/0000", N, 1, True, None),
         ("SDO_VDO", "MONTO VENCIDO AL 00/00/0000", N, 0, True, None),
         ("SALDO1", "MONTO A 1 PAGO LIQUIDACION", N, 0, False, None),
-        ("SALDO2", "MONTO A PAGO LIQUIDACION PLAZOS <= 6 MESES", N, 0, False, None),
+        ("SALDO2", "MONTO A PAGO LIQUIDACION PLAZOS", N, 0, False, "Layout del 13/11/2026: antes 'MONTO A PAGO LIQUIDACION PLAZOS <= 6 MESES'"),
         ("PVS", "DIAS MORA AL 00/00/0000", PVS, 0, True, None),
         ("SEGMENTO", "ESTATUS AL 00/00/0000", C(30), 0, True, None),
         ("TRAMO", "TRAMO AL 00/00/0000", C(20), 0, True, None),
