@@ -29,6 +29,8 @@ Este documento explica cómo funciona por dentro. La instalación, la migración
 
 Decisión 15/11: la actualización toma sus archivos solo en `.txt` y la asignación las bases maestras solo en `.csv` (el patrón de cada uno está en `cfg.ARCHIVO.PATRON_NOMBRE`). Los `.txt` del banco vienen separados por comas, con comillas opcionales, y se leen igual que un CSV.
 
+Cada columna de las bases maestras se busca por su **encabezado** (`cfg.ARCHIVO_COLUMNA.PATRON_ENCABEZADO`), no por su posición: si el banco las cambia de lugar no hay que hacer nada. Solo hay que tocar la matriz (`COLUMNAS` en `tools/generar_sql_486.py`) si cambia el nombre de una columna que usamos, y `NUM_COLUMNAS` si cambia el total de columnas. Layout vigente desde el 11/11/2026: TDC con 100 columnas y Consumo con 115. `SALDO2` se lee de `MONTO A CUBRIR PLAZOS PAGO LIQUIDACION` (TDC) y `MONTO A PAGO LIQUIDACION PLAZOS` (Consumo), que antes traían la leyenda `<= 6`.
+
 `Q:` es `\\192.168.50.13\q`.
 
 | Sale | Para qué |
