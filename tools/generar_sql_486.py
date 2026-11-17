@@ -682,7 +682,8 @@ LISTAS_RETIRADAS = ["OPERACION_PAGOS_486", "ASIG_EXPRESS_486", "PAGOS_NO_ACTUALI
 
 # ---------------------------------------------------------------- escritura
 def sql_semilla(scb, dat):
-    L = ["/* =====================================================================",
+    L = ["USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)", "GO",
+         "/* =====================================================================",
          "   Banbaj · 90 Semilla del cliente 486 (generado por tools/generar_sql_486.py)",
          "   Re-ejecutable: borra y vuelve a cargar la configuración del 486.",
          "   Revisar antes de producción: RUTA de cfg.ARCHIVO, PERFIL_DBMAIL,",

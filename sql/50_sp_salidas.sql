@@ -1,3 +1,5 @@
+USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
+GO
 /* =====================================================================
    Banbaj · 50 Archivos planos de salida
    ---------------------------------------------------------------------

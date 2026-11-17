@@ -1,3 +1,5 @@
+USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
+GO
 /* =====================================================================
    Banbaj · 46 Correos para CYBER (email.PRG + act_mail.prg)
    ---------------------------------------------------------------------

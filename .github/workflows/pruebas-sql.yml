@@ -39,20 +39,28 @@ jobs:
       - name: Crear objetos (sql/*.sql en orden)
         run: |
           set -o pipefail
-          docker cp sql sql:/tmp/sql
-          docker cp tests sql:/tmp/tests
           : > resultado.txt
+          # Cada script empieza con USE [BNABAJ_486] (la base del servidor); aquí se cambia por la base de prueba
+          for f in sql/*.sql sql/instalacion/03_parametros_y_credenciales.sql; do
+            grep -q '^USE \[BNABAJ_486\];' "$f" || { echo "FALLA  $f no empieza con USE [BNABAJ_486]" | tee -a resultado.txt; exit 1; }
+          done
           for db in Banbaj BanbajMig; do
-            for f in $(ls sql/*.sql | sort); do
+            mkdir -p "ci_sql/$db"
+            for f in sql/*.sql; do sed "s/^USE \[BNABAJ_486\];/USE [$db];/" "$f" > "ci_sql/$db/$(basename "$f")"; done
+          done
+          docker cp ci_sql sql:/tmp/ci_sql
+          docker cp tests sql:/tmp/tests
+          for db in Banbaj BanbajMig; do
+            for f in $(ls ci_sql/$db/*.sql | sort); do
               echo "== $db $f" | tee -a resultado.txt
-              docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d $db -I -b -f 65001 \
+              docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -I -b -f 65001 \
                 -i "/tmp/$f" 2>&1 | tee -a resultado.txt
             done
           done
           # Segunda pasada sobre la base ya instalada: así se actualiza un servidor, y debe correr sin errores
-          for f in $(ls sql/*.sql | sort); do
+          for f in $(ls ci_sql/Banbaj/*.sql | sort); do
             echo "== reinstalacion Banbaj $f" | tee -a resultado.txt
-            docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d Banbaj -I -b -f 65001 \
+            docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -I -b -f 65001 \
               -i "/tmp/$f" 2>&1 | tee -a resultado.txt
           done
 
@@ -84,6 +92,7 @@ jobs:
           s = re.sub(r"INSERT INTO @accesos \(LOGIN, NIVEL, CLAVE\) VALUES.*?;\n",
                      "INSERT INTO @accesos (LOGIN, NIVEL, CLAVE) VALUES (N'ci_operador', 'OPERADOR', N'%s'), (N'ci_consulta', 'CONSULTA', N'%s'), (N'sa', 'OPERADOR', NULL);\n" % (sys.argv[1], sys.argv[2]),
                      s, count=1, flags=re.S)
+          s = s.replace("DECLARE @base SYSNAME = N'BNABAJ_486';", "DECLARE @base SYSNAME = N'Banbaj';")
           open('/tmp/04_ci.sql', 'w', encoding='utf-8').write(s)
           EOF
           docker cp /tmp/04_ci.sql sql:/tmp/04_ci.sql

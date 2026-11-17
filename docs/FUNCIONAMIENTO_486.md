@@ -45,7 +45,7 @@ Cada columna de las bases maestras se busca por su **encabezado** (`cfg.ARCHIVO_
 
 | Pieza | Qué es |
 |---|---|
-| Base de datos `Banbaj` | Todas las tablas, catálogos y procedimientos |
+| Base de datos `BNABAJ_486` | Todas las tablas, catálogos y procedimientos |
 | Job **Banbaj 486 diario** | Agente de SQL Server: cada 30 minutos, lunes a viernes de 07:00 a 22:00, llama `ops.sp_diario_486` |
 | Servidor vinculado `[CYBER]` | Oracle de CYBER (proveedor OraOLEDB). Usuario y contraseña cifrados en la base |
 | Servidor vinculado `[192.168.50.53]` | SQL Server de CYBER donde están `telbaj`, `telbaj1` y `TENOVA1` |
@@ -106,6 +106,7 @@ En un día normal: llega ARCHIVOS\_LISTOS\_486 → asignaciones sube los planos 
 Todo paso automático corre una vez por corrida, deja su paso en la bitácora y, si falla, avisa con el correo de hallazgos; no se reintenta solo. Cada uno se puede correr a mano con el número de corrida (`ops.sp_arribar_cyber`, `ops.sp_act_cyber`, `ops.sp_retiro_cerrar`, `ops.sp_blanqueo_automatico`) y cada uno se apaga con su parámetro. Para volver a dejar solo la generación de archivos:
 
 ```sql
+USE [BNABAJ_486];
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486'
    AND CLAVE IN ('ARRIBO_AUTOMATICO', 'ACT_CYBER_AUTOMATICO', 'BLANQUEO_AUTOMATICO', 'CONFIRMACION_AUTOMATICA', 'RETIRO_CYBER_AUTOMATICO');
 ```
@@ -304,6 +305,7 @@ C:\BANBAJ\486\SALIDA\
 Si el equipo que arriba no entra al disco `C:` del servidor, hay dos opciones: compartir `C:\BANBAJ\486\SALIDA\` en la red, o cambiar `RUTA_SALIDA` a una carpeta de red (por ejemplo, una carpeta en `\\192.168.50.13\q\`). La cuenta del servicio de SQL Server necesita permiso de escritura ahí.
 
 ```sql
+USE [BNABAJ_486];
 UPDATE cfg.PARAMETRO SET VALOR = N'\\192.168.50.13\q\BANBAJ\486\SALIDA\' WHERE CLIENTE = '486' AND CLAVE = 'RUTA_SALIDA';
 EXEC ops.sp_exportar_salidas @id, @carpeta = N'D:\otra\carpeta\';   -- solo para una vez
 ```
@@ -438,6 +440,7 @@ Todos los que cambian datos tienen modo de revisión (`@confirmar = 0` o `@solo_
 # Dónde ver qué pasó
 
 ```sql
+USE [BNABAJ_486];
 SELECT TOP 10 ID_CORRIDA, PROCESO, FECHA_PROCESO, ESTATUS, MENSAJE FROM ops.CORRIDA ORDER BY ID_CORRIDA DESC;
 SELECT PASO, ESTATUS, REGISTROS, MENSAJE FROM ops.BITACORA WHERE ID_CORRIDA = @id ORDER BY ID;
 SELECT * FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id;

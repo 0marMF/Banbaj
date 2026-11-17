@@ -43,6 +43,7 @@ Antes de cambiar un proceso, lee su diagrama en `docs/flujo/` (índice en `docs/
 
 ## Convenciones
 
+- **Cada script empieza con `USE [BNABAJ_486];` y `GO`** (los de `sql/` y `sql/instalacion/03`; la semilla lo trae desde `tools/generar_sql_486.py`), y cada bloque de SQL de los documentos que toque la base, también. La CI revisa que esté y lo cambia por la base de prueba.
 - SQL Server 2017 o superior: `CREATE OR ALTER`, `TRY/CATCH` con `THROW`, `STRING_AGG`, `OPENJSON`. Las tablas se crean con `IF OBJECT_ID(...) IS NULL`, y las columnas nuevas con `IF COL_LENGTH(...) IS NULL ALTER TABLE`, para que todo se pueda volver a correr sobre una base existente.
 - **Corrida:** cada proceso es una corrida (`ops.sp_corrida_iniciar` / `ops.sp_corrida_finalizar`). Cada paso deja un renglón con `EXEC ops.sp_log @id, '<PASO>', 'OK|AVISO|ERROR', @registros, @mensaje`. Si la corrida falla, `ops.sp_retroceso_automatico` restaura el DAT.
 - **Lo que pasa después de la corrida** (archivos, CYBER, correos) va fuera del `TRY` principal y en su propio `TRY/CATCH`: si falla no cambia el estatus de la corrida, queda `ERROR` en la bitácora y se avisa con `mail.sp_hallazgo`.

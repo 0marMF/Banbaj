@@ -1,3 +1,5 @@
+USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
+GO
 /* =====================================================================
    Banbaj · 78 Pasos que antes hacía el operador y ahora hace el job (decisión 02/11)
    ---------------------------------------------------------------------

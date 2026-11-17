@@ -1,3 +1,5 @@
+USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
+GO
 /* =====================================================================
    Banbaj · 45 Teléfonos para CYBER (telbnx.prg + act_phone.prg)
    ---------------------------------------------------------------------

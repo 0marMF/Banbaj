@@ -16,6 +16,7 @@ Tiempo aproximado: 20 minutos, sin contar la migración.
 | Exportación de FoxPro sin comillas dobles ni caracteres de control (nulos, tabuladores, saltos de línea) en los campos de texto `C` y `V`: el error de `HISTORIA.csv`, renglón 151946, columna 29 (`DIRECC2`) | `cyber/486/EXPORTAR_MIGRACION.prg` (versión del 15/11 en la tarde) |
 | Accesos: se saltan `sa`, los sysadmin, el dueño de la base y quien corre el script | `sql/instalacion/04_accesos_remotos.sql` |
 | Layout nuevo de las bases maestras (11/11): TDC con 100 columnas y Consumo con 115; `SALDO2` sin la leyenda `<= 6`. Las columnas que solo cambiaron de lugar no requieren nada | semilla (`cfg.ARCHIVO` y `cfg.ARCHIVO_COLUMNA`) |
+| Todos los scripts de `sql/`, el `03` de instalación y cada bloque de esta guía empiezan con `USE [BNABAJ_486];`: ya no se van a `master` si se abren en una ventana nueva de SSMS. `@base` de los scripts 02 y 04 ya dice `BNABAJ_486` | todos los de `sql/`, `sql/instalacion/02`, `03` y `04` |
 | `10_funciones.sql` ya se puede volver a correr sobre una base existente (antes daba `Msg 3729 … referenced by object 'fn_fecha'`) | `10_funciones.sql` |
 
 ## 0. Antes de empezar
@@ -42,7 +43,7 @@ Las credenciales (Oracle y ZIP) **no** se borran: viven cifradas en otra tabla.
 
 ## 2. Correr todos los scripts de `sql/` en orden
 
-En SSMS, conectado a `BNABAJ_486`, abre y ejecuta uno por uno, en orden de nombre, todos los `.sql` de la carpeta `sql/` (de `01_esquemas_tablas.sql` a `90_semilla_486.sql`). **No** los de `sql/instalacion/`. Los archivos están en UTF-8: si al abrir uno en SSMS los acentos se ven raros (por ejemplo `Ã©`), ciérralo sin guardar y usa el comando de PowerShell de abajo, que los lee bien.
+En SSMS abre y ejecuta uno por uno (cada uno empieza con `USE [BNABAJ_486];`), en orden de nombre, todos los `.sql` de la carpeta `sql/` (de `01_esquemas_tablas.sql` a `90_semilla_486.sql`). **No** los de `sql/instalacion/`. Los archivos están en UTF-8: si al abrir uno en SSMS los acentos se ven raros (por ejemplo `Ã©`), ciérralo sin guardar y usa el comando de PowerShell de abajo, que los lee bien.
 
 O, desde PowerShell en la carpeta del repositorio (se detiene en el primer error):
 
@@ -59,6 +60,7 @@ Si un script marca error, el ciclo se detiene ahí y **los siguientes no se inst
 Al terminar, comprueba que quedó la versión nueva:
 
 ```sql
+USE [BNABAJ_486];
 SELECT COUNT(*) AS PROCEDIMIENTOS FROM sys.procedures;                                       -- al menos 74
 SELECT VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'CYBER_HOSTUP_EXPR';       -- to_char(DMHOSTUP, 'YYYYMMDD')
 SELECT CASE WHEN OBJECT_DEFINITION(OBJECT_ID('ops.sp_arribo_bajar')) LIKE '%CYBER_HOSTUP%' THEN 'nuevo' ELSE 'VIEJO' END AS SP_ARRIBO_BAJAR;
@@ -69,6 +71,7 @@ SELECT CASE WHEN OBJECT_DEFINITION(OBJECT_ID('ops.sp_arribo_bajar')) LIKE '%CYBE
 Revisa qué valores tuyos cambió la semilla:
 
 ```sql
+USE [BNABAJ_486];
 SELECT a.CLAVE, a.VALOR AS TUYO, p.VALOR AS NUEVO
 FROM dbo.PARAMETRO_ANTES_20261115 a
 JOIN cfg.PARAMETRO p ON p.CLIENTE = '486' AND p.CLAVE = a.CLAVE
@@ -81,6 +84,7 @@ ORDER BY a.CLAVE;
 - **No** repongas `ARRIBO_AUTOMATICO`, `ACT_CYBER_AUTOMATICO`, `RETIRO_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO`, `CONFIRMACION_AUTOMATICA` ni `RUTA_DEVOLUCION_CYBER`: sus valores nuevos (1, 1, 1, 1, 1 y vacío) son el proceso autónomo.
 
 ```sql
+USE [BNABAJ_486];
 UPDATE cfg.PARAMETRO SET VALOR = N'192.168.90.10:1521/NOMBRE_SERVICIO' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_ORACLE_ORIGEN';
 -- UPDATE cfg.PARAMETRO SET VALOR = N'<tu valor>' WHERE CLIENTE = '486' AND CLAVE = N'<clave>';   -- uno por cada parámetro tuyo
 ```
@@ -99,6 +103,7 @@ Ese script guarda las credenciales cifradas, corre `EXEC cfg.sp_cyber_conectar;`
 Prueba la conexión y la validación de saldos:
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_bajar_cyber 'STATUS', @solo_bajar = 1;      -- debe decir "STATUS: n registros bajados"
 EXEC ops.sp_arribo_bajar;                                -- baja DELQMST, DMHOSTUP y PHONE_G1
 SELECT FECHA, CUENTAS FROM stg.CYBER_HOSTUP ORDER BY FECHA DESC;   -- lo mismo que val.txt, con la fecha en AAAAMMDD
@@ -134,12 +139,14 @@ Quita a `sa` y a `acfvm` de la lista de `sql/instalacion/04_accesos_remotos.sql`
 2. Copia los CSV a `C:\MIGRA486\` del servidor y revisa sin escribir:
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\';
 ```
 
 3. Si los avisos están bien, carga (si ya habías cargado algo, agrega `@reemplazar = 1`):
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;
 ```
 
@@ -153,6 +160,7 @@ Detalle de cada aviso: *Migración paso a paso Banbaj 486*.
 - **Durante el paralelo con FoxPro, o mientras no funcione la conexión a CYBER del paso 4,** apaga lo que escribe en CYBER o manda correos, para que solo FoxPro toque CYBER y no lleguen hallazgos por falta de conexión:
 
 ```sql
+USE [BNABAJ_486];
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486'
    AND CLAVE IN ('ARRIBO_AUTOMATICO', 'RETIRO_AUTOMATICO', 'RETIRO_CYBER_AUTOMATICO', 'ACT_CYBER_AUTOMATICO',
                  'BLANQUEO_AUTOMATICO', 'CONFIRMACION_AUTOMATICA', 'CUADRE_AUTOMATICO');
@@ -167,6 +175,7 @@ EXEC msdb.dbo.sp_update_job @job_name = N'Banbaj 486 diario', @enabled = 1;
 ## 8. Verificar
 
 ```sql
+USE [BNABAJ_486];
 SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486'
  AND CLAVE IN ('CYBER_ORACLE_ORIGEN', 'CYBER_HOSTUP_EXPR', 'ARRIBO_SDOS_MIN_PCT', 'ARRIBO_AUTOMATICO', 'ACT_CYBER_AUTOMATICO',
                'RETIRO_AUTOMATICO', 'RETIRO_CYBER_AUTOMATICO', 'BLANQUEO_AUTOMATICO', 'CONFIRMACION_AUTOMATICA',

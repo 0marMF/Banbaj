@@ -3,6 +3,7 @@
 Cada corrida deja los archivos planos en `ops.SALIDA_LINEA` y los scripts de Oracle en `ops.CYBER_SCRIPT`. Para tenerlos en disco:
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_exportar_salidas <ID>;
 ```
 
@@ -31,6 +32,7 @@ Diagrama: `docs/flujo/05_arribo_cyber.md` (y su imagen en `docs/flujo/img/`).
 Los procedimientos ejecutan en CYBER, por el servidor vinculado `[CYBER]`, las mismas sentencias que quedan en la carpeta `cyber\` (`sql/76_sp_arribo_cyber.sql`), sin sqlldr. Si algo falla queda `ERROR` en la bitácora, llega el correo de hallazgos y no se reintenta solo. Se corrige y se corre a mano:
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_arribar_cyber <ID>, 'CORREOS', @solo_mostrar = 1;   -- ver los bloques sin ejecutar
 EXEC ops.sp_arribar_cyber <ID>, 'CORREOS';                      -- o 'TELEFONOS'
 EXEC ops.sp_act_cyber <ID>;                                     -- scripts de la actualización

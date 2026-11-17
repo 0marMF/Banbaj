@@ -1,5 +1,7 @@
+USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
+GO
 /* =====================================================================
-   Banbaj · Instalación 3 de 3 · Rutas, Oracle y credenciales (en la base Banbaj)
+   Banbaj · Instalación 3 de 3 · Rutas, Oracle y credenciales (en la base BNABAJ_486)
    ---------------------------------------------------------------------
    Reemplaza cada <<…>> antes de correrlo; el script se detiene si queda alguno.
    Las contraseñas se guardan cifradas; borra este archivo editado al terminar

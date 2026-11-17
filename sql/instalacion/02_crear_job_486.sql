@@ -9,7 +9,7 @@
    ===================================================================== */
 USE msdb;
 GO
-DECLARE @base SYSNAME = N'Banbaj', @job SYSNAME = N'Banbaj 486 diario', @id UNIQUEIDENTIFIER;
+DECLARE @base SYSNAME = N'BNABAJ_486', @job SYSNAME = N'Banbaj 486 diario', @id UNIQUEIDENTIFIER;
 
 IF EXISTS (SELECT 1 FROM msdb.dbo.sysjobs WHERE name = @job)
     EXEC msdb.dbo.sp_delete_job @job_name = @job;

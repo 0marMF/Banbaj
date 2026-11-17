@@ -46,8 +46,8 @@ La cuenta del servicio no ve unidades mapeadas como `Q:`: por eso las rutas ya v
 
 La base se crea vacía y se llena corriendo los archivos de `sql/` en orden alfabético. Todos se pueden volver a correr: crean lo que falta y actualizan los procedimientos.
 
-1. Crear la base: `CREATE DATABASE Banbaj;` (o el nombre que se decida; el job lo usa).
-2. Correr los scripts de `sql/` en este orden, conectado a esa base:
+1. Crear la base: `CREATE DATABASE BNABAJ_486;`. Todos los scripts de `sql/` y `sql/instalacion/03` empiezan con `USE [BNABAJ_486];`, así que se pueden abrir y ejecutar tal cual en SSMS, sin que se vayan a `master`. Si la base lleva otro nombre, hay que cambiar esa primera línea en cada script y `@base` en los scripts 02 y 04.
+2. Correr los scripts de `sql/` en este orden:
    - `01_esquemas_tablas.sql`, `02_catalogos.sql`, `03_correo.sql`, `05_tabla_dat_486.sql`
    - `10_funciones.sql`, `12_credenciales.sql` (crea la llave de cifrado de la base)
    - `20_sp_comunes.sql` … `80_sp_migracion.sql`
@@ -55,12 +55,13 @@ La base se crea vacía y se llena corriendo los archivos de `sql/` en orden alfa
 3. Con `sqlcmd`, usar siempre `-I` y `-f 65001` (los scripts están en UTF-8). En SSMS basta con abrir y ejecutar cada archivo.
 
 ```
-for %f in (sql\*.sql) do sqlcmd -S <servidor> -d Banbaj -E -I -b -f 65001 -i "%f"
+for %f in (sql\*.sql) do sqlcmd -S <servidor> -d BNABAJ_486 -E -I -b -f 65001 -i "%f"
 ```
 
 4. Verificar:
 
 ```sql
+USE [BNABAJ_486];
 SELECT COUNT(*) AS PROCEDIMIENTOS FROM sys.procedures;          -- más de 60
 SELECT CODIGO, LISTA, PERFIL_DBMAIL FROM mail.PLANTILLA;           -- 8 plantillas, perfil asig.486.cdmx
 SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486';     -- parámetros del 486
@@ -130,6 +131,7 @@ Todo lo que lee o escribe archivos (`BULK INSERT`, OLE, 7-Zip) lo hace la **cuen
 4. Probar desde SQL Server (escribe y borra un archivo de prueba):
 
    ```sql
+   USE [BNABAJ_486];
    EXEC xp_cmdshell 'echo prueba > \\192.168.50.1\Cyber_00\dev\prueba_banbaj.txt && del \\192.168.50.1\Cyber_00\dev\prueba_banbaj.txt && echo OK';
    EXEC xp_cmdshell 'dir \\192.168.50.13\q\CYBER\C_486';
    ```
@@ -138,7 +140,7 @@ Todo lo que lee o escribe archivos (`BULK INSERT`, OLE, 7-Zip) lo hace la **cuen
 
 ### 2. Job diario (`02_crear_job_486.sql`)
 
-Crea el job **Banbaj 486 diario** en el Agente de SQL Server. Corre un solo paso, `EXEC ops.sp_diario_486;`, en la base Banbaj, cada 30 minutos de lunes a viernes entre 07:00 y 22:00. El procedimiento revisa si ya llegaron los archivos y si ya corrió hoy, así que repetirlo no duplica nada. Si la base tiene otro nombre, cambiar `@base` al inicio del script.
+Crea el job **Banbaj 486 diario** en el Agente de SQL Server. Corre un solo paso, `EXEC ops.sp_diario_486;`, en la base BNABAJ_486, cada 30 minutos de lunes a viernes entre 07:00 y 22:00. El procedimiento revisa si ya llegaron los archivos y si ya corrió hoy, así que repetirlo no duplica nada. Si la base tiene otro nombre, cambiar `@base` al inicio del script.
 
 ### 3. Rutas, Oracle y credenciales (`03_parametros_y_credenciales.sql`)
 
@@ -146,7 +148,7 @@ Crea el job **Banbaj 486 diario** en el Agente de SQL Server. Corre un solo paso
    - origen de Oracle de CYBER (`host:1521/servicio`)
    - usuario y contraseña de Oracle
    - contraseña del ZIP; acepta `{MM}` y `{AAAA}` para el mes y el año
-2. Correrlo en la base Banbaj. Hace lo siguiente:
+2. Correrlo (ya trae `USE [BNABAJ_486];`). Hace lo siguiente:
    - Guarda las credenciales cifradas.
    - Crea el servidor vinculado `[CYBER]` y prueba una bajada de STATUS.
 3. Borrar la copia editada. Nunca se sube al repo.
@@ -154,6 +156,7 @@ Crea el job **Banbaj 486 diario** en el Agente de SQL Server. Corre un solo paso
 Para cambiar una contraseña después, basta con otro `INSERT` a la vista de captura, que reemplaza la anterior:
 
 ```sql
+USE [BNABAJ_486];
 INSERT INTO cfg.CAPTURA_CREDENCIAL (SISTEMA, USUARIO, CLAVE) VALUES ('CYBER_ORACLE', N'usuario', N'nueva');
 SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clave se ve como ********
 ```
@@ -301,7 +304,7 @@ Un db\_owner podría quitarse a sí mismo la negación sobre las credenciales. E
 | --- | --- |
 | 53 / "No se encontró el servidor" | TCP/IP apagado, firewall cerrado o nombre mal escrito |
 | 18456 | Usuario sin inicio de sesión, contraseña mal o modo mixto apagado (ver `sys.server_principals` y el log de errores) |
-| 4060 | El inicio de sesión no tiene usuario en la base Banbaj (correr el script 04) |
+| 4060 | El inicio de sesión no tiene usuario en la base BNABAJ_486 (correr el script 04) |
 | Cadena de certificados no confiable | Marcar *Confiar en el certificado del servidor* |
 
 ## Migración de los datos de FoxPro
@@ -337,6 +340,7 @@ Ya no se migran: **TELBAJ** y **PNC** (se leen de CYBER en cada asignación), **
 ### Paso 2. Revisar sin escribir
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\';
 ```
 
@@ -347,6 +351,7 @@ Si los acentos salen mal, probar con `@codepage = '1252'`.
 ### Paso 3. Cargar
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;
 ```
 
@@ -358,6 +363,7 @@ EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;
 ### Paso 4. Verificar
 
 ```sql
+USE [BNABAJ_486];
 SELECT COUNT(*) FROM dat.DAT_486;                                   -- = registros de DAT.DBF
 SELECT COUNT(*) FROM dat.HISTORIA_FOLIO WHERE CLIENTE = '486';
 SELECT COUNT(*) FROM dat.PAGO_ARRIBADO WHERE CLIENTE = '486' AND ORIGEN = 'PAGTOT';
@@ -403,6 +409,7 @@ Si algo falla, la corrida queda en ERROR, el DAT se regresa solo a como estaba (
 **1. Revisar el resultado**
 
 ```sql
+USE [BNABAJ_486];
 SELECT TOP 5 ID_CORRIDA, PROCESO, FECHA_PROCESO, ESTATUS, MENSAJE FROM ops.CORRIDA WHERE CLIENTE = '486' ORDER BY ID_CORRIDA DESC;
 SELECT PASO, ESTATUS, REGISTROS, MENSAJE FROM ops.BITACORA WHERE ID_CORRIDA = @id ORDER BY ID;
 ```
@@ -412,6 +419,7 @@ SELECT PASO, ESTATUS, REGISTROS, MENSAJE FROM ops.BITACORA WHERE ID_CORRIDA = @i
 Normalmente ya se aplicaron y cerraron solas (bitácora `RETIRO AUTOMATICO`, `RETIRO ARCHIVOS`, `RETIRO CYBER`, `RETIRO DEVOL CYBER`). Si llegó el correo de hallazgos:
 
 ```sql
+USE [BNABAJ_486];
 SELECT * FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id AND PROCESADA = 0;   -- retiro detenido por el tope: revisar
 EXEC ops.sp_retiro @id;                                                   -- si es correcto, aplicar
 EXEC ops.sp_retiro_cerrar @id, @solo_mostrar = 1;                         -- qué pasos faltan
@@ -423,6 +431,7 @@ EXEC ops.sp_retiro_cerrar @id;                                            -- arc
 El job ya los escribe al terminar cada corrida (`EXPORTAR_AUTOMATICO`), y la asignación con retiro los escribe con el ZIP. En cuanto están, llega al equipo de asignaciones el correo **ARCHIVOS\_LISTOS\_486** con la carpeta, cada archivo que hay que subir a CYBER con sus líneas y qué sigue (`AVISO_ARCHIVOS`, lista de archivos en `ARCHIVOS_ARRIBO`). Para mandarlo a mano: `EXEC ops.sp_aviso_archivos @id;`. A mano solo hace falta si llegó un hallazgo de que no se pudieron escribir, o para otra carpeta:
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_exportar_salidas @id, @solo_mostrar = 1;                    -- ver qué se va a escribir
 EXEC ops.sp_exportar_salidas @id;                                       -- planos y scripts
 EXEC ops.sp_exportar_salidas @id, @zip = 'RETIROS', @enviar_zip = 1;    -- con devolución
@@ -484,6 +493,7 @@ C:\BANBAJ\486\SALIDA\
 Si el equipo que arriba no entra al disco `C:` del servidor, hay dos opciones: compartir `C:\BANBAJ\486\SALIDA\` en la red, o cambiar `RUTA_SALIDA` a una carpeta de red (por ejemplo, una carpeta en `\\192.168.50.13\q\`). La cuenta del servicio de SQL Server necesita permiso de escritura ahí.
 
 ```sql
+USE [BNABAJ_486];
 UPDATE cfg.PARAMETRO SET VALOR = N'\\192.168.50.13\q\BANBAJ\486\SALIDA\' WHERE CLIENTE = '486' AND CLAVE = 'RUTA_SALIDA';
 EXEC ops.sp_exportar_salidas @id, @carpeta = N'D:\otra\carpeta\';   -- solo para una vez
 ```
@@ -505,6 +515,7 @@ El operador **solo sube los planos de ancho fijo** con el cargador de CYBER; el 
 Para ver cómo va, o para correr a mano lo que quedó en ERROR (una vez corregida la causa):
 
 ```sql
+USE [BNABAJ_486];
 SELECT PASO, ESTATUS, REGISTROS, MENSAJE FROM ops.BITACORA
  WHERE ID_CORRIDA = @id AND (PASO LIKE 'ARRIBO%' OR PASO LIKE 'ACT CYBER%' OR PASO LIKE 'RETIRO%' OR PASO LIKE 'BLANQUEO%' OR PASO LIKE 'CONFIRMACION%') ORDER BY ID;
 EXEC ops.sp_arribo_automatico;                                   -- revisa y arriba lo que ya esté listo (lo mismo que el job)
@@ -518,6 +529,7 @@ EXEC ops.sp_blanqueo_automatico @id, @forzar = 1;                -- blanqueo
 Solicitud y autorización del arribo se siguen marcando a mano para el seguimiento de tiempos (el fin lo marca el job):
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_marcar_arribo @id, 'SOLICITUD';
 EXEC ops.sp_marcar_arribo @id, 'AUTORIZACION';
 SELECT * FROM ops.v_TIEMPOS_CORRIDA WHERE ID_CORRIDA = @id;
@@ -526,6 +538,7 @@ SELECT * FROM ops.v_TIEMPOS_CORRIDA WHERE ID_CORRIDA = @id;
 Para volver a dejar solo la generación de archivos (depuraciones a mano):
 
 ```sql
+USE [BNABAJ_486];
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486'
    AND CLAVE IN ('ARRIBO_AUTOMATICO', 'ACT_CYBER_AUTOMATICO', 'BLANQUEO_AUTOMATICO', 'CONFIRMACION_AUTOMATICA', 'RETIRO_CYBER_AUTOMATICO');
 ```
@@ -535,6 +548,7 @@ UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486'
 El correo de cierre sale solo al terminar las depuraciones (`CONFIRMACION_AUTOMATICA`). A mano solo si se hicieron a mano:
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486';     -- correo de fin de asignación
 ```
 
@@ -587,6 +601,7 @@ Por cada segmento (CONSUMO, TDC, PYME, HIPOTECARIO…) se guardan dos versiones 
 Al llegar una base nueva, la anterior se borra, la vigente pasa a anterior y la nueva queda como vigente. Si la corrida se revierte, la anterior vuelve a ser la vigente.
 
 ```sql
+USE [BNABAJ_486];
 SELECT CODIGO, ID_CORRIDA, ARCHIVO, FE_CARGA, COUNT(*) AS FILAS
 FROM dat.v_BASE_VIGENTE WHERE CLIENTE = '486'
 GROUP BY CODIGO, ID_CORRIDA, ARCHIVO, FE_CARGA;
@@ -605,6 +620,7 @@ Si el retroceso también falla, queda anotado en la bitácora como `RETROCESO AU
 Para **reintentar** después de corregir la causa (archivo mal formado, parámetro, etc.), correr el proceso a mano:
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_asignacion_486 @fecha = '2026-11-03';      -- o ops.sp_actualizacion_486
 ```
 
@@ -615,6 +631,7 @@ Para apagar el retroceso automático: `RETROCESO_AUTOMATICO = 0`.
 Sirve para deshacer una corrida que terminó OK pero salió mal (base equivocada, etiqueta incorrecta…).
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_revertir_corrida @id;                      -- muestra qué cambiaría
 EXEC ops.sp_revertir_corrida @id, @confirmar = 1;      -- revierte; la corrida queda REVERTIDA
 ```

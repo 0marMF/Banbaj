@@ -1,3 +1,5 @@
+USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
+GO
 /* =====================================================================
    Banbaj · 76 Arribo automático a CYBER de teléfonos y correos (decisión 02/11)
    ---------------------------------------------------------------------

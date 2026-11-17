@@ -1,3 +1,5 @@
+USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
+GO
 /* =====================================================================
    Banbaj · 10 Funciones de apoyo (esquema cfg)
    Se usan en cfg.ARCHIVO_COLUMNA.TRANSFORMACION y cfg.SALIDA.EXPRESION.

@@ -43,6 +43,7 @@ Para ver un diagrama mientras se edita, sin instalar nada: pegar el `.mmd` en <h
 Cada caja de los diagramas deja un renglón en `ops.BITACORA` (columna `PASO`). Para seguir una corrida:
 
 ```sql
+USE [BNABAJ_486];
 SELECT ID, PASO, ESTATUS, REGISTROS, MENSAJE FROM ops.BITACORA WHERE ID_CORRIDA = @id ORDER BY ID;
 ```
 

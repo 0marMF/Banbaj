@@ -12,7 +12,7 @@ Qué se necesita:
 
 | Requisito | Cómo saberlo |
 |---|---|
-| Base `Banbaj` instalada (todos los scripts de `sql/`) | `SELECT COUNT(*) FROM sys.procedures;` da más de 60 |
+| Base `BNABAJ_486` instalada (todos los scripts de `sql/`) | `SELECT COUNT(*) FROM sys.procedures;` da más de 60 |
 | Visual FoxPro en una PC con acceso a `O:\` y a `\\192.168.50.108\T\` | Se abren los DBF |
 | El programa `cyber/486/EXPORTAR_MIGRACION.prg` del repo | Última versión de `main` |
 | Una carpeta que vea el servidor de SQL Server para dejar los CSV | `C:\MIGRA486\` en el servidor o una carpeta de red |
@@ -75,9 +75,10 @@ No se exportan DEVOL, TELBAJ, PNC ni LADA. TELBAJ y PNC se leen de CYBER en cada
 
 # Paso 4. Revisar sin escribir
 
-En SSMS, conectado a la base `Banbaj`:
+En SSMS (cada bloque ya trae `USE [BNABAJ_486];`):
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\';
 ```
 
@@ -106,6 +107,7 @@ Si los acentos se ven mal en algún resultado, repetir con `@codepage = '1252'`.
 # Paso 5. Cargar
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;
 ```
 
@@ -114,6 +116,7 @@ EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;
 - Si la base ya tiene datos (por ejemplo, de una prueba), se detiene con un error 50910 a 50914 y no carga nada. Para sobrescribir:
 
 ```sql
+USE [BNABAJ_486];
 EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1, @reemplazar = 1;
 ```
 
@@ -123,6 +126,7 @@ EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1, @reemplazar =
 # Paso 6. Verificar
 
 ```sql
+USE [BNABAJ_486];
 SELECT COUNT(*) AS DAT FROM dat.DAT_486;                                   -- ≈ registros de DAT.DBF
 SELECT ESTATUS, COUNT(*) FROM dat.HISTORIA_FOLIO WHERE CLIENTE = '486' GROUP BY ESTATUS;   -- A = activas del DAT, B = periodos anteriores
 SELECT COUNT(*) FROM dat.HISTORIA_FOLIO WHERE CLIENTE = '486' AND ESTATUS = 'B' AND FE_ALTA IS NULL;   -- periodos anteriores, sin fechas (03/11)
@@ -135,6 +139,7 @@ SELECT TIPO, ACTIVO, COUNT(*) FROM cfg.EXCLUSION WHERE CLIENTE = '486' AND ORIGE
 Revisar también a mano tres o cuatro cuentas conocidas, comparando con FoxPro: folio, saldo, etiqueta y teléfono en el DAT, y sus periodos anteriores en el histórico.
 
 ```sql
+USE [BNABAJ_486];
 SELECT FOLIO, CUENTA2, SDO_ACT, ETIQUETA1, TEL1 FROM dat.DAT_486 WHERE CUENTA = '<crédito>';
 SELECT FOLIO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA FROM dat.HISTORIA_FOLIO WHERE CUENTA = '<crédito>' ORDER BY FE_ALTA;
 ```
@@ -151,6 +156,7 @@ SELECT FOLIO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA, MOTIVO_BAJA FROM dat.HISTORIA_
 3. Encender el job y el arribo y el retiro automáticos (durante el paralelo van en 0 para que solo FoxPro escriba en CYBER):
 
 ```sql
+USE [BNABAJ_486];
 UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486'
    AND CLAVE IN ('ARRIBO_AUTOMATICO', 'RETIRO_AUTOMATICO', 'RETIRO_CYBER_AUTOMATICO', 'ACT_CYBER_AUTOMATICO', 'BLANQUEO_AUTOMATICO', 'CONFIRMACION_AUTOMATICA', 'CUADRE_AUTOMATICO');
 EXEC msdb.dbo.sp_update_job @job_name = N'Banbaj 486 diario', @enabled = 1;

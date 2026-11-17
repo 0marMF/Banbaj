@@ -1,3 +1,5 @@
+USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
+GO
 /* =====================================================================
    Banbaj · 52 Escribir en disco los archivos planos y scripts de CYBER
    ---------------------------------------------------------------------

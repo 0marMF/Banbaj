@@ -1,3 +1,5 @@
+USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
+GO
 /* =====================================================================
    Banbaj · 90 Semilla del cliente 486 (generado por tools/generar_sql_486.py)
    Re-ejecutable: borra y vuelve a cargar la configuración del 486.
