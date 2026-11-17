@@ -66,7 +66,9 @@ def sql_dat(dat):
         "    FE_ULT_ACT      DATETIME2(0) NULL",
     ]
     vista = ", ".join("d.CUENTA2 AS CUENTA" if c == "CUENTA" else "d.CUENTA AS CUENTA3" if c == "CUENTA3" else f"d.{c}" for c, _, _ in dat)
-    return f"""/* =====================================================================
+    return f"""USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
+GO
+/* =====================================================================
    Banbaj · 05 Tabla fija DAT del cliente 486 (generado por tools/generar_sql_486.py)
    Misma estructura que DAT.DBF (hoja DAT_GENERAL del mapeo) + 3 columnas de control.
    ===================================================================== */

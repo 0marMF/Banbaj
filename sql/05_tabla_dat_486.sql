@@ -1,3 +1,5 @@
+USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
+GO
 /* =====================================================================
    Banbaj · 05 Tabla fija DAT del cliente 486 (generado por tools/generar_sql_486.py)
    Misma estructura que DAT.DBF (hoja DAT_GENERAL del mapeo) + 3 columnas de control.
