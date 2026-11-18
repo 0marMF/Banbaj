@@ -29,6 +29,7 @@ Antes de cambiar un proceso, lee su diagrama en `docs/flujo/` (índice en `docs/
 |---|---|
 | `10_funciones` | `cfg.fn_param`, `cfg.fn_texto`, `cfg.fn_importe`, `cfg.fn_fecha`… |
 | `20_sp_comunes` | `ops.sp_log`, `ops.sp_corrida_iniciar/finalizar`, `ops.sp_cargar_proceso`, `ops.sp_homologar`, `ops.sp_validar` |
+| `22_sp_validacion_entrada` | `ops.sp_validar_datos_archivo`, `ops.sp_validacion_entrada_avisar`, `cfg.sp_layout_cambiar`, `cfg.sp_catalogo_alta`, `cfg.v_LAYOUT`, `cfg.v_CATALOGO` |
 | `25_sp_correo` | `mail.sp_enviar`, `mail.sp_hallazgo`, `mail.fn_tabla_html` |
 | `30_sp_asignacion` | `ops.sp_asig_unir_layout`, `ops.sp_asig_devolucion`, `ops.sp_asig_existentes`, `ops.sp_asig_alta`, `ops.sp_retiro` |
 | `35_sp_respaldo` | `ops.sp_respaldo`, `ops.sp_revertir_corrida`, `ops.sp_retroceso_automatico` |
@@ -48,10 +49,11 @@ Antes de cambiar un proceso, lee su diagrama en `docs/flujo/` (índice en `docs/
 - **Corrida:** cada proceso es una corrida (`ops.sp_corrida_iniciar` / `ops.sp_corrida_finalizar`). Cada paso deja un renglón con `EXEC ops.sp_log @id, '<PASO>', 'OK|AVISO|ERROR', @registros, @mensaje`. Si la corrida falla, `ops.sp_retroceso_automatico` restaura el DAT.
 - **Lo que pasa después de la corrida** (archivos, CYBER, correos) va fuera del `TRY` principal y en su propio `TRY/CATCH`: si falla no cambia el estatus de la corrida, queda `ERROR` en la bitácora y se avisa con `mail.sp_hallazgo`.
 - **Pasos automáticos idempotentes:** antes de actuar revisan en `ops.BITACORA` si su paso ya quedó `OK` (o `OK`/`ERROR` cuando no deben reintentarse solos). Se pueden correr a mano con el número de corrida y solo repiten lo pendiente.
+- **Lo que edita el equipo de asignaciones vive en tablas, no en código:** el layout (`cfg.ARCHIVO`, `cfg.ARCHIVO_COLUMNA`), las etiquetas (`cfg.CATALOGO`, leídas con `cfg.fn_catalogo` desde `cfg.HOMOLOGACION`) y las reglas de datos (`cfg.VALIDACION_DATO`). La semilla conserva lo que el equipo cambió: en el layout respeta `EDITADO_POR` (los triggers lo marcan salvo con `SESSION_CONTEXT('SEMILLA') = 1`) y en catálogos y reglas solo agrega lo que falta. Una etiqueta nueva va en `CATALOGOS` de `tools/generar_sql_486.py`, no como literal en `HOMOLOGACION`.
 - **Todo lo configurable es un parámetro:** se lee con `cfg.fn_param('486', 'CLAVE')`. Para agregar uno, se agrega en `PARAMETROS` de `tools/generar_sql_486.py`, se corre `python3 tools/generar_sql_486.py` y se documenta en el manual.
 - **Correos:** plantilla y lista en `PLANTILLAS` de `tools/generar_sql_486.py`; se mandan con `mail.sp_enviar @plantilla, @id_corrida, @valores (JSON)`. Las llaves `HTML_*` van sin escapar (ya armadas con `mail.fn_tabla_html`).
 - **Escribir en CYBER:** siempre con `ops.sp_cyber_ejecutar @id, '<SCRIPT>'`, que toma las líneas de `ops.CYBER_SCRIPT` (las mismas que se escriben en `cyber\*.sql`) y las manda en bloques PL/SQL por el servidor vinculado. No abras otra conexión.
-- **Errores:** `THROW 50xxx`, con rango por archivo (20: 50010-50040, 30: 50100-50110, 35: 50300s, 50: 50200s, 70: 50600s, 72: 50700s, 74/76/77/78: 50760-50823, 52: 50850s, 80: 50900s). Antes de usar un número, búscalo con `grep -rn "5xxxx" sql/`.
+- **Errores:** `THROW 50xxx`, con rango por archivo (20: 50010-50040, 22: 50041-50049, 30: 50100-50110, 35: 50300s, 50: 50200s, 70: 50600s, 72: 50700s, 74/76/77/78: 50760-50823, 52: 50850s, 80: 50900s). Antes de usar un número, búscalo con `grep -rn "5xxxx" sql/`.
 - `EXEC proc` no acepta expresiones como parámetro (`CONCAT`, subconsultas): asigna primero a una variable. Un agregado no puede contener una subconsulta (`SUM(CASE WHEN EXISTS…)`): usa `LEFT JOIN`.
 
 ## Probar
@@ -71,10 +73,11 @@ Cada cambio de comportamiento lleva su prueba en `tests/pruebas.sql` (`INSERT IN
 2. Si cambió un flujo, actualiza su diagrama en `docs/flujo/mmd/*.mmd` y su explicación en `docs/flujo/*.md`, y corre `./tools/generar_diagramas.sh`.
 3. Regenera los Word: `./tools/generar_docs_word.sh` (pandoc con `tools/plantilla_word.docx`).
 
-## Estado actual (15/11/2026)
+## Estado actual (17/11/2026)
 
 - **Proceso autónomo:** el job corre la actualización y la asignación, escribe los archivos, avisa a asignaciones (`ARCHIVOS_LISTOS_486`), aplica las devoluciones con tope de 50 % por segmento, ejecuta en CYBER los scripts de la actualización, detecta cuándo se subieron los saldos (cuentas con `DMHOSTUP` del día = SCBSDOS, la validación del equipo) y el SCBTEL para correr las depuraciones de correos y teléfonos, hace el blanqueo de status, manda la confirmación y cuadra los pagos.
 - **Sigue a mano:** subir los planos de ancho fijo con el cargador de CYBER (SCBSDOS, SCBTEL, SCBPAG, gescar), copiar `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` (el servidor no tiene acceso; `RUTA_DEVOLUCION_CYBER` vacío) y atender el correo de hallazgos.
 - Cada parte automática se apaga con su parámetro: `ARRIBO_AUTOMATICO`, `ACT_CYBER_AUTOMATICO`, `RETIRO_AUTOMATICO`, `RETIRO_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO`, `CONFIRMACION_AUTOMATICA`, `CUADRE_AUTOMATICO`, `EXPORTAR_AUTOMATICO`, `AVISO_ARCHIVOS`.
 - Entradas: la actualización en `.txt` y la asignación en `.csv` (`cfg.ARCHIVO.PATRON_NOMBRE`, desde `ARCHIVOS` en `tools/generar_sql_486.py`).
+- **Validación de la entrada (17/11):** antes de tocar el DAT, cada archivo se revisa: layout (que estén todos los campos de `cfg.ARCHIVO_COLUMNA`) y datos (`cfg.VALIDACION_DATO`). Si algo no pasa, `VALIDACION_ENTRADA_486` al equipo de asignaciones, corrida CANCELADA (50025) y se vuelve a correr a mano. Diagrama: `docs/flujo/09_validacion_entrada.md`. Parámetros `VALIDAR_LAYOUT` y `VALIDAR_DATOS`.
 - Pendientes con el equipo: `docs/FALTANTES_486.md`.

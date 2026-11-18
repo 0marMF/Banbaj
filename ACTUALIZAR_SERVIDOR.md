@@ -1,4 +1,4 @@
-# Qué volver a ejecutar en el servidor (actualización del 16/11/2026)
+# Qué volver a ejecutar en el servidor (actualización del 17/11/2026)
 
 Esta guía lleva tu base (`BNABAJ_486` en `STCSVASIGNAC044\MULTISQLSERVER`) a la versión actual de `main`. Vale para una base instalada en cualquier fecha a partir del 03/11. Todos los scripts de `sql/` se pueden volver a correr sobre una base con datos: crean solo lo que falta y reemplazan los procedimientos.
 
@@ -18,6 +18,10 @@ Tiempo aproximado: 20 minutos, sin contar la migración.
 | Layout nuevo de las bases maestras (11/11): TDC con 100 columnas y Consumo con 115; `SALDO2` sin la leyenda `<= 6`. Las columnas que solo cambiaron de lugar no requieren nada | semilla (`cfg.ARCHIVO` y `cfg.ARCHIVO_COLUMNA`) |
 | Todos los scripts de `sql/`, el `03` de instalación y cada bloque de esta guía empiezan con `USE [BNABAJ_486];`: ya no se van a `master` si se abren en una ventana nueva de SSMS. `@base` de los scripts 02 y 04 ya dice `BNABAJ_486` | todos los de `sql/`, `sql/instalacion/02`, `03` y `04` |
 | `10_funciones.sql` ya se puede volver a correr sobre una base existente (antes daba `Msg 3729 … referenced by object 'fn_fecha'`) | `10_funciones.sql` |
+| **Validación de la entrada (17/11):** antes de tocar el DAT se revisa el layout (que estén todos los campos que se usan) y los datos de cada archivo (importes, teléfonos, correos, catálogos, cuentas repetidas, volumen). Si algo no pasa, la corrida se detiene (CANCELADA), se avisa al equipo de asignaciones (`VALIDACION_ENTRADA_486`) y se vuelve a correr a mano | `01`, `02`, `10`, `20`, **`22_sp_validacion_entrada.sql` (nuevo)**, `25`, `60`, semilla |
+| **Layout editable por tabla:** el equipo cambia un encabezado con `cfg.sp_layout_cambiar` o en `cfg.ARCHIVO_COLUMNA`; queda historial y la semilla lo respeta. El número de columnas se cuenta en el archivo (ya no hay que cambiar `NUM_COLUMNAS`) | `02`, `20`, `22`, semilla |
+| **Etiquetado por catálogos estáticos:** estatus, tramo, cartera, tipo de crédito, enfoque, garantía y cosecha salen de `cfg.CATALOGO` (`cfg.sp_catalogo_alta`) | `02`, `10`, `22`, semilla |
+| Con el layout real de TDC: el saldo actualizado vacío (VEN2 y VEN3) ya no rechaza el renglón y toma el saldo PRIME; el tramo como rango (`30-59`) y el enfoque con acento (`LIQUIDACIÓN`) ya dan estatus | semilla |
 
 ## 0. Antes de empezar
 
@@ -82,6 +86,7 @@ ORDER BY a.CLAVE;
 - **Siempre repón `CYBER_ORACLE_ORIGEN`**, ahora con puerto y servicio: `192.168.90.10:1521/NOMBRE_SERVICIO` (sale del `tnsnames.ora` de la PC donde corre sqlldr, o te lo da el DBA con `lsnrctl status`).
 - Repón también cualquier otro parámetro que hayas ajustado a mano, como rutas o tu correo de prueba.
 - **No** repongas `ARRIBO_AUTOMATICO`, `ACT_CYBER_AUTOMATICO`, `RETIRO_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO`, `CONFIRMACION_AUTOMATICA` ni `RUTA_DEVOLUCION_CYBER`: sus valores nuevos (1, 1, 1, 1, 1 y vacío) son el proceso autónomo.
+- `VALIDAR_LAYOUT` y `VALIDAR_DATOS` son nuevos y vienen en 1. No escriben en CYBER, solo detienen y avisan al equipo de asignaciones, así que conviene dejarlos prendidos también durante el paralelo.
 
 ```sql
 USE [BNABAJ_486];
@@ -89,7 +94,7 @@ UPDATE cfg.PARAMETRO SET VALOR = N'192.168.90.10:1521/NOMBRE_SERVICIO' WHERE CLI
 -- UPDATE cfg.PARAMETRO SET VALOR = N'<tu valor>' WHERE CLIENTE = '486' AND CLAVE = N'<clave>';   -- uno por cada parámetro tuyo
 ```
 
-Si habías cambiado la carpeta de entrada de algún archivo (`cfg.ARCHIVO.RUTA`), vuelve a cambiarla: de fábrica es `\\192.168.50.13\q\CYBER\C_486\{AAAA}\{MES}\{DD}\`.
+Si habías cambiado la carpeta de entrada de algún archivo (`cfg.ARCHIVO.RUTA`), vuelve a cambiarla esta última vez: de fábrica es `\\192.168.50.13\q\CYBER\C_486\{AAAA}\{MES}\{DD}\`. Desde esta versión, lo que cambies en `cfg.ARCHIVO` (carpeta, nombre) y en `cfg.ARCHIVO_COLUMNA` (encabezados), en los catálogos y en las reglas de datos **se conserva** cuando vuelvas a correr la semilla.
 
 ## 4. Cambiar las contraseñas y conectar CYBER
 
@@ -184,7 +189,25 @@ SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486'
 SELECT PROCESO, CODIGO, PATRON_NOMBRE, NUM_COLUMNAS FROM cfg.ARCHIVO WHERE CLIENTE = '486' AND ACTIVO = 1 ORDER BY PROCESO, ORDEN;   -- ACT en .txt, ASIG en .csv; TDC 100 y Consumo 115
 SELECT a.CODIGO, c.PATRON_ENCABEZADO FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO
  WHERE a.CLIENTE = '486' AND c.CAMPO_DESTINO = 'SALDO2';                                                -- sin '<= 6'
+SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE IN ('VALIDAR_LAYOUT', 'VALIDAR_DATOS');   -- 1 y 1
+SELECT CATALOGO, COUNT(*) AS VALORES FROM cfg.CATALOGO WHERE CLIENTE = '486' GROUP BY CATALOGO;              -- 10 catálogos
+SELECT CODIGO, COUNT(*) AS REGLAS FROM cfg.VALIDACION_DATO WHERE CLIENTE = '486' GROUP BY CODIGO;             -- reglas por archivo
+SELECT ARCHIVO, CAMPO, PATRON_ENCABEZADO, ESTADO FROM cfg.v_LAYOUT WHERE ESTADO NOT IN ('OK', 'DERIVADO', 'SIN ARCHIVO');   -- vacío, o lo que el último archivo no traía
 EXEC ops.sp_diario_486 @fecha = '2026-11-14';   -- sábado: debe contestar FIN DE SEMANA sin hacer nada
 ```
 
 Cuando todo cuadre, borra el respaldo de parámetros: `DROP TABLE dbo.PARAMETRO_ANTES_20261115;`.
+
+## 9. Si llega el correo de validación de la entrada
+
+La primera vez que llegue un archivo que no cuadre (por ejemplo, el primer Hipotecario, del que no hay ejemplo), la corrida se detiene antes de tocar el DAT y llega `VALIDACION_ENTRADA_486` con qué falta y qué hacer. Lo usual:
+
+```sql
+USE [BNABAJ_486];
+EXEC cfg.sp_layout_cambiar 'MAESTRA_HIPO', 'SDO_ACT', N'encabezado como viene en el archivo';   -- encabezado que cambió
+EXEC cfg.sp_catalogo_alta 'ESTATUS_TDC', N'VEN1', N'';                                           -- estatus nuevo válido
+SELECT * FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = <corrida> ORDER BY DETIENE DESC;          -- todo lo que encontró
+EXEC ops.sp_asignacion_486 @fecha = '<AAAA-MM-DD>';                                               -- volver a correr
+```
+
+Detalle: *Flujo y diagramas*, sección 09.
