@@ -102,7 +102,7 @@ BEGIN
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
         SET @msg = ERROR_MESSAGE();
-        DECLARE @estatus VARCHAR(15) = CASE WHEN ERROR_NUMBER() IN (50040, 50100) THEN 'CANCELADA' ELSE 'ERROR' END;
+        DECLARE @estatus VARCHAR(15) = CASE WHEN ERROR_NUMBER() IN (50025, 50040, 50100) THEN 'CANCELADA' ELSE 'ERROR' END;
         EXEC ops.sp_corrida_finalizar @id_corrida, @estatus, @msg;
         EXEC ops.sp_retroceso_automatico @id_corrida;
         THROW;
@@ -179,7 +179,7 @@ BEGIN
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
         SET @msg = ERROR_MESSAGE();
-        DECLARE @estatus VARCHAR(15) = CASE WHEN ERROR_NUMBER() IN (50040, 50100) THEN 'CANCELADA' ELSE 'ERROR' END;
+        DECLARE @estatus VARCHAR(15) = CASE WHEN ERROR_NUMBER() IN (50025, 50040, 50100) THEN 'CANCELADA' ELSE 'ERROR' END;
         EXEC ops.sp_corrida_finalizar @id_corrida, @estatus, @msg;
         EXEC ops.sp_retroceso_automatico @id_corrida;
         THROW;

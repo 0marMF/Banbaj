@@ -49,6 +49,12 @@ UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486'
 /* Proceso autónomo (07/11): el arribo automático y el retiro en CYBER vienen prendidos de fábrica;
    se dejan explícitos para que las pruebas no dependan de la semilla */
 UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE IN ('ARRIBO_AUTOMATICO', 'RETIRO_CYBER_AUTOMATICO');
+/* Validación de datos de la entrada (17/11): el escenario trae a propósito un saldo 'abc', un correo sin arroba
+   y un crédito repetido para probar el rechazo por renglón. Esas reglas se toleran aquí; la detención se prueba aparte. */
+UPDATE cfg.VALIDACION_DATO SET PCT_MAX = 100
+WHERE CLIENTE = '486' AND ((CODIGO = 'MAESTRA_TDC' AND CAMPO = 'SDO_ACT' AND TIPO = 'IMPORTE')
+                        OR (CODIGO = 'MAESTRA_CONSUMO' AND CAMPO = 'CORREO1' AND TIPO = 'CORREO')
+                        OR (CODIGO = 'MAESTRA_CONSUMO' AND TIPO = 'LLAVE_UNICA'));
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO) VALUES ('486', 'CUENTA', '20000008', 'Prueba de exclusión');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'TELEFONO', '5533333333', '486-104', 'Prueba de queja (TELBAJ)');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'CORREO', 'malo@correo.com', '20000009', 'Prueba de EMAILMALO');
@@ -159,6 +165,167 @@ FROM (SELECT N'Correo: alta de destinatario' AS p, CAST(N'nuevo.correo@sertec.co
 EXEC mail.sp_destinatario_baja 'OPERACION_ASIG_486', 'nuevo.correo@sertec.com.mx';
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'Correo: baja de destinatario' AS p, CAST(NULL AS NVARCHAR(4000)) AS e, CAST((SELECT CC FROM mail.v_LISTA_RESUELTA WHERE LISTA = 'OPERACION_ASIG_486') AS NVARCHAR(4000)) AS o) x;
+GO
+
+/* ---------------------------------------------------------------------
+   VALIDACIÓN DE LA ENTRADA (17/11): funciones, layout, datos y catálogos
+   --------------------------------------------------------------------- */
+DECLARE @rs NVARCHAR(4000);
+SET @rs = CONCAT(cfg.fn_patron_encabezado(N'Saldo PRIME total asignado al 11/11/2026'), '|', cfg.fn_patron_encabezado(N'TEL_CERT'), '|',
+                 cfg.fn_patron_encabezado(N'ESTATUS 01 ENE'), '|', cfg.fn_patron_encabezado(N'ADEUDO TOTAL  QUERY  01 ENE'));
+EXEC pru.sp_igual N'LAYOUT: patrón desde el encabezado (fecha, guion bajo y mes, como el generador)',
+     N'Saldo PRIME total asignado al %|TEL[_]CERT|ESTATUS [0-9][0-9] %|ADEUDO TOTAL  QUERY  [0-9][0-9] %', @rs;
+SET @rs = CONCAT(cfg.fn_catalogo('486', 'TRAMO_TDC', '45'), '|', cfg.fn_catalogo('486', 'TRAMO_TDC', '30-59'), '|',
+                 cfg.fn_catalogo('486', 'ESTATUS_CONSUMO', 'vigente'), '|', cfg.fn_catalogo('486', 'TIPO_CREDITO_CONSUMO', N'Nómina Revolvente'), '|',
+                 cfg.fn_catalogo('486', 'TIPO_CREDITO_CONSUMO', N'PERSONAL REESTRUCTURADO'), '|', cfg.fn_catalogo('486', 'ENFOQUE_TDC_90', N'LIQUIDACIÓN'), '|',
+                 cfg.fn_catalogo('486', 'ENFOQUE_TDC_90', N'LIQUIDACION TOTAL'), '|', ISNULL(cfg.fn_catalogo('486', 'CARTERA_CONSUMO', 'OTRA'), '(nulo)'));
+EXEC pru.sp_igual N'CATALOGO: exacto, patrón y orden, sin acentos; fuera de catálogo = nulo', N'VEN|VEN|VIG|NOMINA REV|PERSONAL|CAS|VEN|(nulo)', @rs;
+SET @rs = cfg.fn_enmascarar(N'Ab-12@x.com');
+EXEC pru.sp_igual N'VALIDACION: valor enmascarado (letra x, dígito 9)', N'xx-99@x.xxx', @rs;
+GO
+
+/* Layout: el banco le cambió el nombre a la columna de SALDO2 en TDC */
+UPDATE cfg.ARCHIVO SET RUTA = '/datos/asig_layout/' WHERE CLIENTE = '486' AND PROCESO = 'ASIG';
+DECLARE @id INT, @err INT, @rs NVARCHAR(4000), @c INT;
+BEGIN TRY
+    EXEC ops.sp_asignacion_486 @fecha = '2026-11-02', @hora_llegada = '09:00', @id_corrida = @id OUTPUT;
+END TRY
+BEGIN CATCH
+    SET @err = ERROR_NUMBER();
+END CATCH;
+SET @c = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ASIG');
+SET @rs = CONCAT(@err, '|', (SELECT ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = @c), '|',
+                 (SELECT STRING_AGG(CONCAT(CODIGO, '.', CAMPO), ',') FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @c AND TIPO = 'LAYOUT' AND DETIENE = 1), '|',
+                 (SELECT ESTATUS FROM ops.ARCHIVO_CARGADO WHERE ID_CORRIDA = @c AND CODIGO = 'MAESTRA_TDC'), '|',
+                 (SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @c AND PLANTILLA = 'VALIDACION_ENTRADA_486'), '|',
+                 (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @c AND PASO = 'VALIDACION ENTRADA' AND ESTATUS = 'ERROR'), '|',
+                 (SELECT COUNT(*) FROM dat.DAT_486), '|', (SELECT COUNT(*) FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @c));
+EXEC pru.sp_igual N'LAYOUT: columna renombrada detiene la asignación (50025, CANCELADA), avisa y no toca el DAT ni la base maestra',
+     N'50025|CANCELADA|MAESTRA_TDC.SALDO2|LAYOUT|1|1|5|0', @rs;
+DECLARE @r TABLE (PARA NVARCHAR(MAX), CC NVARCHAR(MAX), CCO NVARCHAR(MAX), ASUNTO NVARCHAR(255), CUERPO_HTML NVARCHAR(MAX), ADJUNTOS NVARCHAR(MAX));
+DECLARE @m NVARCHAR(2048);
+INSERT INTO @r EXEC ops.sp_validacion_entrada_avisar @c, @m OUTPUT, @solo_prueba = 1;
+SELECT @rs = CONCAT(CASE WHEN ASUNTO LIKE N'%Asignación detenida por la validación%' THEN 1 ELSE 0 END,
+                    CASE WHEN CUERPO_HTML LIKE N'%MONTO LIQUIDACION A PLAZOS%' THEN 1 ELSE 0 END,
+                    CASE WHEN CUERPO_HTML LIKE N'%cfg.sp[_]layout[_]cambiar%' THEN 1 ELSE 0 END,
+                    CASE WHEN CUERPO_HTML LIKE N'%ops.sp[_]asignacion[_]486 @fecha = ''2026-11-02''%' THEN 1 ELSE 0 END,
+                    CASE WHEN CUERPO_HTML NOT LIKE N'%{{%' THEN 1 ELSE 0 END,
+                    CASE WHEN PARA = N'asig.486.cdmx@sertec.com.mx' THEN 1 ELSE 0 END,
+                    CASE WHEN @m LIKE N'%MAESTRA[_]TDC: falta SALDO2%' THEN 1 ELSE 0 END) FROM @r;
+EXEC pru.sp_igual N'LAYOUT: el correo al equipo trae el encabezado nuevo, cómo cambiar la matriz y cómo volver a correr', N'1111111', @rs;
+
+/* El equipo corrige la matriz con una sola instrucción */
+DECLARE @lc TABLE (ARCHIVO VARCHAR(50), CAMPO SYSNAME, PATRON_ANTES NVARCHAR(200), PATRON_NUEVO NVARCHAR(200), ACTIVO BIT,
+                   ULTIMO_ARCHIVO DATETIME2(0), EN_EL_ULTIMO_ARCHIVO NVARCHAR(MAX));
+INSERT INTO @lc EXEC cfg.sp_layout_cambiar 'MAESTRA_TDC', 'SALDO2', N'MONTO LIQUIDACION A PLAZOS';
+SET @rs = CONCAT((SELECT EN_EL_ULTIMO_ARCHIVO FROM @lc), '|',
+                 (SELECT CASE WHEN c.EDITADO_POR IS NOT NULL THEN 1 ELSE 0 END FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO
+                  WHERE a.CODIGO = 'MAESTRA_TDC' AND c.CAMPO_DESTINO = 'SALDO2'), '|',
+                 (SELECT COUNT(*) FROM cfg.LAYOUT_HISTORIAL WHERE CODIGO = 'MAESTRA_TDC' AND CAMPO = 'SALDO2' AND DATO = 'PATRON_ENCABEZADO'
+                  AND ANTES = N'MONTO A CUBRIR PLAZOS PAGO LIQUIDACION' AND DESPUES = N'MONTO LIQUIDACION A PLAZOS'), '|',
+                 (SELECT ESTADO FROM cfg.v_LAYOUT WHERE ARCHIVO = 'MAESTRA_TDC' AND CAMPO = 'SALDO2'));
+EXEC pru.sp_igual N'LAYOUT: cfg.sp_layout_cambiar prueba el encabezado contra el último archivo, marca el campo y deja historial',
+     N'columna 31: MONTO LIQUIDACION A PLAZOS|1|1|OK', @rs;
+DECLARE @c2 INT, @n INT;
+EXEC ops.sp_corrida_iniciar '486', 'ASIG', '2030-02-01', NULL, @c2 OUTPUT;
+SET @err = 0;
+BEGIN TRY
+    EXEC ops.sp_cargar_proceso @c2, @n OUTPUT;
+END TRY
+BEGIN CATCH
+    SET @err = ERROR_NUMBER();
+END CATCH;
+EXEC ops.sp_corrida_finalizar @c2, 'CANCELADA', N'Prueba: carga con la matriz corregida';
+DELETE FROM dat.BASE_RECIBIDA WHERE ID_CORRIDA = @c2;
+DELETE FROM dat.BASE_RECIBIDA_ARCHIVO WHERE ID_CORRIDA = @c2;
+SET @rs = CONCAT(@err, '|', (SELECT COUNT(*) FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @c2 AND DETIENE = 1), '|',
+                 (SELECT STRING_AGG(ESTATUS, ',') WITHIN GROUP (ORDER BY CODIGO) FROM ops.ARCHIVO_CARGADO WHERE ID_CORRIDA = @c2 AND ESTATUS <> 'NO_RECIBIDO'));
+EXEC pru.sp_igual N'LAYOUT: con la matriz corregida la carga pasa la validación', N'0|0|CARGADO,CARGADO', @rs;
+/* Se regresa al valor de fábrica (el patrón y la marca) */
+UPDATE c SET PATRON_ENCABEZADO = N'MONTO A CUBRIR PLAZOS PAGO LIQUIDACION'
+FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO WHERE a.CODIGO = 'MAESTRA_TDC' AND c.CAMPO_DESTINO = 'SALDO2';
+UPDATE c SET EDITADO_POR = NULL, FE_EDICION = NULL
+FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO WHERE a.CODIGO = 'MAESTRA_TDC' AND c.CAMPO_DESTINO = 'SALDO2';
+BEGIN TRY
+    EXEC cfg.sp_layout_cambiar 'MAESTRA_TDC', 'NO_EXISTE', N'X';
+    SET @err = 0;
+END TRY
+BEGIN CATCH
+    SET @err = ERROR_NUMBER();
+END CATCH;
+SET @rs = CAST(@err AS NVARCHAR(10));
+EXEC pru.sp_igual N'LAYOUT: campo que no existe se rechaza (50042)', N'50042', @rs;
+GO
+
+/* Datos: teléfono con letras, una cuenta en la columna de saldo, estatus nuevo, correo sin forma de correo */
+UPDATE cfg.ARCHIVO SET RUTA = '/datos/asig_datos/' WHERE CLIENTE = '486' AND PROCESO = 'ASIG';
+DECLARE @id INT, @err INT, @rs NVARCHAR(4000), @c INT;
+BEGIN TRY
+    EXEC ops.sp_asignacion_486 @fecha = '2026-11-02', @hora_llegada = '09:00', @id_corrida = @id OUTPUT;
+END TRY
+BEGIN CATCH
+    SET @err = ERROR_NUMBER();
+END CATCH;
+SET @c = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ASIG');
+SET @rs = CONCAT(@err, '|', (SELECT ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = @c), '|',
+                 (SELECT STRING_AGG(CONCAT(CODIGO, '.', CAMPO, '.', TIPO), ',') WITHIN GROUP (ORDER BY CODIGO, CAMPO, TIPO)
+                  FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @c AND DETIENE = 1), '|',
+                 (SELECT COUNT(*) FROM dat.DAT_486));
+EXEC pru.sp_igual N'DATOS: anomalías detienen la asignación sin tocar el DAT',
+     N'50025|CANCELADA|MAESTRA_CONSUMO.CORREO2.CORREO,MAESTRA_CONSUMO.SEGMENTO.CATALOGO,MAESTRA_TDC.SDO_VDO.MAXIMO,MAESTRA_TDC.TEL1.TELEFONO|5', @rs;
+SET @rs = CONCAT((SELECT EJEMPLOS FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @c AND CAMPO = 'SEGMENTO' AND TIPO = 'CATALOGO'), '|',
+                 (SELECT CONCAT(ANOMALOS, '/', REVISADOS, ':', EJEMPLOS) FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @c AND CAMPO = 'TEL1' AND TIPO = 'TELEFONO'), '|',
+                 (SELECT ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @c AND PASO = 'VALIDACION DATOS MAESTRA_TDC'));
+EXEC pru.sp_igual N'DATOS: ejemplos (catálogo tal cual; lo demás enmascarado con su renglón) y bitácora por archivo',
+     N'"EN REVISION" (1)|1/3:renglón 3: xxx xxxxxxxx|ERROR', @rs;
+/* Layout real de TDC (11/11): VEN2 trae vacío el saldo actualizado; ya no se rechaza (toma el saldo PRIME en la homologación) */
+SET @rs = CONCAT((SELECT COUNT(*) FROM stg.ENT_MAESTRA_TDC WHERE ID_CORRIDA = @c AND RIESGO = '1000000009' AND SDO_ACT IS NULL), '|',
+                 (SELECT COUNT(*) FROM ops.RECHAZO WHERE ID_CORRIDA = @c AND ORIGEN = 'MAESTRA_TDC'));
+EXEC pru.sp_igual N'DATOS: saldo actualizado de TDC vacío no rechaza el renglón (PERMITE_VACIO)', N'1|0', @rs;
+
+/* El equipo agrega el estatus nuevo al catálogo y vuelve a correr: ya solo quedan las otras anomalías */
+DECLARE @k TABLE (CATALOGO VARCHAR(40), VALOR_ORIGEN NVARCHAR(200), VALOR_DESTINO NVARCHAR(200), ORDEN INT, ACTIVO BIT, ALTA_POR VARCHAR(10), USUARIO SYSNAME, FE_MOD DATETIME2(0));
+INSERT INTO @k EXEC cfg.sp_catalogo_alta 'ESTATUS_CONSUMO', N'EN REVISION', N'VEN';
+SET @rs = CONCAT((SELECT CONCAT(VALOR_DESTINO, ':', ALTA_POR) FROM @k WHERE VALOR_ORIGEN = N'EN REVISION'), '|',
+                 cfg.fn_catalogo('486', 'ESTATUS_CONSUMO', N'en revisión'), '|',
+                 (SELECT MAX(VALIDA) FROM cfg.v_CATALOGO WHERE CATALOGO = 'ESTATUS_CONSUMO'));
+EXEC pru.sp_igual N'CATALOGO: el equipo agrega un valor con cfg.sp_catalogo_alta (sin acentos ni mayúsculas)', N'VEN:EQUIPO|VEN|1', @rs;
+BEGIN TRY
+    EXEC ops.sp_asignacion_486 @fecha = '2026-11-02', @hora_llegada = '09:00', @id_corrida = @id OUTPUT;
+END TRY
+BEGIN CATCH
+    SET @err = ERROR_NUMBER();
+END CATCH;
+SET @c = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ASIG');
+SET @rs = CONCAT(@err, '|', (SELECT STRING_AGG(CONCAT(CODIGO, '.', CAMPO, '.', TIPO), ',') WITHIN GROUP (ORDER BY CODIGO, CAMPO, TIPO)
+                             FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @c AND DETIENE = 1));
+EXEC pru.sp_igual N'CATALOGO: con el valor agregado, la segunda corrida ya no lo marca',
+     N'50025|MAESTRA_CONSUMO.CORREO2.CORREO,MAESTRA_TDC.SDO_VDO.MAXIMO,MAESTRA_TDC.TEL1.TELEFONO', @rs;
+EXEC cfg.sp_catalogo_alta 'ESTATUS_CONSUMO', N'EN REVISION', N'VEN', @activo = 0;
+BEGIN TRY
+    EXEC cfg.sp_catalogo_alta 'NO_EXISTE', N'X', N'Y';
+    SET @err = 0;
+END TRY
+BEGIN CATCH
+    SET @err = ERROR_NUMBER();
+END CATCH;
+SET @rs = CONCAT(@err, '|', ISNULL(cfg.fn_catalogo('486', 'ESTATUS_CONSUMO', N'EN REVISION'), '(nulo)'));
+EXEC pru.sp_igual N'CATALOGO: catálogo inexistente se rechaza (50044) y un valor dado de baja ya no aplica', N'50044|(nulo)', @rs;
+
+/* Homologación por catálogo con el layout real de TDC: tramo como rango, saldo vacío, enfoque con acento, reestructura */
+DECLARE @h INT;
+EXEC ops.sp_corrida_iniciar '486', 'ASIG', '2030-02-02', NULL, @h OUTPUT;
+INSERT INTO stg.ENT_MAESTRA_TDC (ID_CORRIDA, FILA, PRIME4DIG, RIESGO, RFC, SDO_ACT, SDO_VDO, SALDO2, TRAMO, SEGMENTO, ENFOQUE, GARAN, ETIQUETA1)
+VALUES (@h, 2, '10000000099991', '1000000091', 'XAXX010101000', NULL, 650, 300, '30-59', 'VEN2', '-', '1', 'COSECHA 2'),
+       (@h, 3, '10000000099992', '1000000092', 'XAXX010101000', 800, 800, 300, '90+', 'VEN4', N'LIQUIDACIÓN', '0', '-'),
+       (@h, 4, '10000000099993', '1000000093', 'XAXX010101000', 500, 500, 300, '0', 'BCOB', '-', '0', NULL);
+EXEC ops.sp_homologar @h, 'stg.ENT_MAESTRA_TDC';
+SELECT @rs = STRING_AGG(CONCAT(SDO_ACT, ':', ESTATUS2, ':', TIPO, ':', GARAN, ':', ETIQUETA1), '|') WITHIN GROUP (ORDER BY FILA)
+FROM stg.ENT_MAESTRA_TDC WHERE ID_CORRIDA = @h;
+EXEC ops.sp_corrida_finalizar @h, 'CANCELADA', N'Prueba de homologación por catálogo';
+EXEC pru.sp_igual N'CATALOGO: homologación TDC (30-59 VEN y saldo vacío toma PRIME; 90+ LIQUIDACIÓN CAS; BCOB tramo 0 REE; garantizada; mora)',
+     N'650.00:VEN:TDC_VEN:GARANTIZADA:MORA 2|800.00:CAS:TDC_CAS::|500.00:REE:TDC_REE::', @rs;
+UPDATE cfg.ARCHIVO SET RUTA = '/datos/asig/' WHERE CLIENTE = '486' AND PROCESO = 'ASIG';
 GO
 
 /* ---------------------------------------------------------------------
@@ -457,6 +624,23 @@ FROM (SELECT N'SCBSDOS: U1MINASIG con signo' AS p, CAST(N'000000000400.00' AS NV
 GO
 
 /* ---------------------------------------------------------------------
+   VALIDACIÓN DE LA ENTRADA: volumen contra la última carga buena (la asignación 2 trajo 4 renglones de TDC)
+   --------------------------------------------------------------------- */
+DECLARE @v INT, @ida INT = (SELECT ID_ARCHIVO FROM cfg.ARCHIVO WHERE CLIENTE = '486' AND CODIGO = 'MAESTRA_TDC'), @rs NVARCHAR(4000);
+EXEC ops.sp_corrida_iniciar '486', 'ASIG', '2030-02-03', NULL, @v OUTPUT;
+DROP TABLE IF EXISTS stg.RAW_PRUEBA_VOL;
+CREATE TABLE stg.RAW_PRUEBA_VOL (ID INT IDENTITY(1,1), c001 NVARCHAR(4000));
+INSERT INTO stg.RAW_PRUEBA_VOL (c001) VALUES (N'ACC_NUM'), (N'1000000001');
+CREATE TABLE #map (CAMPO SYSNAME, POS INT);
+INSERT INTO #map VALUES ('RIESGO', 1);
+EXEC ops.sp_validar_datos_archivo @v, @ida, N'stg.RAW_PRUEBA_VOL', 1;
+SET @rs = (SELECT CONCAT(CAST(DETIENE AS INT), '|', PCT, '|', EJEMPLOS) FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @v AND TIPO = 'VOLUMEN');
+EXEC ops.sp_corrida_finalizar @v, 'CANCELADA', N'Prueba de volumen';
+DROP TABLE stg.RAW_PRUEBA_VOL;
+EXEC pru.sp_igual N'DATOS: volumen fuera de rango contra la última carga buena detiene', N'1|25.00|Trae 1 renglones; la última carga buena trajo 4', @rs;
+GO
+
+/* ---------------------------------------------------------------------
    ETIQUETAS TOP (las alimenta Asignaciones con folio + etiqueta de Operación)
    --------------------------------------------------------------------- */
 DECLARE @r TABLE (TIPO VARCHAR(20), MODO VARCHAR(10), LEIDOS INT, CARGADOS INT, SIN_DATO INT, REPETIDOS INT, NO_DAT INT);
@@ -574,6 +758,52 @@ DECLARE @pn TABLE (PARA NVARCHAR(MAX), CC NVARCHAR(MAX), CCO NVARCHAR(MAX), ASUN
 INSERT INTO @pn EXEC mail.sp_enviar @plantilla = 'PAGOS_NEGATIVOS_486', @valores = N'{"REGISTROS":"1","DETALLE":"x"}', @solo_prueba = 1;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Pagos negativos: el correo va al equipo de asignaciones',
        CASE WHEN PARA = N'asig.486.cdmx@sertec.com.mx' AND CCO LIKE N'%asignaciones3@sertec.com.mx%' THEN 1 ELSE 0 END, CONCAT(PARA, ' | ', CCO) FROM @pn;
+GO
+
+/* ---------------------------------------------------------------------
+   VALIDACIÓN DE LA ENTRADA en la actualización: el banco le cambió el nombre a SALDO
+   --------------------------------------------------------------------- */
+DECLARE @ruta_act NVARCHAR(400) = (SELECT TOP (1) RUTA FROM cfg.ARCHIVO WHERE CLIENTE = '486' AND PROCESO = 'ACT' ORDER BY ID_ARCHIVO);
+UPDATE cfg.ARCHIVO SET RUTA = '/datos/act_layout/' WHERE CLIENTE = '486' AND PROCESO = 'ACT';
+DECLARE @id INT, @err INT, @rs NVARCHAR(4000), @c INT;
+BEGIN TRY
+    EXEC ops.sp_actualizacion_486 @fecha = '2030-02-04', @id_corrida = @id OUTPUT;
+END TRY
+BEGIN CATCH
+    SET @err = ERROR_NUMBER();
+END CATCH;
+SET @c = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ACT');
+SET @rs = CONCAT(@err, '|', (SELECT ESTATUS FROM ops.CORRIDA WHERE ID_CORRIDA = @c), '|',
+                 (SELECT STRING_AGG(CONCAT(CODIGO, '.', CAMPO), ',') FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @c AND TIPO = 'LAYOUT' AND DETIENE = 1), '|',
+                 (SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @c AND PLANTILLA = 'VALIDACION_ENTRADA_486'));
+EXEC pru.sp_igual N'LAYOUT ACT: columna renombrada detiene la actualización y avisa', N'50025|CANCELADA|SALDOS_TDC.SDO_ACT|1', @rs;
+DECLARE @r TABLE (PARA NVARCHAR(MAX), CC NVARCHAR(MAX), CCO NVARCHAR(MAX), ASUNTO NVARCHAR(255), CUERPO_HTML NVARCHAR(MAX), ADJUNTOS NVARCHAR(MAX));
+DECLARE @m NVARCHAR(2048);
+INSERT INTO @r EXEC ops.sp_validacion_entrada_avisar @c, @m OUTPUT, @solo_prueba = 1;
+SELECT @rs = CONCAT(CASE WHEN ASUNTO LIKE N'%Actualización detenida%' THEN 1 ELSE 0 END,
+                    CASE WHEN CUERPO_HTML LIKE N'%SALDO[_]ACTUAL%' THEN 1 ELSE 0 END,
+                    CASE WHEN CUERPO_HTML LIKE N'%ops.sp[_]actualizacion[_]486 @fecha = ''2030-02-04''%' THEN 1 ELSE 0 END) FROM @r;
+EXEC pru.sp_igual N'LAYOUT ACT: el correo trae el encabezado nuevo (respecto a la última carga buena) y el comando de la actualización', N'111', @rs;
+DECLARE @lc TABLE (ARCHIVO VARCHAR(50), CAMPO SYSNAME, PATRON_ANTES NVARCHAR(200), PATRON_NUEVO NVARCHAR(200), ACTIVO BIT,
+                   ULTIMO_ARCHIVO DATETIME2(0), EN_EL_ULTIMO_ARCHIVO NVARCHAR(MAX));
+INSERT INTO @lc EXEC cfg.sp_layout_cambiar 'SALDOS_TDC', 'SDO_ACT', N'SALDO_ACTUAL';
+DECLARE @c2 INT, @n INT;
+EXEC ops.sp_corrida_iniciar '486', 'ACT', '2030-02-05', NULL, @c2 OUTPUT;
+SET @err = 0;
+BEGIN TRY
+    EXEC ops.sp_cargar_proceso @c2, @n OUTPUT;
+END TRY
+BEGIN CATCH
+    SET @err = ERROR_NUMBER();
+END CATCH;
+EXEC ops.sp_corrida_finalizar @c2, 'CANCELADA', N'Prueba: actualización con la matriz corregida';
+SET @rs = CONCAT((SELECT PATRON_NUEVO FROM @lc), '|', @err, '|', (SELECT ESTATUS FROM ops.ARCHIVO_CARGADO WHERE ID_CORRIDA = @c2 AND CODIGO = 'SALDOS_TDC'));
+EXEC pru.sp_igual N'LAYOUT ACT: con la matriz corregida la carga pasa', N'SALDO[_]ACTUAL|0|CARGADO', @rs;
+UPDATE c SET PATRON_ENCABEZADO = N'SALDO'
+FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO WHERE a.CODIGO = 'SALDOS_TDC' AND c.CAMPO_DESTINO = 'SDO_ACT';
+UPDATE c SET EDITADO_POR = NULL, FE_EDICION = NULL
+FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO WHERE a.CODIGO = 'SALDOS_TDC' AND c.CAMPO_DESTINO = 'SDO_ACT';
+UPDATE cfg.ARCHIVO SET RUTA = @ruta_act WHERE CLIENTE = '486' AND PROCESO = 'ACT';
 GO
 
 /* ---------------------------------------------------------------------
@@ -1101,6 +1331,33 @@ EXEC ops.sp_exportar_auto @g15;
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'EXPORTAR_AUTOMATICO';
 SET @rs = CAST((SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @g15 AND PASO = 'EXPORTAR AUTOMATICO') AS NVARCHAR(10));
 EXEC pru.sp_igual N'EXPORTAR AUTO: apagado no escribe; encendido deja constancia en la bitácora', N'1', @rs;
+GO
+
+/* ---------------------------------------------------------------------
+   La semilla conserva lo que cambió el equipo (layout, catálogos, tolerancias).
+   Va al final porque la semilla regresa los parámetros a los de fábrica. :r es de sqlcmd (CI).
+   --------------------------------------------------------------------- */
+DECLARE @lc TABLE (ARCHIVO VARCHAR(50), CAMPO SYSNAME, PATRON_ANTES NVARCHAR(200), PATRON_NUEVO NVARCHAR(200), ACTIVO BIT,
+                   ULTIMO_ARCHIVO DATETIME2(0), EN_EL_ULTIMO_ARCHIVO NVARCHAR(MAX));
+INSERT INTO @lc EXEC cfg.sp_layout_cambiar 'MAESTRA_HIPO', 'SALDO2', N'MONTO PLAZO NUEVO';
+UPDATE cfg.VALIDACION_DATO SET PCT_MAX = 7 WHERE CLIENTE = '486' AND CODIGO = 'MAESTRA_TDC' AND CAMPO = 'TEL1' AND TIPO = 'TELEFONO';
+DECLARE @k TABLE (CATALOGO VARCHAR(40), VALOR_ORIGEN NVARCHAR(200), VALOR_DESTINO NVARCHAR(200), ORDEN INT, ACTIVO BIT, ALTA_POR VARCHAR(10), USUARIO SYSNAME, FE_MOD DATETIME2(0));
+INSERT INTO @k EXEC cfg.sp_catalogo_alta 'ESTATUS_TDC', N'VEN1', N'';
+UPDATE cfg.CATALOGO SET VALOR_DESTINO = N'VENC' WHERE CLIENTE = '486' AND CATALOGO = 'ESTATUS_CONSUMO' AND VALOR_ORIGEN = N'VENCIDA';
+GO
+:r /tmp/ci_sql/Banbaj/90_semilla_486.sql
+DECLARE @rs NVARCHAR(4000) = CONCAT(
+    (SELECT CONCAT(c.PATRON_ENCABEZADO, ':', CASE WHEN c.EDITADO_POR IS NOT NULL THEN 1 ELSE 0 END) FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO
+     WHERE a.CODIGO = 'MAESTRA_HIPO' AND c.CAMPO_DESTINO = 'SALDO2'), '|',
+    (SELECT c.PATRON_ENCABEZADO FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO
+     WHERE a.CODIGO = 'MAESTRA_TDC' AND c.CAMPO_DESTINO = 'SALDO2'), '|',
+    (SELECT RUTA FROM cfg.ARCHIVO WHERE CLIENTE = '486' AND CODIGO = 'MAESTRA_TDC'), '|',
+    (SELECT PCT_MAX FROM cfg.VALIDACION_DATO WHERE CLIENTE = '486' AND CODIGO = 'MAESTRA_TDC' AND CAMPO = 'TEL1' AND TIPO = 'TELEFONO'), '|',
+    (SELECT ALTA_POR FROM cfg.CATALOGO WHERE CLIENTE = '486' AND CATALOGO = 'ESTATUS_TDC' AND VALOR_ORIGEN = N'VEN1'), '|',
+    (SELECT VALOR_DESTINO FROM cfg.CATALOGO WHERE CLIENTE = '486' AND CATALOGO = 'ESTATUS_CONSUMO' AND VALOR_ORIGEN = N'VENCIDA'), '|',
+    ISNULL(CAST(SESSION_CONTEXT(N'SEMILLA') AS NVARCHAR(10)), N'(nulo)'));
+EXEC pru.sp_igual N'SEMILLA: conserva layout, carpeta, catálogos y tolerancias del equipo; lo no editado queda de fábrica',
+     N'MONTO PLAZO NUEVO:1|MONTO A CUBRIR PLAZOS PAGO LIQUIDACION|/datos/asig/|7.00|EQUIPO|VENC|(nulo)', @rs;
 GO
 
 /* ---------------------------------------------------------------------

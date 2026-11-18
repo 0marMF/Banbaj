@@ -7,7 +7,8 @@ GO
    ops.sp_corrida_iniciar   abre una corrida (ASIG / ACT)
    ops.sp_corrida_finalizar cierra la corrida
    ops.sp_cargar_archivo    carga dinámica de UN archivo (versión corregida de SQLQuery1)
-   ops.sp_cargar_proceso    carga todos los archivos activos del proceso
+   ops.sp_cargar_proceso    carga todos los archivos activos del proceso y, si la validación de la
+                            entrada (sql/22) encontró algo, avisa y detiene (50025)
    ops.sp_homologar         aplica cfg.HOMOLOGACION
    ops.sp_validar           aplica cfg.REGLA de un paso
    ===================================================================== */
@@ -84,11 +85,11 @@ BEGIN
 
     DECLARE @cliente VARCHAR(10), @codigo VARCHAR(50), @ruta NVARCHAR(400), @patron NVARCHAR(200),
             @sep VARCHAR(5), @comillas BIT, @codepage VARCHAR(10), @fdl VARCHAR(10), @fila_enc INT,
-            @ncols INT, @destino SYSNAME, @obligatorio BIT, @fecha DATE, @err NVARCHAR(4000);
+            @ncols INT, @ncols_cfg INT, @destino SYSNAME, @obligatorio BIT, @fecha DATE, @err NVARCHAR(4000);
 
     SELECT @cliente = a.CLIENTE, @codigo = a.CODIGO, @ruta = a.RUTA, @patron = a.PATRON_NOMBRE,
            @sep = a.SEPARADOR, @comillas = a.CON_COMILLAS, @codepage = a.CODEPAGE, @fdl = a.FIN_DE_LINEA,
-           @fila_enc = a.FILA_ENCABEZADO, @ncols = a.NUM_COLUMNAS, @destino = a.TABLA_DESTINO,
+           @fila_enc = a.FILA_ENCABEZADO, @ncols_cfg = a.NUM_COLUMNAS, @destino = a.TABLA_DESTINO,
            @obligatorio = a.OBLIGATORIO, @fecha = c.FECHA_PROCESO
     FROM cfg.ARCHIVO a
     JOIN ops.CORRIDA c ON c.ID_CORRIDA = @id_corrida
@@ -97,6 +98,8 @@ BEGIN
     IF @codigo IS NULL THROW 50020, 'Archivo no encontrado en cfg.ARCHIVO.', 1;
     SET @ruta = cfg.fn_ruta(@ruta, @fecha);       -- carpeta del día: Q:\CYBER\C_486\{AAAA}\{MES}\{DD}\
 
+    DECLARE @validar_layout BIT = CASE WHEN ISNULL(cfg.fn_param(@cliente, 'VALIDAR_LAYOUT'), '1') = '1' THEN 1 ELSE 0 END,
+            @validar_datos  BIT = CASE WHEN ISNULL(cfg.fn_param(@cliente, 'VALIDAR_DATOS'), '1') = '1' THEN 1 ELSE 0 END;
     DECLARE @paso VARCHAR(80) = 'CARGA ' + @codigo;
     DECLARE @dest_schema SYSNAME = ISNULL(PARSENAME(@destino, 2), 'stg'),
             @dest_tabla  SYSNAME = PARSENAME(@destino, 1);
@@ -120,8 +123,8 @@ BEGIN
 
     IF @archivo IS NULL
     BEGIN
-        INSERT INTO ops.ARCHIVO_CARGADO (ID_CORRIDA, ID_ARCHIVO, RUTA, ESTATUS)
-        VALUES (@id_corrida, @id_archivo, @ruta + @patron, 'NO_RECIBIDO');
+        INSERT INTO ops.ARCHIVO_CARGADO (ID_CORRIDA, ID_ARCHIVO, CODIGO, RUTA, ESTATUS)
+        VALUES (@id_corrida, @id_archivo, @codigo, @ruta + @patron, 'NO_RECIBIDO');
         EXEC ops.sp_log @id_corrida, @paso, 'AVISO', 0, N'No se encontró el archivo con el patrón indicado.';
         IF @obligatorio = 1
             THROW 50021, 'Falta un archivo obligatorio; revisa ops.ARCHIVO_CARGADO.', 1;
@@ -131,8 +134,46 @@ BEGIN
     DECLARE @path NVARCHAR(1000) = @ruta + @archivo;
     EXEC ops.sp_log @id_corrida, @paso, 'INICIO', NULL, @path;
 
-    /* 2. Staging crudo: ID + c001..cNNN, todo texto */
+    /* 2. Cuántas columnas trae: se cuentan en el renglón de encabezados (respeta las comillas).
+          Así el layout no depende de NUM_COLUMNAS: si el banco agrega o quita columnas, se lee igual
+          y solo queda un aviso en la bitácora. */
     DECLARE @sql NVARCHAR(MAX), @cols NVARCHAR(MAX) = N'', @colsdef NVARCHAR(MAX) = N'', @i INT = 1;
+    CREATE TABLE #linea (L NVARCHAR(MAX));
+    SET @sql = N'BULK INSERT #linea FROM ' + QUOTENAME(@path, '''') + N' WITH (ROWTERMINATOR = ' + QUOTENAME(@fdl, '''')
+             + CASE WHEN NULLIF(@codepage, '') IS NOT NULL THEN N', CODEPAGE = ' + QUOTENAME(@codepage, '''') ELSE N'' END
+             + N', FIRSTROW = ' + CAST(@fila_enc AS NVARCHAR(10)) + N', LASTROW = ' + CAST(@fila_enc AS NVARCHAR(10)) + N');';
+    BEGIN TRY
+        EXEC (@sql);
+    END TRY
+    BEGIN CATCH
+        SET @err = ERROR_MESSAGE();          -- si no se pudo leer el renglón, se usa NUM_COLUMNAS
+    END CATCH;
+    DECLARE @enc NVARCHAR(MAX) = (SELECT TOP (1) L FROM #linea), @dentro BIT = 0, @ch NCHAR(1);
+    SET @ncols = NULL;
+    IF @enc IS NOT NULL
+    BEGIN
+        SET @enc = REPLACE(@enc, NCHAR(13), N'');
+        SET @ncols = 1;
+        WHILE @i <= LEN(@enc)
+        BEGIN
+            SET @ch = SUBSTRING(@enc, @i, 1);
+            IF @comillas = 1 AND @ch = N'"'
+                SET @dentro = 1 - @dentro
+            ELSE IF @dentro = 0 AND @ch = LEFT(@sep, 1)
+                SET @ncols += 1;
+            SET @i += 1;
+        END;
+    END;
+    IF @ncols IS NULL OR @ncols > 999 SET @ncols = @ncols_cfg;
+    IF @ncols <> @ncols_cfg
+    BEGIN
+        SET @err = CONCAT(N'El archivo trae ', @ncols, N' columnas (cfg.ARCHIVO.NUM_COLUMNAS dice ', @ncols_cfg,
+                          N'): se lee con las del archivo. Las columnas se buscan por encabezado, no por posición.');
+        EXEC ops.sp_log @id_corrida, @paso, 'AVISO', @ncols, @err;
+    END;
+
+    /* 3. Staging crudo: ID + c001..cNNN, todo texto */
+    SET @i = 1;
     WHILE @i <= @ncols
     BEGIN
         SET @cols    += CASE WHEN @i > 1 THEN N',' ELSE N'' END + N'c' + RIGHT(N'000' + CAST(@i AS NVARCHAR(4)), 3);
@@ -158,13 +199,13 @@ BEGIN
         EXEC (@sql);
     END TRY
     BEGIN CATCH
-        SET @err = N'BULK INSERT falló (revisa NUM_COLUMNAS, separador y codificación): ' + ERROR_MESSAGE();
-        INSERT INTO ops.ARCHIVO_CARGADO (ID_CORRIDA, ID_ARCHIVO, RUTA, ESTATUS) VALUES (@id_corrida, @id_archivo, @path, 'ERROR');
+        SET @err = N'BULK INSERT falló (revisa separador, comillas y codificación): ' + ERROR_MESSAGE();
+        INSERT INTO ops.ARCHIVO_CARGADO (ID_CORRIDA, ID_ARCHIVO, CODIGO, RUTA, ESTATUS, COLUMNAS) VALUES (@id_corrida, @id_archivo, @codigo, @path, 'ERROR', @ncols);
         EXEC ops.sp_log @id_corrida, @paso, 'ERROR', NULL, @err;
         THROW 50022, @err, 1;
     END CATCH;
 
-    /* 3. Encabezados -> posición de cada columna del catálogo */
+    /* 4. Encabezados -> posición de cada columna del catálogo */
     CREATE TABLE #hdr (POS INT, NOMBRE NVARCHAR(4000));
     SET @sql = N'INSERT INTO #hdr (POS, NOMBRE) SELECT v.POS, cfg.fn_texto(v.NOMBRE) FROM ' + @raw_q
              + N' r CROSS APPLY (VALUES ';
@@ -177,8 +218,65 @@ BEGIN
     END;
     SET @sql += N') v(POS, NOMBRE) WHERE r.ID = @fila;';
     EXEC sp_executesql @sql, N'@fila INT', @fila = @fila_enc;
+    DECLARE @encabezados NVARCHAR(MAX) =
+        (SELECT N'[' + STRING_AGG(CAST(N'"' + STRING_ESCAPE(ISNULL(NOMBRE, N''), 'json') + N'"' AS NVARCHAR(MAX)), N',') WITHIN GROUP (ORDER BY POS) + N']' FROM #hdr);
 
-    /* 3b. Base completa: todas las columnas, tal como llegaron (cfg.ARCHIVO.GUARDAR_COMPLETO) */
+    CREATE TABLE #map (CAMPO SYSNAME, POS INT NULL, TIPO_SQL VARCHAR(50), TRANSF NVARCHAR(1000),
+                       OBLIGATORIO BIT, PERMITE_VACIO BIT, DERIVADO BIT, PATRON NVARCHAR(200), COINCIDENCIAS INT);
+    INSERT INTO #map (CAMPO, POS, TIPO_SQL, TRANSF, OBLIGATORIO, PERMITE_VACIO, DERIVADO, PATRON, COINCIDENCIAS)
+    SELECT  c.CAMPO_DESTINO,
+            COALESCE(c.POSICION, m.POS),
+            c.TIPO_SQL, c.TRANSFORMACION, c.OBLIGATORIO, c.PERMITE_VACIO,
+            CASE WHEN c.PATRON_ENCABEZADO IS NULL AND c.POSICION IS NULL THEN 1 ELSE 0 END,
+            c.PATRON_ENCABEZADO, m.N
+    FROM cfg.ARCHIVO_COLUMNA c
+    OUTER APPLY (SELECT MIN(h.POS) AS POS, COUNT(*) AS N FROM #hdr h
+                 WHERE UPPER(h.NOMBRE) COLLATE Latin1_General_CI_AI LIKE UPPER(c.PATRON_ENCABEZADO) COLLATE Latin1_General_CI_AI) m
+    WHERE c.ID_ARCHIVO = @id_archivo AND c.ACTIVO = 1;
+
+    /* 5. Validación del layout (decisión 17/11): con VALIDAR_LAYOUT = 1 cada campo que toma el proceso
+          tiene que estar en el archivo, obligatorio u opcional. Si falta uno, el archivo no se carga,
+          se siguen revisando los demás archivos y al final ops.sp_cargar_proceso detiene la corrida y
+          avisa al equipo de asignaciones (VALIDACION_ENTRADA_486). */
+    DECLARE @faltan NVARCHAR(4000) =
+        (SELECT STRING_AGG(CAMPO, ', ') FROM #map WHERE POS IS NULL AND DERIVADO = 0 AND (OBLIGATORIO = 1 OR @validar_layout = 1));
+    DECLARE @opcionales NVARCHAR(4000) =
+        (SELECT STRING_AGG(CAMPO, ', ') FROM #map WHERE POS IS NULL AND DERIVADO = 0 AND OBLIGATORIO = 0 AND @validar_layout = 0);
+    IF @validar_layout = 1
+    BEGIN
+        INSERT INTO ops.VALIDACION_ENTRADA (ID_CORRIDA, CODIGO, TIPO, CAMPO, ESPERADO, DETIENE)
+        SELECT @id_corrida, @codigo, 'LAYOUT', CAMPO, LEFT(PATRON, 400), 1 FROM #map WHERE POS IS NULL AND DERIVADO = 0;
+        /* Un patrón que coincide con varias columnas no detiene (se toma la primera) pero se avisa */
+        INSERT INTO ops.VALIDACION_ENTRADA (ID_CORRIDA, CODIGO, TIPO, CAMPO, ESPERADO, ANOMALOS, EJEMPLOS, DETIENE)
+        SELECT @id_corrida, @codigo, 'LAYOUT', CAMPO, LEFT(PATRON, 400), COINCIDENCIAS,
+               CONCAT(N'Coincide con ', COINCIDENCIAS, N' columnas; se toma la ', POS), 0
+        FROM #map WHERE COINCIDENCIAS > 1 AND DERIVADO = 0;
+    END;
+    IF @faltan IS NOT NULL
+    BEGIN
+        SET @err = N'Encabezados no encontrados en el archivo: ' + @faltan;
+        INSERT INTO ops.ARCHIVO_CARGADO (ID_CORRIDA, ID_ARCHIVO, CODIGO, RUTA, ESTATUS, ENCABEZADOS, COLUMNAS)
+        VALUES (@id_corrida, @id_archivo, @codigo, @path, CASE WHEN @validar_layout = 1 THEN 'LAYOUT' ELSE 'ERROR' END, @encabezados, @ncols);
+        EXEC ops.sp_log @id_corrida, @paso, 'ERROR', NULL, @err;
+        IF @validar_layout = 0
+            THROW 50023, @err, 1;
+        /* Los campos que sí se encontraron también se revisan, para que el correo traiga todo de una vez */
+        IF @validar_datos = 1
+            EXEC ops.sp_validar_datos_archivo @id_corrida, @id_archivo, @raw_q, @fila_enc;
+        SET @recibido = 1;
+        RETURN;
+    END;
+    IF @opcionales IS NOT NULL
+    BEGIN
+        SET @err = N'Encabezados opcionales no encontrados (quedan vacíos): ' + @opcionales;
+        EXEC ops.sp_log @id_corrida, @paso, 'AVISO', NULL, @err;
+    END
+
+    /* 6. Validación de datos (decisión 17/11): reglas de cfg.VALIDACION_DATO sobre el texto crudo */
+    IF @validar_datos = 1
+        EXEC ops.sp_validar_datos_archivo @id_corrida, @id_archivo, @raw_q, @fila_enc;
+
+    /* 6b. Base completa: todas las columnas, tal como llegaron (cfg.ARCHIVO.GUARDAR_COMPLETO) */
     IF EXISTS (SELECT 1 FROM cfg.ARCHIVO WHERE ID_ARCHIVO = @id_archivo AND GUARDAR_COMPLETO = 1)
     BEGIN
         /* Llave JSON = encabezado; vacío -> COL_n, repetido -> nombre_n; el punto se cambia por _ (FOR JSON lo anida) */
@@ -204,48 +302,18 @@ BEGIN
                  + (SELECT STRING_AGG(CAST(N'r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3) AS NVARCHAR(MAX)), N', ') FROM #llave) + N', NULL) IS NOT NULL;';
         EXEC sp_executesql @sql, N'@id_corrida INT, @codigo VARCHAR(50), @fila INT', @id_corrida = @id_corrida, @codigo = @codigo, @fila = @fila_enc;
         INSERT INTO dat.BASE_RECIBIDA_ARCHIVO (ID_CORRIDA, CODIGO, CLIENTE, ARCHIVO, ENCABEZADOS, REGISTROS, VIGENTE)
-        SELECT @id_corrida, @codigo, @cliente, @archivo,
-               (SELECT N'[' + STRING_AGG(CAST(N'"' + STRING_ESCAPE(ISNULL(NOMBRE, N''), 'json') + N'"' AS NVARCHAR(MAX)), N',') WITHIN GROUP (ORDER BY POS) + N']' FROM #hdr),
+        SELECT @id_corrida, @codigo, @cliente, @archivo, @encabezados,
                (SELECT COUNT(*) FROM dat.BASE_RECIBIDA WHERE ID_CORRIDA = @id_corrida AND CODIGO = @codigo), 1;
     END;
 
-    CREATE TABLE #map (CAMPO SYSNAME, POS INT NULL, TIPO_SQL VARCHAR(50), TRANSF NVARCHAR(1000),
-                       OBLIGATORIO BIT, DERIVADO BIT);
-    INSERT INTO #map (CAMPO, POS, TIPO_SQL, TRANSF, OBLIGATORIO, DERIVADO)
-    SELECT  c.CAMPO_DESTINO,
-            COALESCE(c.POSICION,
-                     (SELECT MIN(h.POS) FROM #hdr h
-                      WHERE UPPER(h.NOMBRE) COLLATE Latin1_General_CI_AI LIKE UPPER(c.PATRON_ENCABEZADO) COLLATE Latin1_General_CI_AI)),
-            c.TIPO_SQL, c.TRANSFORMACION, c.OBLIGATORIO,
-            CASE WHEN c.PATRON_ENCABEZADO IS NULL AND c.POSICION IS NULL THEN 1 ELSE 0 END
-    FROM cfg.ARCHIVO_COLUMNA c
-    WHERE c.ID_ARCHIVO = @id_archivo AND c.ACTIVO = 1;
-
-    DECLARE @faltan NVARCHAR(4000) =
-        (SELECT STRING_AGG(CAMPO, ', ') FROM #map WHERE POS IS NULL AND DERIVADO = 0 AND OBLIGATORIO = 1);
-    IF @faltan IS NOT NULL
-    BEGIN
-        SET @err = N'Encabezados obligatorios no encontrados: ' + @faltan;
-        INSERT INTO ops.ARCHIVO_CARGADO (ID_CORRIDA, ID_ARCHIVO, RUTA, ESTATUS) VALUES (@id_corrida, @id_archivo, @path, 'ERROR');
-        EXEC ops.sp_log @id_corrida, @paso, 'ERROR', NULL, @err;
-        THROW 50023, @err, 1;
-    END;
-    DECLARE @opcionales NVARCHAR(4000) =
-        (SELECT STRING_AGG(CAMPO, ', ') FROM #map WHERE POS IS NULL AND DERIVADO = 0 AND OBLIGATORIO = 0);
-    IF @opcionales IS NOT NULL
-    BEGIN
-        SET @err = N'Encabezados opcionales no encontrados (quedan vacíos): ' + @opcionales;
-        EXEC ops.sp_log @id_corrida, @paso, 'AVISO', NULL, @err;
-    END
-
-    /* 4. Tabla destino tipada (se recrea) */
+    /* 7. Tabla destino tipada (se recrea) */
     DECLARE @def NVARCHAR(MAX) =
         (SELECT STRING_AGG(CAST(QUOTENAME(CAMPO) + N' ' + TIPO_SQL + N' NULL' AS NVARCHAR(MAX)), N', ') FROM #map);
     SET @sql = N'DROP TABLE IF EXISTS ' + @dest_q + N'; CREATE TABLE ' + @dest_q
              + N' (ID_CORRIDA INT NOT NULL, FILA INT NOT NULL, ' + @def + N', MOTIVO_RECHAZO NVARCHAR(1000) NULL);';
     EXEC (@sql);
 
-    /* 5. Inserta convirtiendo; arma el motivo de rechazo en el mismo paso */
+    /* 8. Inserta convirtiendo; arma el motivo de rechazo en el mismo paso */
     DECLARE @lista NVARCHAR(MAX), @exprs NVARCHAR(MAX), @motivo NVARCHAR(MAX);
     SELECT
         @lista = STRING_AGG(CAST(QUOTENAME(CAMPO) AS NVARCHAR(MAX)), N', '),
@@ -255,26 +323,27 @@ BEGIN
                               + REPLACE(TRANSF, N'{v}', N'cfg.fn_texto(r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3) + N')')
                               + N')'
                     END + N' AS ' + QUOTENAME(CAMPO) AS NVARCHAR(MAX)), N', '),
-        /* Solo las columnas OBLIGATORIAS rechazan el renglón (vacías o no convertibles).
-           En las opcionales un valor no convertible queda NULL y se reporta como aviso. */
+        /* Solo las columnas OBLIGATORIAS rechazan el renglón (vacías o no convertibles; con PERMITE_VACIO
+           solo las no convertibles). En las opcionales un valor no convertible queda NULL y se reporta como aviso. */
         @motivo = STRING_AGG(CAST(
                     CASE WHEN POS IS NOT NULL AND OBLIGATORIO = 1 THEN
                         N'CASE WHEN x.' + QUOTENAME(CAMPO) + N' IS NULL AND cfg.fn_texto(r.c'
-                        + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3) + N') IS NOT NULL THEN N''' + CAMPO + N' inválido; '' END, '
-                        + N'CASE WHEN cfg.fn_texto(r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3)
-                        + N') IS NULL THEN N''' + CAMPO + N' vacío; '' END'
+                        + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3) + N') IS NOT NULL THEN N''' + CAMPO + N' inválido; '' END'
+                        + CASE WHEN PERMITE_VACIO = 1 THEN N'' ELSE
+                          N', CASE WHEN cfg.fn_texto(r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3)
+                        + N') IS NULL THEN N''' + CAMPO + N' vacío; '' END' END
                     END AS NVARCHAR(MAX)), N', ')
     FROM #map;
 
     SET @sql = N'INSERT INTO ' + @dest_q + N' (ID_CORRIDA, FILA, ' + @lista + N', MOTIVO_RECHAZO) '
              + N'SELECT @id_corrida, r.ID, ' + (SELECT STRING_AGG(CAST(N'x.' + QUOTENAME(CAMPO) AS NVARCHAR(MAX)), N', ') FROM #map)
-             + N', NULLIF(CONCAT(N'''', ' + ISNULL(@motivo, N'N''''') + N'), N'''') '
+             + N', NULLIF(CONCAT(N'''', ' + ISNULL(@motivo, N'N''''') + N', N''''), N'''') '
              + N'FROM ' + @raw_q + N' r CROSS APPLY (SELECT ' + @exprs + N') x '
              + N'WHERE r.ID > @fila AND COALESCE(' + (SELECT STRING_AGG(CAST(N'cfg.fn_texto(r.c' + RIGHT(N'000' + CAST(POS AS NVARCHAR(4)), 3) + N')' AS NVARCHAR(MAX)), N', ') FROM #map WHERE POS IS NOT NULL) + N', NULL) IS NOT NULL; SET @n = @@ROWCOUNT;';
     DECLARE @leidos INT;
     EXEC sp_executesql @sql, N'@id_corrida INT, @fila INT, @n INT OUTPUT', @id_corrida = @id_corrida, @fila = @fila_enc, @n = @leidos OUTPUT;
 
-    /* 6. Rechazos -> ops.RECHAZO (con el renglón crudo en JSON) y se quitan del destino */
+    /* 9. Rechazos -> ops.RECHAZO (con el renglón crudo en JSON) y se quitan del destino */
     SET @sql = N'INSERT INTO ops.RECHAZO (ID_CORRIDA, ORIGEN, FILA, MOTIVO, DATOS) '
              + N'SELECT d.ID_CORRIDA, @codigo, d.FILA, d.MOTIVO_RECHAZO, '
              + N'(SELECT r.* FROM ' + @raw_q + N' r WHERE r.ID = d.FILA FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) '
@@ -305,8 +374,8 @@ BEGIN
         END;
     END;
 
-    INSERT INTO ops.ARCHIVO_CARGADO (ID_CORRIDA, ID_ARCHIVO, RUTA, LEIDOS, INSERTADOS, RECHAZADOS, ESTATUS)
-    VALUES (@id_corrida, @id_archivo, @path, @leidos, @insertados, @leidos - @insertados, 'CARGADO');
+    INSERT INTO ops.ARCHIVO_CARGADO (ID_CORRIDA, ID_ARCHIVO, CODIGO, RUTA, LEIDOS, INSERTADOS, RECHAZADOS, ESTATUS, ENCABEZADOS, COLUMNAS)
+    VALUES (@id_corrida, @id_archivo, @codigo, @path, @leidos, @insertados, @leidos - @insertados, 'CARGADO', @encabezados, @ncols);
     SET @err = CONCAT(N'Leídos: ', @leidos, N' · rechazados: ', @leidos - @insertados);
     EXEC ops.sp_log @id_corrida, @paso, 'OK', @insertados, @err;
     SET @recibido = 1;
@@ -337,6 +406,16 @@ BEGIN
         FETCH NEXT FROM cur INTO @id;
     END;
     CLOSE cur; DEALLOCATE cur;
+
+    /* Validación de la entrada (decisión 17/11): ya se revisaron todos los archivos; si alguno no pasó
+       (layout o datos), se avisa al equipo de asignaciones con todo lo encontrado y se detiene la corrida.
+       Todavía no se tocó el DAT: el equipo corrige (matriz, catálogo, tolerancia o archivo) y la vuelve a correr. */
+    IF EXISTS (SELECT 1 FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @id_corrida AND DETIENE = 1)
+    BEGIN
+        DECLARE @msg NVARCHAR(2048);
+        EXEC ops.sp_validacion_entrada_avisar @id_corrida, @msg OUTPUT;
+        THROW 50025, @msg, 1;
+    END;
 
     IF @recibidos = 0
         THROW 50024, 'No se recibió ningún archivo para este proceso.', 1;

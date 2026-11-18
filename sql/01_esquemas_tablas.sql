@@ -356,3 +356,29 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_HISTORIA_FOLIO_RIESGO')
     CREATE INDEX IX_HISTORIA_FOLIO_RIESGO ON dat.HISTORIA_FOLIO (CLIENTE, RIESGO);
 GO
+/* Encabezados de cada archivo cargado (para el correo de validación y cfg.sp_layout_cambiar) */
+IF COL_LENGTH('ops.ARCHIVO_CARGADO', 'ENCABEZADOS') IS NULL
+    ALTER TABLE ops.ARCHIVO_CARGADO ADD ENCABEZADOS NVARCHAR(MAX) NULL, COLUMNAS INT NULL, CODIGO VARCHAR(50) NULL;
+GO
+/* Resultado de la validación de la entrada (layout y datos) por corrida, archivo y regla.
+   DETIENE = 1: superó la tolerancia y detuvo el proceso. */
+IF OBJECT_ID('ops.VALIDACION_ENTRADA') IS NULL
+CREATE TABLE ops.VALIDACION_ENTRADA (
+    ID          INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_VALIDACION_ENTRADA PRIMARY KEY,
+    ID_CORRIDA  INT            NOT NULL,
+    CODIGO      VARCHAR(50)    NOT NULL,           -- archivo
+    TIPO        VARCHAR(15)    NOT NULL,           -- LAYOUT o el TIPO de cfg.VALIDACION_DATO
+    CAMPO       SYSNAME        NULL,
+    ESPERADO    NVARCHAR(400)  NULL,               -- encabezado buscado, catálogo, tope…
+    REVISADOS   INT            NULL,
+    ANOMALOS    INT            NULL,
+    PCT         DECIMAL(7,2)   NULL,
+    PCT_MAX     DECIMAL(5,2)   NULL,
+    EJEMPLOS    NVARCHAR(1000) NULL,               -- renglón y valor enmascarado (o el valor de catálogo, que no es dato personal)
+    DETIENE     BIT            NOT NULL,
+    FECHA       DATETIME2(0)   NOT NULL CONSTRAINT DF_VALIDACION_ENTRADA_FE DEFAULT SYSDATETIME()
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_VALIDACION_ENTRADA_CORRIDA')
+    CREATE INDEX IX_VALIDACION_ENTRADA_CORRIDA ON ops.VALIDACION_ENTRADA (ID_CORRIDA, CODIGO);
+GO

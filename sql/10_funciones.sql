@@ -188,3 +188,71 @@ BEGIN
     RETURN CASE WHEN DATEDIFF(DAY, '19000101', @fecha) % 7 IN (5, 6) THEN 1 ELSE 0 END;
 END;
 GO
+
+/* ---------------------------------------------------------------------
+   Catálogos estáticos (cfg.CATALOGO, decisión 17/11)
+   Etiqueta del catálogo para un valor del banco; NULL si no está.
+   Compara sin acentos ni mayúsculas; el valor exacto gana sobre los patrones
+   (VALOR_ORIGEN con % o [0-9]) y entre patrones gana el ORDEN menor.
+   --------------------------------------------------------------------- */
+CREATE OR ALTER FUNCTION cfg.fn_catalogo (@cliente VARCHAR(10), @catalogo VARCHAR(40), @valor NVARCHAR(4000))
+RETURNS NVARCHAR(200)
+AS
+BEGIN
+    DECLARE @v NVARCHAR(4000) = cfg.fn_texto(@valor);
+    IF @v IS NULL RETURN NULL;
+    RETURN (SELECT TOP (1) VALOR_DESTINO
+            FROM cfg.CATALOGO
+            WHERE CLIENTE = @cliente AND CATALOGO = @catalogo AND ACTIVO = 1
+              AND (@v = VALOR_ORIGEN COLLATE Latin1_General_CI_AI OR @v LIKE VALOR_ORIGEN COLLATE Latin1_General_CI_AI)
+            ORDER BY CASE WHEN @v = VALOR_ORIGEN COLLATE Latin1_General_CI_AI THEN 0 ELSE 1 END, ORDEN, ID);
+END;
+GO
+
+/* Valor enmascarado para correos y bitácora: letras -> x, dígitos -> 9 (el resto se queda).
+   Sirve para ver la forma de un dato ("xxxx@xxx" o "99-xxxx") sin exponerlo. */
+CREATE OR ALTER FUNCTION cfg.fn_enmascarar (@t NVARCHAR(4000))
+RETURNS NVARCHAR(60)
+AS
+BEGIN
+    IF @t IS NULL RETURN NULL;
+    DECLARE @r NVARCHAR(60) = N'', @i INT = 1, @c NCHAR(1), @n INT = LEN(@t);
+    IF @n > 40 SET @n = 40;
+    WHILE @i <= @n
+    BEGIN
+        SET @c = SUBSTRING(@t, @i, 1);
+        SET @r += CASE WHEN @c LIKE N'[0-9]' THEN N'9'
+                       WHEN UPPER(@c) COLLATE Latin1_General_CI_AI LIKE N'[A-Z]' OR @c LIKE N'[ñÑ]' THEN N'x'
+                       ELSE @c END;
+        SET @i += 1;
+    END;
+    RETURN @r + CASE WHEN LEN(@t) > 40 THEN N'…' ELSE N'' END;
+END;
+GO
+
+/* Patrón LIKE a partir de un encabezado tal como viene en el archivo (lo mismo que patron() de
+   tools/generar_sql_486.py): escapa [ % _, cambia las fechas DD/MM/AAAA por % y "01 ENE…" por
+   "[0-9][0-9] %", para que el patrón siga sirviendo cuando cambie la fecha del encabezado. */
+CREATE OR ALTER FUNCTION cfg.fn_patron_encabezado (@encabezado NVARCHAR(200))
+RETURNS NVARCHAR(200)
+AS
+BEGIN
+    DECLARE @p NVARCHAR(400) = cfg.fn_texto(@encabezado), @i INT, @j INT;
+    IF @p IS NULL RETURN NULL;
+    SET @p = REPLACE(REPLACE(REPLACE(@p, N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
+    SET @i = PATINDEX(N'%[0-9][0-9]/[0-9][0-9]/[0-9][0-9][0-9][0-9]%', @p);
+    WHILE @i > 0
+    BEGIN
+        SET @p = STUFF(@p, @i, 10, N'%');
+        SET @i = PATINDEX(N'%[0-9][0-9]/[0-9][0-9]/[0-9][0-9][0-9][0-9]%', @p);
+    END;
+    SET @i = PATINDEX(N'%[0-9][0-9] [A-Za-z][A-Za-z][A-Za-z]%', @p);
+    IF @i > 0 AND UPPER(SUBSTRING(@p, @i + 3, 3)) IN (N'ENE', N'FEB', N'MAR', N'ABR', N'MAY', N'JUN', N'JUL', N'AGO', N'SEP', N'OCT', N'NOV', N'DIC')
+    BEGIN
+        SET @j = @i + 6;                                         -- fin de la palabra del mes
+        WHILE @j <= LEN(@p) AND SUBSTRING(@p, @j, 1) LIKE N'[A-Za-z0-9]' SET @j += 1;
+        SET @p = STUFF(@p, @i, @j - @i, N'[0-9][0-9] %');
+    END;
+    RETURN LEFT(@p, 200);
+END;
+GO

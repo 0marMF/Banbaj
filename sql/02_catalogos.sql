@@ -77,6 +77,89 @@ CREATE TABLE cfg.ARCHIVO_COLUMNA (
     CONSTRAINT UX_ARCHIVO_COLUMNA UNIQUE (ID_ARCHIVO, CAMPO_DESTINO)
 );
 GO
+/* PERMITE_VACIO: con OBLIGATORIO = 1, un valor vacío no rechaza el renglón (solo uno que no convierte).
+   Ej. el saldo actualizado de TDC viene vacío en VEN2 y VEN3 y la homologación toma el saldo PRIME. */
+IF COL_LENGTH('cfg.ARCHIVO_COLUMNA', 'PERMITE_VACIO') IS NULL
+    ALTER TABLE cfg.ARCHIVO_COLUMNA ADD PERMITE_VACIO BIT NOT NULL CONSTRAINT DF_ARCHIVO_COLUMNA_PV DEFAULT 0;
+GO
+
+/* ---------------------------------------------------------------------
+   Layout editable por el equipo de asignaciones (decisión 17/11)
+   ---------------------------------------------------------------------
+   El layout de cada archivo vive en cfg.ARCHIVO (nombre y carpeta) y en
+   cfg.ARCHIVO_COLUMNA (encabezado de cada campo). El equipo lo cambia con un
+   UPDATE o con cfg.sp_layout_cambiar. Cada cambio queda en cfg.LAYOUT_HISTORIAL
+   y marca el renglón (EDITADO_POR, FE_EDICION): la semilla (90_semilla_486.sql)
+   conserva lo que el equipo cambió en vez de regresarlo al valor de fábrica.
+   Para volver al valor de fábrica: EDITADO_POR = NULL y correr la semilla.
+   --------------------------------------------------------------------- */
+IF COL_LENGTH('cfg.ARCHIVO_COLUMNA', 'EDITADO_POR') IS NULL
+    ALTER TABLE cfg.ARCHIVO_COLUMNA ADD EDITADO_POR SYSNAME NULL, FE_EDICION DATETIME2(0) NULL;
+GO
+IF COL_LENGTH('cfg.ARCHIVO', 'EDITADO_POR') IS NULL
+    ALTER TABLE cfg.ARCHIVO ADD EDITADO_POR SYSNAME NULL, FE_EDICION DATETIME2(0) NULL;
+GO
+IF OBJECT_ID('cfg.LAYOUT_HISTORIAL') IS NULL
+CREATE TABLE cfg.LAYOUT_HISTORIAL (
+    ID           INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_LAYOUT_HISTORIAL PRIMARY KEY,
+    CLIENTE      VARCHAR(10)    NOT NULL,
+    CODIGO       VARCHAR(50)    NOT NULL,           -- archivo (cfg.ARCHIVO.CODIGO)
+    CAMPO        SYSNAME        NULL,               -- NULL = cambio del archivo (nombre, carpeta, activo)
+    DATO         VARCHAR(30)    NOT NULL,           -- PATRON_ENCABEZADO, ACTIVO, RUTA, PATRON_NOMBRE…
+    ANTES        NVARCHAR(400)  NULL,
+    DESPUES      NVARCHAR(400)  NULL,
+    USUARIO      SYSNAME        NOT NULL CONSTRAINT DF_LAYOUT_HISTORIAL_USR DEFAULT SUSER_SNAME(),
+    FECHA        DATETIME2(0)   NOT NULL CONSTRAINT DF_LAYOUT_HISTORIAL_FE DEFAULT SYSDATETIME()
+);
+GO
+/* La semilla corre con SESSION_CONTEXT('SEMILLA') = 1: sus cambios no cuentan como del equipo */
+CREATE OR ALTER TRIGGER cfg.tr_ARCHIVO_COLUMNA_EDICION ON cfg.ARCHIVO_COLUMNA AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF TRY_CONVERT(INT, SESSION_CONTEXT(N'SEMILLA')) = 1 RETURN;
+    IF NOT (UPDATE(PATRON_ENCABEZADO) OR UPDATE(POSICION) OR UPDATE(ACTIVO) OR UPDATE(OBLIGATORIO) OR UPDATE(PERMITE_VACIO)) RETURN;
+    INSERT INTO cfg.LAYOUT_HISTORIAL (CLIENTE, CODIGO, CAMPO, DATO, ANTES, DESPUES)
+    SELECT a.CLIENTE, a.CODIGO, i.CAMPO_DESTINO, v.DATO, v.ANTES, v.DESPUES
+    FROM inserted i
+    JOIN deleted d ON d.ID = i.ID
+    JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = i.ID_ARCHIVO
+    CROSS APPLY (VALUES ('PATRON_ENCABEZADO', d.PATRON_ENCABEZADO, i.PATRON_ENCABEZADO),
+                        ('POSICION', CAST(d.POSICION AS NVARCHAR(400)), CAST(i.POSICION AS NVARCHAR(400))),
+                        ('ACTIVO', CAST(d.ACTIVO AS NVARCHAR(400)), CAST(i.ACTIVO AS NVARCHAR(400))),
+                        ('OBLIGATORIO', CAST(d.OBLIGATORIO AS NVARCHAR(400)), CAST(i.OBLIGATORIO AS NVARCHAR(400))),
+                        ('PERMITE_VACIO', CAST(d.PERMITE_VACIO AS NVARCHAR(400)), CAST(i.PERMITE_VACIO AS NVARCHAR(400)))) v(DATO, ANTES, DESPUES)
+    WHERE ISNULL(v.ANTES, N'<<NULL>>') <> ISNULL(v.DESPUES, N'<<NULL>>');
+    UPDATE c SET EDITADO_POR = SUSER_SNAME(), FE_EDICION = SYSDATETIME()
+    FROM cfg.ARCHIVO_COLUMNA c
+    JOIN inserted i ON i.ID = c.ID
+    JOIN deleted d ON d.ID = i.ID
+    WHERE ISNULL(i.PATRON_ENCABEZADO, N'<<NULL>>') <> ISNULL(d.PATRON_ENCABEZADO, N'<<NULL>>') OR ISNULL(i.POSICION, -1) <> ISNULL(d.POSICION, -1)
+       OR i.ACTIVO <> d.ACTIVO OR i.OBLIGATORIO <> d.OBLIGATORIO OR i.PERMITE_VACIO <> d.PERMITE_VACIO;
+END;
+GO
+CREATE OR ALTER TRIGGER cfg.tr_ARCHIVO_EDICION ON cfg.ARCHIVO AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF TRY_CONVERT(INT, SESSION_CONTEXT(N'SEMILLA')) = 1 RETURN;
+    IF NOT (UPDATE(RUTA) OR UPDATE(PATRON_NOMBRE) OR UPDATE(ACTIVO) OR UPDATE(OBLIGATORIO)) RETURN;
+    INSERT INTO cfg.LAYOUT_HISTORIAL (CLIENTE, CODIGO, CAMPO, DATO, ANTES, DESPUES)
+    SELECT i.CLIENTE, i.CODIGO, NULL, v.DATO, v.ANTES, v.DESPUES
+    FROM inserted i
+    JOIN deleted d ON d.ID_ARCHIVO = i.ID_ARCHIVO
+    CROSS APPLY (VALUES ('RUTA', d.RUTA, i.RUTA),
+                        ('PATRON_NOMBRE', d.PATRON_NOMBRE, i.PATRON_NOMBRE),
+                        ('ACTIVO', CAST(d.ACTIVO AS NVARCHAR(400)), CAST(i.ACTIVO AS NVARCHAR(400))),
+                        ('OBLIGATORIO', CAST(d.OBLIGATORIO AS NVARCHAR(400)), CAST(i.OBLIGATORIO AS NVARCHAR(400)))) v(DATO, ANTES, DESPUES)
+    WHERE ISNULL(v.ANTES, N'<<NULL>>') <> ISNULL(v.DESPUES, N'<<NULL>>');
+    UPDATE a SET EDITADO_POR = SUSER_SNAME(), FE_EDICION = SYSDATETIME()
+    FROM cfg.ARCHIVO a
+    JOIN inserted i ON i.ID_ARCHIVO = a.ID_ARCHIVO
+    JOIN deleted d ON d.ID_ARCHIVO = i.ID_ARCHIVO
+    WHERE i.RUTA <> d.RUTA OR i.PATRON_NOMBRE <> d.PATRON_NOMBRE OR i.ACTIVO <> d.ACTIVO OR i.OBLIGATORIO <> d.OBLIGATORIO;
+END;
+GO
 
 /* Homologación: UPDATE t SET CAMPO_DESTINO = VALOR WHERE CONDICION, en ORDEN.
    VALOR es una expresión SQL (un literal va entre comillas: 'VIG').
@@ -255,4 +338,105 @@ CREATE TABLE cfg.TEL_QUEJA_CYBER (
     FE_CARGA  DATETIME2(0) NOT NULL CONSTRAINT DF_TEL_QUEJA_CYBER_FE DEFAULT SYSDATETIME(),
     CONSTRAINT PK_TEL_QUEJA_CYBER PRIMARY KEY (CUENTA, TELEFONO)
 );
+GO
+
+/* ---------------------------------------------------------------------
+   Catálogos estáticos de etiquetado (decisión 17/11)
+   ---------------------------------------------------------------------
+   Lo que antes estaba escrito en el código de la homologación (estatus,
+   tipo de crédito, cartera, enfoque, tramo…) ahora es una tabla que el equipo
+   de asignaciones edita: cambia o agrega un valor y la próxima corrida lo usa.
+   - VALOR_ORIGEN: el texto como llega del banco. Sin acentos ni mayúsculas.
+     Admite comodines de LIKE (% y [0-9]); el valor exacto gana sobre el patrón.
+   - VALOR_DESTINO: la etiqueta que se guarda ('' = se deja vacío a propósito).
+   - ORDEN: entre patrones que coinciden, gana el ORDEN menor.
+   - Para quitar un valor: ACTIVO = 0 (si se borra, la semilla lo vuelve a poner).
+   La semilla solo agrega los valores que faltan: nunca cambia ni borra lo del equipo.
+   Si un catálogo tiene VALIDA = 1, un valor que no esté en él detiene el proceso
+   (validación de datos de la entrada, cfg.VALIDACION_DATO tipo CATALOGO).
+   --------------------------------------------------------------------- */
+IF OBJECT_ID('cfg.CATALOGO_DEF') IS NULL
+CREATE TABLE cfg.CATALOGO_DEF (
+    CLIENTE      VARCHAR(10)    NOT NULL,
+    CATALOGO     VARCHAR(40)    NOT NULL,
+    DESCRIPCION  NVARCHAR(400)  NOT NULL,
+    ORIGEN       NVARCHAR(200)  NULL,               -- archivo y columna de donde sale el valor
+    DESTINO      NVARCHAR(200)  NULL,               -- campo que llena
+    CONSTRAINT PK_CATALOGO_DEF PRIMARY KEY (CLIENTE, CATALOGO)
+);
+GO
+IF OBJECT_ID('cfg.CATALOGO') IS NULL
+CREATE TABLE cfg.CATALOGO (
+    ID             INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CATALOGO PRIMARY KEY,
+    CLIENTE        VARCHAR(10)    NOT NULL,
+    CATALOGO       VARCHAR(40)    NOT NULL,
+    VALOR_ORIGEN   NVARCHAR(200)  NOT NULL,
+    VALOR_DESTINO  NVARCHAR(200)  NOT NULL CONSTRAINT DF_CATALOGO_DESTINO DEFAULT N'',
+    ORDEN          INT            NOT NULL CONSTRAINT DF_CATALOGO_ORDEN DEFAULT 100,
+    ACTIVO         BIT            NOT NULL CONSTRAINT DF_CATALOGO_ACT DEFAULT 1,
+    COMENTARIO     NVARCHAR(400)  NULL,
+    ALTA_POR       VARCHAR(10)    NOT NULL CONSTRAINT DF_CATALOGO_ALTA DEFAULT 'EQUIPO',   -- SEMILLA / EQUIPO
+    USUARIO        SYSNAME        NOT NULL CONSTRAINT DF_CATALOGO_USR DEFAULT SUSER_SNAME(),
+    FE_MOD         DATETIME2(0)   NOT NULL CONSTRAINT DF_CATALOGO_FE DEFAULT SYSDATETIME(),
+    CONSTRAINT UX_CATALOGO UNIQUE (CLIENTE, CATALOGO, VALOR_ORIGEN)
+);
+GO
+CREATE OR ALTER TRIGGER cfg.tr_CATALOGO_EDICION ON cfg.CATALOGO AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF TRY_CONVERT(INT, SESSION_CONTEXT(N'SEMILLA')) = 1 RETURN;
+    IF NOT (UPDATE(VALOR_ORIGEN) OR UPDATE(VALOR_DESTINO) OR UPDATE(ORDEN) OR UPDATE(ACTIVO)) RETURN;
+    UPDATE c SET USUARIO = SUSER_SNAME(), FE_MOD = SYSDATETIME()
+    FROM cfg.CATALOGO c JOIN inserted i ON i.ID = c.ID;
+END;
+GO
+
+/* ---------------------------------------------------------------------
+   Validación de datos de la entrada (decisión 17/11)
+   ---------------------------------------------------------------------
+   Antes de tocar el DAT, cada archivo se revisa columna por columna. Si una
+   regla encuentra más anomalías que su tolerancia, el proceso se detiene,
+   se avisa al equipo de asignaciones (VALIDACION_ENTRADA_486) y se corre de
+   nuevo a mano cuando se corrige. TIPO:
+     IMPORTE      el texto no es un importe ("abc", "N/A")
+     NO_NEGATIVO  importe menor que cero
+     MAXIMO       importe mayor que VALOR (ej. 10000000): suele ser una cuenta en la columna de saldo
+     ENTERO       el texto no es un número entero (días de mora)
+     TELEFONO     trae letras o no tiene entre VALOR dígitos ('10-12'); '0' y '-' cuentan como vacío
+     CORREO       no tiene forma de correo (sin @, con espacios, sin dominio); '0' y '-' cuentan como vacío
+     CATALOGO     el valor no está en el catálogo VALOR (cfg.CATALOGO): segmento o estatus nuevo
+     LLAVE_UNICA  la cuenta viene repetida en el archivo
+     NO_VACIO     la columna viene vacía (en un % mayor a la tolerancia, la columna se corrió o cambió)
+     VOLUMEN      el archivo trae menos o más renglones que la última carga buena: VALOR = 'mínimo-máximo' en %
+   PCT_MAX: % de anomalías tolerado sobre los valores revisados (0 = ninguna).
+   La semilla solo agrega las reglas que faltan: el equipo ajusta VALOR, PCT_MAX y ACTIVO.
+   --------------------------------------------------------------------- */
+IF OBJECT_ID('cfg.VALIDACION_DATO') IS NULL
+CREATE TABLE cfg.VALIDACION_DATO (
+    ID           INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_VALIDACION_DATO PRIMARY KEY,
+    CLIENTE      VARCHAR(10)    NOT NULL,
+    CODIGO       VARCHAR(50)    NOT NULL,           -- archivo (cfg.ARCHIVO.CODIGO)
+    CAMPO        SYSNAME        NOT NULL,           -- cfg.ARCHIVO_COLUMNA.CAMPO_DESTINO; '*' para VOLUMEN
+    TIPO         VARCHAR(15)    NOT NULL,
+    VALOR        NVARCHAR(100)  NULL,
+    PCT_MAX      DECIMAL(5,2)   NOT NULL CONSTRAINT DF_VALIDACION_DATO_PCT DEFAULT 0,
+    ACTIVO       BIT            NOT NULL CONSTRAINT DF_VALIDACION_DATO_ACT DEFAULT 1,
+    DESCRIPCION  NVARCHAR(400)  NULL,
+    USUARIO      SYSNAME        NOT NULL CONSTRAINT DF_VALIDACION_DATO_USR DEFAULT SUSER_SNAME(),
+    FE_MOD       DATETIME2(0)   NOT NULL CONSTRAINT DF_VALIDACION_DATO_FE DEFAULT SYSDATETIME(),
+    CONSTRAINT UX_VALIDACION_DATO UNIQUE (CLIENTE, CODIGO, CAMPO, TIPO),
+    CONSTRAINT CK_VALIDACION_DATO_TIPO CHECK (TIPO IN ('IMPORTE','NO_NEGATIVO','MAXIMO','ENTERO','TELEFONO','CORREO',
+                                                       'CATALOGO','LLAVE_UNICA','NO_VACIO','VOLUMEN'))
+);
+GO
+CREATE OR ALTER TRIGGER cfg.tr_VALIDACION_DATO_EDICION ON cfg.VALIDACION_DATO AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF TRY_CONVERT(INT, SESSION_CONTEXT(N'SEMILLA')) = 1 RETURN;
+    IF NOT (UPDATE(VALOR) OR UPDATE(PCT_MAX) OR UPDATE(ACTIVO)) RETURN;
+    UPDATE v SET USUARIO = SUSER_SNAME(), FE_MOD = SYSDATETIME()
+    FROM cfg.VALIDACION_DATO v JOIN inserted i ON i.ID = v.ID;
+END;
 GO

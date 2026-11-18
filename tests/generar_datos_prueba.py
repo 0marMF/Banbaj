@@ -78,6 +78,30 @@ def main(destino):
             correo1="Malo@Correo.com", correo2="notiene@hotmail.com"),
     ])
 
+    # Validación de la entrada (decisión 17/11)
+    # asig_layout/: el banco le cambió el nombre a la columna de SALDO2 en TDC -> la asignación se detiene
+    tdc_ren = [("MONTO LIQUIDACION A PLAZOS" if h == "MONTO A CUBRIR PLAZOS PAGO LIQUIDACION" else h) for h in tdc_h]
+    fila_ren = dict(tdc("10000000066666", "1000000006", "CLIENTE PRUEBA SEIS", "900.00", "900.00", "45", "VEN4"))
+    fila_ren["MONTO LIQUIDACION A PLAZOS"] = "4500.00"
+    escribir(destino / "asig_layout" / "BASE MAESTRA_TARJETA 31-10-2026 - SERTEC.csv", tdc_ren, [fila_ren])
+    escribir(destino / "asig_layout" / "BASE MAESTRA_CONSUMO 31-10-2026 - SERTEC.csv", con_h, [
+        con("20000021", "CLIENTE PRUEBA C21", "5000.00", "800.00", "PERSONAL", "PERSONAL", "VENCIDA", "90+", "96"),
+    ])
+    # asig_datos/: layout bien, datos mal: teléfono con letras, saldo enorme (una cuenta en la columna de saldo),
+    # estatus nuevo que no está en el catálogo, correo sin forma de correo. Además, el layout real de TDC:
+    # VEN2 con tramo '30-59' y el saldo actualizado vacío (no se rechaza: toma el saldo PRIME)
+    escribir(destino / "asig_datos" / "BASE MAESTRA_TARJETA 31-10-2026 - SERTEC.csv", tdc_h, [
+        tdc("10000000077777", "1000000007", "CLIENTE PRUEBA SIETE", "900.00", "900.00", "45", "VEN4", tel="5512345678"),
+        tdc("10000000088888", "1000000008", "CLIENTE PRUEBA OCHO", "900.00", "1000000008", "45", "VEN4", tel="SIN TELEFONO"),
+        tdc("10000000099999", "1000000009", "CLIENTE PRUEBA NUEVE", "", "650.00", "30-59", "VEN2", tel="5512345679"),
+    ])
+    escribir(destino / "asig_datos" / "BASE MAESTRA_CONSUMO 31-10-2026 - SERTEC.csv", con_h, [
+        con("20000031", "CLIENTE PRUEBA C31", "5000.00", "800.00", "PERSONAL", "PERSONAL", "EN REVISION", "90+", "96"),
+        con("20000032", "CLIENTE PRUEBA C32", "3000.00", "300.00", "PERSONAL", "PERSONAL", "VENCIDA", "90+", "96",
+            correo2="correo invalido"),
+        con("20000033", "CLIENTE PRUEBA C33", "3000.00", "300.00", "PERSONAL", "PERSONAL", "VENCIDA", "90+", "96"),
+    ])
+
     escribir(destino / "act_ok" / "SERTEC_Saldos_tdc.txt",
              ["ACCT_NUM", "CYBER", "ACC_NUM", "SALDO", "ESTATUS", "PAGO-MIN", "FECHA_CORTE", "DESPACHO"], [
         {"ACCT_NUM": "4000000000011111", "CYBER": "10000000011111", "ACC_NUM": "1000000001", "SALDO": "500.00",
@@ -105,6 +129,12 @@ def main(destino):
         {"CREDITO": "20000004", "IMPORTE": "500.00", "FECHA": "2026-11-02", "TRX": "RECUPERACION", "EMPRESA": "CONSUMO", "DESPACHO": "SERTEC"},
         {"CREDITO": "20000004", "IMPORTE": "500.00", "FECHA": "2026-11-02", "TRX": "RECUPERACION", "EMPRESA": "CONSUMO", "DESPACHO": "SERTEC"},
         {"CREDITO": "29999999", "IMPORTE": "10.00", "FECHA": "2026-11-02", "TRX": "RECUPERACION", "EMPRESA": "CONSUMO", "DESPACHO": "SERTEC"},
+    ])
+    # act_layout/: el banco le cambió el nombre a SALDO en los saldos de TDC -> la actualización se detiene
+    escribir(destino / "act_layout" / "SERTEC_Saldos_tdc.txt",
+             ["ACCT_NUM", "CYBER", "ACC_NUM", "SALDO_ACTUAL", "ESTATUS", "PAGO-MIN", "FECHA_CORTE", "DESPACHO"], [
+        {"ACCT_NUM": "4000000000011111", "CYBER": "10000000011111", "ACC_NUM": "1000000001", "SALDO_ACTUAL": "500.00",
+         "ESTATUS": "NORM", "PAGO-MIN": "50.00", "FECHA_CORTE": "2026-10-25 00:00:00.0", "DESPACHO": "SERTEC"},
     ])
     escribir(destino / "act_neg" / "SERTEC_Pagos.txt", pagos_h, [
         {"CREDITO": "20000001", "IMPORTE": "-100.00", "FECHA": "2026-11-02", "TRX": "AJUSTE", "EMPRESA": "CONSUMO", "DESPACHO": "SERTEC"},

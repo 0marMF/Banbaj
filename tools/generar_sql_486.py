@@ -165,7 +165,7 @@ COLUMNAS = {
         ("RFC", "RFC", C(25), 0, False, None),
         ("PAG_MIN", "Pago mínimo 00/00/0000", N, 0, True, None),
         ("SDO_VDO", "Saldo PRIME total asignado al 00/00/0000", N, 0, True, None),
-        ("SDO_ACT", "Saldo actualizado VEN4/CCAS al 00/00/0000", N, 1, True, None),
+        ("SDO_ACT", "Saldo actualizado VEN4/CCAS al 00/00/0000", N, 2, True, "Obligatorio pero admite vacío (2): en el layout del 11/11 viene vacío en VEN2 y VEN3 y la homologación toma el saldo PRIME"),
         ("SALDO1", "MONTO A CUBRIR 1 PAGO LIQUIDACION", N, 0, False, None),
         ("SALDO2", "MONTO A CUBRIR PLAZOS PAGO LIQUIDACION", N, 0, False, "Layout del 11/11/2026: antes 'MONTO A CUBRIR PLAZOS PAGO <= 6 LIQUIDACION'"),
         ("ENFOQUE", "ENFOQUE_LIQUIDACION_1_PAGO", C(60), 0, False, "Lo usa la regla de TRAMO 90+ (CAS / VEN). ETIQUETA y REE ya no salen de la base: llegan por etiquetado y estructura (30/10)"),
@@ -263,11 +263,19 @@ COLUMNAS = {
 
 # ---------------------------------------------------------------- homologación
 # (TABLA, CAMPO, VALOR, CONDICION, DESCRIPCION, REQ)
+# Catálogos estáticos (decisión 17/11): el valor sale de cfg.CATALOGO, que edita el equipo de asignaciones
+def K(catalogo, campo):
+    return f"cfg.fn_catalogo('{{CLIENTE}}', '{catalogo}', t.{campo})"
+
+
+def KH(campo, catalogo, desc, req=None):
+    """Homologación por catálogo: el campo toma la etiqueta del catálogo si su valor está en él."""
+    return (campo, K(catalogo, campo), f"{K(catalogo, campo)} IS NOT NULL", f"{desc} (catálogo {catalogo})", req)
+
+
 MORA = [
     ("ETIQUETA1", "REPLACE(t.ETIQUETA1, '-', '')", "t.ETIQUETA1 LIKE '%-%'", "Quita '-' (asig_bases)", None),
-    ("ETIQUETA1", "'MORA 1'", "t.ETIQUETA1 = 'COSECHA 1'", "COSECHA -> MORA", "REQ 2023-067064"),
-    ("ETIQUETA1", "'MORA 2'", "t.ETIQUETA1 = 'COSECHA 2'", "COSECHA -> MORA", "REQ 2023-067064"),
-    ("ETIQUETA1", "'MORA 3'", "t.ETIQUETA1 = 'COSECHA 3'", "COSECHA -> MORA", "REQ 2023-067064"),
+    KH("ETIQUETA1", "COSECHA_MORA", "COSECHA -> MORA", "REQ 2023-067064"),
 ]
 AI = "COLLATE Latin1_General_CI_AI"
 HOMOLOGACION = (
@@ -278,18 +286,15 @@ HOMOLOGACION = (
         ("NOMBRE1", "t.NAME1", "t.NOMBRE1 IS NULL OR LTRIM(RTRIM(t.NOMBRE1)) IN ('', '-')",
          "Si NAME2 viene vacío o '-' se usa NAME1 (regla que hacía la macro)", None),
         ("DES_PROD", "t.CUENTA", None, "DES_PROD = CUENTA (paso.prg)", None),
-        ("GARAN", "'GARANTIZADA'", "t.GARAN = '1'", "Garantizada", "REQ 2021-024042"),
-        ("GARAN", "''", "t.GARAN = '0'", "No garantizada", "REQ 2021-024042"),
+        KH("GARAN", "GARANTIA_TDC", "Garantizada 1 / 0", "REQ 2021-024042"),
     ] + MORA + [
-        ("SDO_ACT", "t.SDO_VDO", "t.SDO_ACT <= 0", "Saldo actual <= 0 toma el saldo PRIME (asig_bases)", None),
-        ("ESTATUS2", "'VIG'", "TRY_CONVERT(INT, t.TRAMO) BETWEEN 1 AND 29", "Tramo 1-29", None),
-        ("ESTATUS2", "'VEN'", "TRY_CONVERT(INT, t.TRAMO) BETWEEN 30 AND 89", "Tramo 30-89", None),
-        ("ESTATUS2", "'CAS'", "t.TRAMO = '90+' AND t.ENFOQUE LIKE '%LIQUIDACION%'", "90+ con enfoque liquidación", None),
-        ("ESTATUS2", "'VEN'", "t.TRAMO = '90+' AND t.ENFOQUE LIKE '% %'",
-         "90+ con enfoque de varias palabras. ORDEN LEGADO: se aplica después de CAS y puede sobrescribirlo", None),
-        ("ESTATUS2", "'VEN'", "t.TRAMO = '90+' AND t.ENFOQUE LIKE '%CONTENCION%'", "90+ contención", None),
-        ("ESTATUS2", "'CAS'", "t.TRAMO = 'CASTIGADA'", "Castigada", None),
-        ("ESTATUS2", "'REE'", "t.TRAMO = '0' AND t.SEGMENTO IN ('BCOB', 'BOPE', 'FALL')", "Reestructura", None),
+        ("SDO_ACT", "t.SDO_VDO", "t.SDO_ACT IS NULL OR t.SDO_ACT <= 0",
+         "Saldo actual vacío o <= 0 toma el saldo PRIME (asig_bases; en el layout del 11/11 VEN2 y VEN3 lo traen vacío)", None),
+        ("ESTATUS2", K("TRAMO_TDC", "TRAMO"), f"NULLIF({K('TRAMO_TDC', 'TRAMO')}, '') IS NOT NULL",
+         "Estatus por tramo: 1-29 VIG, 30-89 VEN, CASTIGADA CAS (catálogo TRAMO_TDC; acepta el tramo como número o como rango '30-59')", None),
+        ("ESTATUS2", K("ENFOQUE_TDC_90", "ENFOQUE"), f"t.TRAMO = '90+' AND NULLIF({K('ENFOQUE_TDC_90', 'ENFOQUE')}, '') IS NOT NULL",
+         "90+: liquidación CAS, contención o enfoque de varias palabras VEN (catálogo ENFOQUE_TDC_90, sin acentos)", None),
+        ("ESTATUS2", "'REE'", f"t.TRAMO = '0' AND {K('ESTATUS_TDC', 'SEGMENTO')} = 'REE'", "Reestructura: BCOB, BOPE, FALL con tramo 0 (catálogo ESTATUS_TDC)", None),
         ("SALDO3", "ROUND(t.SALDO2 / 3, 2)", None, "SALDO3 = SALDO2 / 3", None),
         ("TIPO", "LEFT('TDC_' + ISNULL(t.ESTATUS2, ''), 25)", None, "TIPO = TDC_ + estatus", None),
     ]]
@@ -297,24 +302,10 @@ HOMOLOGACION = (
         ("SEGMENTO2", "'CONSUMO'", None, "Segmento", None),
         ("RIESGO", "t.CUENTA", None, "RIESGO = CUENTA", None),
         ("NOMBRE2", "LEFT(t.RFC, 20)", None, "NOMBRE2 = RFC", None),
-        ("ESTRA3", f"'NOMINA'", f"t.TIPO_CREDITO {AI} LIKE '%ADELANTO DE NOMINA%'", "Tipo de crédito", None),
-        ("ESTRA3", "'AUTO'", f"t.TIPO_CREDITO {AI} LIKE '%AUTO%'", "Tipo de crédito", None),
-        ("ESTRA3", "'AUTO PPF'", f"t.ESTRA3 {AI} LIKE '%AUTO PAGOS FIJOS%'",
-         "ORDEN LEGADO: se evalúa sobre ESTRA3 ya convertido a 'AUTO', nunca se cumple (H-22)", None),
-        ("ESTRA3", "'AUTO REE'", f"t.ESTRA3 {AI} LIKE '%AUTO REESTRUCTURADO%'", "Igual que AUTO PPF (H-22)", None),
-        ("ESTRA3", "'NOMINA REE'", f"t.TIPO_CREDITO {AI} = 'NOMINA REESTRUCTURADA'", "Tipo de crédito", None),
-        ("ESTRA3", "'NOMINA REV'", f"t.TIPO_CREDITO {AI} IN ('NOMINA REVOLVENTE', 'NOMINA REVOLVENTE RENOVADA')", "Tipo de crédito", None),
-        ("ESTRA3", "'PERSONAL'", f"t.TIPO_CREDITO {AI} LIKE '%PERSONAL%'", "Tipo de crédito", None),
-        ("ESTRA3", "'PERSONAL PPF'", f"t.ESTRA3 {AI} = 'PERSONAL PAGOS FIJOS'", "Nunca se cumple (H-22)", None),
-        ("ESTRA3", "'PERSONAL REE'", f"t.ESTRA3 {AI} = 'PERSONAL REESTRUCTURADO'", "Nunca se cumple (H-22)", None),
-        ("TIPO", "'NOMINA'", f"t.TIPO {AI} LIKE '%ANTICIPO NOMINA%'", "Cartera", None),
-        ("TIPO", "'AUTO'", f"t.TIPO {AI} LIKE '%AUTO%'", "Cartera", None),
-        ("TIPO", "'NOMINA'", f"t.TIPO {AI} = 'NOMINA'", "Cartera", None),
-        ("TIPO", "'PERS'", f"t.TIPO {AI} IN ('PERSONAL', 'RS TDC')", "Cartera", None),
-        ("SEGMENTO", "'VIG'", "t.SEGMENTO = 'VIGENTE'", "Estatus", "REQ 2022-035011"),
-        ("SEGMENTO", "'VEN'", "t.SEGMENTO = 'VENCIDA'", "Estatus", "REQ 2022-035011"),
-        ("SEGMENTO", "'CAS'", "t.SEGMENTO = 'CASTIGADA'", "Estatus", "REQ 2022-035011"),
-        ("SEGMENTO", "'REE'", "t.SEGMENTO = 'PAGO SOSTENIDO'", "Estatus", "REQ 2022-035011"),
+        ("ESTRA3", K("TIPO_CREDITO_CONSUMO", "TIPO_CREDITO"), f"{K('TIPO_CREDITO_CONSUMO', 'TIPO_CREDITO')} IS NOT NULL",
+         "Tipo de crédito (catálogo TIPO_CREDITO_CONSUMO; sin valor en el catálogo se queda el texto recortado)", None),
+        KH("TIPO", "CARTERA_CONSUMO", "Cartera"),
+        KH("SEGMENTO", "ESTATUS_CONSUMO", "Estatus", "REQ 2022-035011"),
     ] + MORA + [
         ("SALDO3", "ROUND(t.SALDO2 / 3, 2)", None, "SALDO3 = SALDO2 / 3", None),
         ("TIPO", "LEFT(ISNULL(t.TIPO, '') + '_' + ISNULL(t.SEGMENTO, ''), 25)", None, "TIPO = cartera + estatus", None),
@@ -322,13 +313,9 @@ HOMOLOGACION = (
     + [("stg.ENT_MAESTRA_HIPO",) + x for x in [
         ("SEGMENTO2", "'HIPOTECARIO'", None, "Segmento", None),
         ("RIESGO", "t.CUENTA", None, "RIESGO = CUENTA", "REQ 2023-067064"),
-        ("TIPO", "'HIPO_CAS'", "t.SEGMENTO IN ('CAS', 'CASTIGA', 'CCAS')", "Estatus", "REQ 2023-067064"),
-        ("TIPO", "'HIPO_VEN'", "t.SEGMENTO IN ('VENCIDA', 'VEN4', '90+', 'VEN')", "Estatus", "REQ 2023-067064"),
-        ("TIPO", "'HIPO_VIG'", "t.SEGMENTO IN ('VIG', 'VEN3', '60-89', 'VEN2', 'VIGENTE')", "Estatus", "REQ 2023-067064"),
+        ("TIPO", K("TIPO_HIPO", "SEGMENTO"), f"{K('TIPO_HIPO', 'SEGMENTO')} IS NOT NULL", "Tipo por estatus (catálogo TIPO_HIPO)", "REQ 2023-067064"),
     ] + MORA + [
-        ("ETIQUETA5", "'LIQ'", f"t.ETIQUETA5 {AI} = 'LIQUIDACION'", "Enfoque", "REQ 2023-067064"),
-        ("ETIQUETA5", "'REG-LIQ'", f"t.ETIQUETA5 {AI} IN ('REGULARIZACION Y LIQUIDACION', 'LIQUIDACION Y REGULARIZACION')", "Enfoque", "REQ 2023-067064"),
-        ("ETIQUETA5", "'REG'", f"t.ETIQUETA5 {AI} = 'REGULARIZACION'", "Enfoque", "REQ 2023-067064"),
+        KH("ETIQUETA5", "ENFOQUE_HIPO", "Enfoque", "REQ 2023-067064"),
     ]]
     + [("stg.LAYOUT_486",) + x for x in [
         ("PVS", "'0'", "t.PVS IS NULL OR t.PVS LIKE '%/%' OR t.PVS LIKE '%-%'", "PVS sin dato -> 0", None),
@@ -342,6 +329,47 @@ HOMOLOGACION = (
         ("DIRECC1", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal); va al final porque DIRECC1 es parte de la condición", None),
     ]]
 )
+
+
+# ---------------------------------------------------------------- catálogos estáticos (decisión 17/11)
+# Lo que antes estaba escrito en la homologación ahora vive en cfg.CATALOGO, que edita el equipo de asignaciones
+# (cfg.sp_catalogo_alta). La semilla solo agrega lo que falta: nunca cambia ni borra lo que el equipo puso.
+# Valor de origen sin acentos ni mayúsculas; admite % y [0-9]. El exacto gana; entre patrones gana el ORDEN menor.
+# (CATALOGO, DESCRIPCION, ORIGEN, DESTINO, [(VALOR_ORIGEN, VALOR_DESTINO, ORDEN)])
+CATALOGOS = [
+    ("ESTATUS_TDC", "Estatus de TDC válidos; BCOB, BOPE y FALL con tramo 0 son reestructura",
+     "MAESTRA_TDC · Estatus al <fecha>", "ESTATUS2 = REE (solo con tramo 0); '' = válido sin etiqueta",
+     [("CCAS", "", 100), ("VEN2", "", 100), ("VEN3", "", 100), ("VEN4", "", 100),
+      ("BCOB", "REE", 100), ("BOPE", "REE", 100), ("FALL", "REE", 100)]),
+    ("TRAMO_TDC", "Tramo de TDC -> estatus (VIG / VEN / CAS); 90+ se decide por el enfoque (ENFOQUE_TDC_90)",
+     "MAESTRA_TDC · Tramo <fecha>", "ESTATUS2 (y TIPO = 'TDC_' + ESTATUS2); '' = válido sin etiqueta",
+     [("1-29", "VIG", 100), ("30-59", "VEN", 100), ("60-89", "VEN", 100), ("CASTIGADA", "CAS", 100), ("90+", "", 100), ("0", "", 100),
+      ("[1-9]", "VIG", 10), ("[1-2][0-9]", "VIG", 10), ("[3-8][0-9]", "VEN", 10)]),
+    ("ENFOQUE_TDC_90", "Enfoque de liquidación de TDC en tramo 90+ -> estatus. Legado: varias palabras gana sobre liquidación",
+     "MAESTRA_TDC · ENFOQUE_LIQUIDACION_1_PAGO", "ESTATUS2 cuando el tramo es 90+",
+     [("%CONTENCION%", "VEN", 10), ("% %", "VEN", 20), ("%LIQUIDACION%", "CAS", 30)]),
+    ("GARANTIA_TDC", "Tarjeta garantizada", "MAESTRA_TDC · GARANTIZADA", "GARAN",
+     [("1", "GARANTIZADA", 100), ("0", "", 100)]),
+    ("ESTATUS_CONSUMO", "Estatus de Consumo -> segmento corto", "MAESTRA_CONSUMO · ESTATUS AL <fecha>", "SEGMENTO (y TIPO = cartera + '_' + SEGMENTO)",
+     [("VIGENTE", "VIG", 100), ("VENCIDA", "VEN", 100), ("CASTIGADA", "CAS", 100), ("PAGO SOSTENIDO", "REE", 100)]),
+    ("CARTERA_CONSUMO", "Cartera de Consumo -> tipo", "MAESTRA_CONSUMO · CARTERA", "TIPO",
+     [("NOMINA", "NOMINA", 100), ("PERSONAL", "PERS", 100), ("RS TDC", "PERS", 100),
+      ("%AUTO%", "AUTO", 20), ("%ANTICIPO NOMINA%", "NOMINA", 30)]),
+    ("TIPO_CREDITO_CONSUMO", "Tipo de crédito de Consumo -> clasificación. Las reglas AUTO PPF / AUTO REE / PERSONAL PPF / "
+     "PERSONAL REE del legado nunca se cumplían (H-22): si se necesitan, se agregan aquí",
+     "MAESTRA_CONSUMO · TIPO DE CRÉDITO", "ESTRA3 (sin valor en el catálogo se queda el texto recortado a 15)",
+     [("NOMINA REESTRUCTURADA", "NOMINA REE", 100), ("NOMINA REVOLVENTE", "NOMINA REV", 100), ("NOMINA REVOLVENTE RENOVADA", "NOMINA REV", 100),
+      ("%PERSONAL%", "PERSONAL", 10), ("%AUTO%", "AUTO", 20), ("%ADELANTO DE NOMINA%", "NOMINA", 30)]),
+    ("TIPO_HIPO", "Estatus de Hipotecario -> tipo", "MAESTRA_HIPO · ESTATUS <fecha>", "TIPO",
+     [("CAS", "HIPO_CAS", 100), ("CASTIGA", "HIPO_CAS", 100), ("CCAS", "HIPO_CAS", 100),
+      ("VENCIDA", "HIPO_VEN", 100), ("VEN4", "HIPO_VEN", 100), ("90+", "HIPO_VEN", 100), ("VEN", "HIPO_VEN", 100),
+      ("VIG", "HIPO_VIG", 100), ("VEN3", "HIPO_VIG", 100), ("60-89", "HIPO_VIG", 100), ("VEN2", "HIPO_VIG", 100), ("VIGENTE", "HIPO_VIG", 100)]),
+    ("ENFOQUE_HIPO", "Enfoque de liquidación de Hipotecario", "MAESTRA_HIPO · ENFOQUE_LIQUIDACION", "ETIQUETA5",
+     [("LIQUIDACION", "LIQ", 100), ("REGULARIZACION Y LIQUIDACION", "REG-LIQ", 100), ("LIQUIDACION Y REGULARIZACION", "REG-LIQ", 100),
+      ("REGULARIZACION", "REG", 100)]),
+    ("COSECHA_MORA", "Cosecha de la base maestra -> mora (después de quitar '-')", "MAESTRA_* · COSECHAS", "ETIQUETA1",
+     [("COSECHA 1", "MORA 1", 100), ("COSECHA 2", "MORA 2", 100), ("COSECHA 3", "MORA 3", 100)]),
+]
 
 # ---------------------------------------------------------------- reglas
 # estructura.prg: REE del DAT en la actualización (se aplica en orden; la última que cumple gana).
@@ -407,8 +435,80 @@ REGLAS = [
      "Cuenta del DAT con saldo actual <= 0", None, 30, "REQ 2025-099547"),
 ]
 
+
+# ---------------------------------------------------------------- validación de datos de la entrada (decisión 17/11)
+# (CODIGO, CAMPO, TIPO, VALOR, PCT_MAX, DESCRIPCION). La semilla solo agrega las que faltan: el equipo ajusta
+# VALOR, PCT_MAX y ACTIVO en cfg.VALIDACION_DATO. Tolerancias calibradas con las bases reales del 11 y 13/11
+# (teléfonos de 10 dígitos sin letras; correos mal formados < 0.2 %; saldos de hasta 1.2 millones; sin cuentas repetidas).
+TOPE_SALDO = {"TDC": "10000000", "CONSUMO": "10000000", "HIPO": "50000000"}
+
+
+def v_importes(cod, campos, tope, negativos=True):
+    out = []
+    for c in campos:
+        out += [(cod, c, "IMPORTE", None, 0, "Texto que no es importe en una columna de saldo"),
+                (cod, c, "MAXIMO", tope, 0, "Importe fuera de rango: suele ser una cuenta o un teléfono en la columna de saldo")]
+        if negativos:
+            out.append((cod, c, "NO_NEGATIVO", None, 1, "Saldos negativos: unos cuantos se toleran, muchos indican un archivo mal armado"))
+    return out
+
+
+def v_contacto(cod, tels, correos=("CORREO1", "CORREO2")):
+    return ([(cod, t, "TELEFONO", "10-12", 2, "Teléfono con letras o con un número de dígitos fuera de rango") for t in tels]
+            + [(cod, c, "CORREO", None, 2, "Correo sin forma de correo (sin @, con espacios o sin dominio)") for c in correos])
+
+
+TELS13 = [f"TEL{i}" for i in range(1, 14)]
+VALIDACIONES = (
+    [("MAESTRA_TDC", "*", "VOLUMEN", "30-300", 0, "Renglones contra la última carga buena (archivo cortado o duplicado)"),
+     ("MAESTRA_TDC", "PRIME4DIG", "LLAVE_UNICA", None, 0, "PRIME+4DIG repetido"),
+     ("MAESTRA_TDC", "RIESGO", "LLAVE_UNICA", None, 0, "ACC_NUM repetido"),
+     ("MAESTRA_TDC", "RIESGO", "NO_VACIO", None, 1, "ACC_NUM vacío"),
+     ("MAESTRA_TDC", "SDO_VDO", "NO_VACIO", None, 5, "Saldo PRIME vacío (la columna se corrió o cambió)"),
+     ("MAESTRA_TDC", "SEGMENTO", "CATALOGO", "ESTATUS_TDC", 0, "Estatus que no está en el catálogo"),
+     ("MAESTRA_TDC", "TRAMO", "CATALOGO", "TRAMO_TDC", 0, "Tramo que no está en el catálogo"),
+     ("MAESTRA_TDC", "GARAN", "CATALOGO", "GARANTIA_TDC", 0, "GARANTIZADA distinto de 1 / 0"),
+     ("MAESTRA_TDC", "PVS", "ENTERO", None, 0, "Días vencidos que no son número")]
+    + v_importes("MAESTRA_TDC", ["SDO_ACT", "SDO_VDO", "PAG_MIN", "SALDO1", "SALDO2"], TOPE_SALDO["TDC"])
+    + v_contacto("MAESTRA_TDC", TELS13)
+    + [("MAESTRA_CONSUMO", "*", "VOLUMEN", "30-300", 0, "Renglones contra la última carga buena (archivo cortado o duplicado)"),
+       ("MAESTRA_CONSUMO", "CUENTA", "LLAVE_UNICA", None, 0, "Crédito repetido"),
+       ("MAESTRA_CONSUMO", "DES_PROD", "LLAVE_UNICA", None, 0, "Crédito CYBER repetido"),
+       ("MAESTRA_CONSUMO", "CUENTA", "NO_VACIO", None, 1, "Crédito vacío"),
+       ("MAESTRA_CONSUMO", "SDO_ACT", "NO_VACIO", None, 5, "Adeudo total vacío (la columna se corrió o cambió)"),
+       ("MAESTRA_CONSUMO", "SEGMENTO", "CATALOGO", "ESTATUS_CONSUMO", 0, "Estatus que no está en el catálogo"),
+       ("MAESTRA_CONSUMO", "TIPO", "CATALOGO", "CARTERA_CONSUMO", 0, "Cartera que no está en el catálogo"),
+       ("MAESTRA_CONSUMO", "TIPO_CREDITO", "CATALOGO", "TIPO_CREDITO_CONSUMO", 0, "Tipo de crédito que no está en el catálogo"),
+       ("MAESTRA_CONSUMO", "PVS", "ENTERO", None, 0, "Días de mora que no son número")]
+    + v_importes("MAESTRA_CONSUMO", ["CAPITAL", "SDO_ACT", "SDO_VDO", "SALDO1", "SALDO2"], TOPE_SALDO["CONSUMO"])
+    + v_contacto("MAESTRA_CONSUMO", TELS13)
+    + [("MAESTRA_HIPO", "*", "VOLUMEN", "30-300", 0, "Renglones contra la última carga buena (archivo cortado o duplicado)"),
+       ("MAESTRA_HIPO", "CUENTA", "LLAVE_UNICA", None, 0, "Crédito repetido"),
+       ("MAESTRA_HIPO", "DES_PROD", "LLAVE_UNICA", None, 0, "Crédito CYBER repetido"),
+       ("MAESTRA_HIPO", "CUENTA", "NO_VACIO", None, 1, "Crédito vacío"),
+       ("MAESTRA_HIPO", "SDO_ACT", "NO_VACIO", None, 5, "Adeudo total vacío (la columna se corrió o cambió)"),
+       ("MAESTRA_HIPO", "SEGMENTO", "CATALOGO", "TIPO_HIPO", 0, "Estatus que no está en el catálogo"),
+       ("MAESTRA_HIPO", "PVS", "ENTERO", None, 0, "Días de mora que no son número")]
+    + v_importes("MAESTRA_HIPO", ["SDO_VDO", "SDO_ACT", "CAPITAL", "SALDO1", "SALDO2"], TOPE_SALDO["HIPO"])
+    + v_contacto("MAESTRA_HIPO", [f"TEL{i}" for i in range(1, 17)])
+    # Actualización: un saldo negativo o cero es un criterio de retiro (cfg.REGLA RETIRO_*), no se valida aquí
+    + [("SALDOS_TDC", "*", "VOLUMEN", "30-300", 0, "Renglones contra la última carga buena (archivo cortado o duplicado)"),
+       ("SALDOS_TDC", "RIESGO", "NO_VACIO", None, 1, "ACC_NUM vacío")]
+    + v_importes("SALDOS_TDC", ["SDO_ACT", "PAG_MIN"], TOPE_SALDO["TDC"], negativos=False)
+    + [("SALDOS_CONS", "*", "VOLUMEN", "30-300", 0, "Renglones contra la última carga buena (archivo cortado o duplicado)"),
+       ("SALDOS_CONS", "DES_PROD", "NO_VACIO", None, 1, "Crédito CYBER vacío"),
+       ("SALDOS_CONS", "PVS", "ENTERO", None, 0, "Días de mora que no son número")]
+    + v_importes("SALDOS_CONS", ["SDO_ACT", "SDO_VDO", "PAG_MIN"], TOPE_SALDO["CONSUMO"], negativos=False)
+    + v_importes("SALDOS_HIP", ["SDO_ACT"], TOPE_SALDO["HIPO"], negativos=False)
+    # Pagos: los negativos ya se excluyen y se avisan (cfg.REGLA PAGOS_NEGATIVOS); el volumen cambia mucho de un día a otro
+    + [("PAGOS", "RIESGO", "NO_VACIO", None, 1, "Crédito vacío")]
+    + v_importes("PAGOS", ["IMPORTE"], TOPE_SALDO["CONSUMO"], negativos=False)
+)
+
 PARAMETROS = [
     ("PREFIJO_CUENTA2", "486-", "Prefijo de la cuenta en CYBER"),
+    ("VALIDAR_LAYOUT", "1", "1 (17/11) = si a un archivo le falta cualquier campo que toma el proceso (cfg.ARCHIVO_COLUMNA, obligatorio u opcional), la corrida se detiene antes de tocar el DAT y se avisa al equipo de asignaciones (VALIDACION_ENTRADA_486); 0 = como antes: solo los obligatorios detienen"),
+    ("VALIDAR_DATOS", "1", "1 (17/11) = cada archivo se revisa con las reglas de cfg.VALIDACION_DATO (importes, teléfonos, correos, catálogos, cuentas repetidas, volumen); si una supera su tolerancia, la corrida se detiene antes de tocar el DAT y se avisa (VALIDACION_ENTRADA_486); 0 = no se revisan"),
     ("TOPE_DEVOLUCION_PCT", "", "Vacío = sin tope: la base maestra se trabaja como llega. Con un número (ej. 10) se detiene si la devolución de un segmento supera ese %"),
     ("DMSTATUS_RETIRO", "R", "dmstatus que se pone en CYBER al retirar (prog15.prg: u8activo = 'R')"),
     ("ASIG_REQUIERE_ACT", "1", "1 = la asignación solo corre si la actualización del mismo día terminó OK (la asignación siempre llega después)"),
@@ -636,7 +736,7 @@ LISTAS = {
         [(e, "TO") for e in ["supervisor.aem.cdmx4@sertec.com.mx", "aem.control1@sertec.com.mx", "aem.proyectos1@sertec.com.mx",
                              "aem.consultoria1@sertec.com.mx", "supervisor.aem.cdmx2@sertec.com.mx"]]
         + [("asig.cdmx@sertec.com.mx", "BCC")]),
-    "ASIGNACIONES_486": ("Equipo de asignaciones: validaciones (pagos negativos, números cortados por Excel)", [(BUZON, "TO")] + [(e, "BCC") for e in INTERNOS_BCC]),
+    "ASIGNACIONES_486": ("Equipo de asignaciones: validaciones (layout y datos de la entrada, pagos negativos, números cortados por Excel), hallazgos y archivos listos", [(BUZON, "TO")] + [(e, "BCC") for e in INTERNOS_BCC]),
 }
 TEXTO_DEVOLUCION = "Archivo de devolución actualizado ({{ORIGEN}}), favor de verificar."
 EXTRA_DEVOLUCION = "<p>Cuentas devueltas: {{CUENTAS}} · corrida {{CORRIDA}}</p>"
@@ -671,6 +771,11 @@ PLANTILLAS = [
      "Ya están los archivos planos para arribar a CYBER.",
      "<p>Carpeta: <b>{{CARPETA}}</b></p>{{HTML_TABLA}}<p><b>Qué sigue:</b> {{SIGUE}}</p>"
      "<p>Proceso {{PROCESO}} · corrida {{ID_CORRIDA}} del {{FECHA_PROCESO}}</p>", "Normal"),
+    # Validación de la entrada (decisión 17/11): layout y datos; solo al equipo de asignaciones (ops.sp_validacion_entrada_avisar)
+    ("VALIDACION_ENTRADA_486", "ASIGNACIONES_486", "Banbaj 486: {{PROCESO}} detenida por la validación de la entrada {{FECHA}}",
+     "Banbaj detuvo la corrida antes de tocar el DAT: la información que llegó no pasó la validación.",
+     "<p>{{RESUMEN}}</p>{{HTML_LAYOUT}}{{HTML_NUEVOS}}{{HTML_DATOS}}<p><b>Qué hacer:</b></p><ol>{{HTML_PASOS}}</ol>"
+     "<p>{{PROCESO}} · corrida {{ID_CORRIDA}} del {{FECHA_PROCESO}}</p>", "High"),
     ("MAESTRA_NUMEROS_EXCEL_486", "ASIGNACIONES_486", "Asignación 486 detenida: base maestra con números cortados por Excel {{FECHA}}",
      "La base maestra se guardó como CSV con cuentas en notación científica (ej. 1.23457E+15). Formatea esas columnas como Texto en Excel, vuelve a guardar el CSV y corre de nuevo.",
      "<p>Registros: {{REGISTROS}}</p>", "High"),
@@ -691,9 +796,17 @@ def sql_semilla(scb, dat):
          "   Revisar antes de producción: RUTA de cfg.ARCHIVO, PERFIL_DBMAIL,",
          "   TOPE_DEVOLUCION_PCT y los campos marcados POR CONFIRMAR / PENDIENTE.",
          "   ===================================================================== */",
-         "SET NOCOUNT ON;", "SET XACT_ABORT ON;", "BEGIN TRANSACTION;", ""]
+         "SET NOCOUNT ON;", "SET XACT_ABORT ON;", "BEGIN TRANSACTION;",
+         "/* Lo que cambia la semilla no cuenta como cambio del equipo (triggers de cfg.ARCHIVO, cfg.ARCHIVO_COLUMNA, cfg.CATALOGO).",
+         "   Si la semilla fallara a medias, cierra la ventana de SSMS antes de editar el layout a mano. */",
+         "EXEC sp_set_session_context @key = N'SEMILLA', @value = 1;", ""]
     cli = q(CLIENTE)
-    L += [f"DELETE c FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO WHERE a.CLIENTE = {cli};",
+    L += ["/* Layout que cambió el equipo de asignaciones (decisión 17/11): se guarda y se repone después de recargar */",
+          "DROP TABLE IF EXISTS #arch_equipo; DROP TABLE IF EXISTS #col_equipo;",
+          f"SELECT CODIGO, RUTA, PATRON_NOMBRE, ACTIVO, OBLIGATORIO, EDITADO_POR, FE_EDICION INTO #arch_equipo FROM cfg.ARCHIVO WHERE CLIENTE = {cli} AND EDITADO_POR IS NOT NULL;",
+          "SELECT a.CODIGO, c.CAMPO_DESTINO, c.PATRON_ENCABEZADO, c.POSICION, c.ACTIVO, c.OBLIGATORIO, c.PERMITE_VACIO, c.EDITADO_POR, c.FE_EDICION",
+          f"INTO #col_equipo FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO WHERE a.CLIENTE = {cli} AND c.EDITADO_POR IS NOT NULL;",
+          f"DELETE c FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO WHERE a.CLIENTE = {cli};",
           f"DELETE FROM cfg.ARCHIVO WHERE CLIENTE = {cli};",
           f"DELETE FROM cfg.HOMOLOGACION WHERE CLIENTE = {cli};",
           f"DELETE FROM cfg.REGLA WHERE CLIENTE = {cli};",
@@ -727,9 +840,33 @@ def sql_semilla(scb, dat):
         L.append("SET @id = SCOPE_IDENTITY();")
         for campo, enc, (tipo, trf), obl_c, con_fecha, comc in COLUMNAS[cod]:
             pat_c = patron(enc, con_fecha) if enc else None
-            L.append(f"INSERT INTO cfg.ARCHIVO_COLUMNA (ID_ARCHIVO, CAMPO_DESTINO, PATRON_ENCABEZADO, TIPO_SQL, TRANSFORMACION, OBLIGATORIO, COMENTARIO) "
-                     f"VALUES (@id, {q(campo)}, {q(pat_c)}, {q(tipo)}, {q(trf)}, {obl_c}, {q(comc)});")
+            L.append(f"INSERT INTO cfg.ARCHIVO_COLUMNA (ID_ARCHIVO, CAMPO_DESTINO, PATRON_ENCABEZADO, TIPO_SQL, TRANSFORMACION, OBLIGATORIO, PERMITE_VACIO, COMENTARIO) "
+                     f"VALUES (@id, {q(campo)}, {q(pat_c)}, {q(tipo)}, {q(trf)}, {1 if obl_c else 0}, {1 if obl_c == 2 else 0}, {q(comc)});")
         L.append("")
+    L += ["/* Se repone lo que había cambiado el equipo */",
+          "UPDATE a SET RUTA = e.RUTA, PATRON_NOMBRE = e.PATRON_NOMBRE, ACTIVO = e.ACTIVO, OBLIGATORIO = e.OBLIGATORIO,",
+          "       EDITADO_POR = e.EDITADO_POR, FE_EDICION = e.FE_EDICION",
+          f"FROM cfg.ARCHIVO a JOIN #arch_equipo e ON e.CODIGO = a.CODIGO WHERE a.CLIENTE = {cli};",
+          "PRINT CONCAT('Archivos con ajustes del equipo conservados: ', @@ROWCOUNT);",
+          "UPDATE c SET PATRON_ENCABEZADO = e.PATRON_ENCABEZADO, POSICION = e.POSICION, ACTIVO = e.ACTIVO, OBLIGATORIO = e.OBLIGATORIO,",
+          "       PERMITE_VACIO = e.PERMITE_VACIO, EDITADO_POR = e.EDITADO_POR, FE_EDICION = e.FE_EDICION",
+          "FROM cfg.ARCHIVO_COLUMNA c JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = c.ID_ARCHIVO",
+          f"JOIN #col_equipo e ON e.CODIGO = a.CODIGO AND e.CAMPO_DESTINO = c.CAMPO_DESTINO WHERE a.CLIENTE = {cli};",
+          "PRINT CONCAT('Campos con ajustes del equipo conservados: ', @@ROWCOUNT);", ""]
+
+    L.append("/* Catálogos estáticos de etiquetado (decisión 17/11): solo se agrega lo que falta */")
+    L.append(f"DELETE FROM cfg.CATALOGO_DEF WHERE CLIENTE = {cli};")
+    for cat, desc, origen, destino, valores in CATALOGOS:
+        L.append(f"INSERT INTO cfg.CATALOGO_DEF (CLIENTE, CATALOGO, DESCRIPCION, ORIGEN, DESTINO) VALUES ({cli}, {q(cat)}, {q(desc)}, {q(origen)}, {q(destino)});")
+        for vo, vd, orden_c in valores:
+            L.append(f"IF NOT EXISTS (SELECT 1 FROM cfg.CATALOGO WHERE CLIENTE = {cli} AND CATALOGO = {q(cat)} AND VALOR_ORIGEN = {q(vo)}) "
+                     f"INSERT INTO cfg.CATALOGO (CLIENTE, CATALOGO, VALOR_ORIGEN, VALOR_DESTINO, ORDEN, ALTA_POR) VALUES ({cli}, {q(cat)}, {q(vo)}, {q(vd)}, {orden_c}, 'SEMILLA');")
+    L.append("")
+    L.append("/* Validación de datos de la entrada (decisión 17/11): solo se agregan las reglas que faltan */")
+    for cod, campo, tipo_v, valor, pct, desc in VALIDACIONES:
+        L.append(f"IF NOT EXISTS (SELECT 1 FROM cfg.VALIDACION_DATO WHERE CLIENTE = {cli} AND CODIGO = {q(cod)} AND CAMPO = {q(campo)} AND TIPO = {q(tipo_v)}) "
+                 f"INSERT INTO cfg.VALIDACION_DATO (CLIENTE, CODIGO, CAMPO, TIPO, VALOR, PCT_MAX, DESCRIPCION) VALUES ({cli}, {q(cod)}, {q(campo)}, {q(tipo_v)}, {q(valor)}, {pct}, {q(desc)});")
+    L.append("")
 
     L.append("/* Homologación */")
     orden = {}
@@ -802,7 +939,7 @@ def sql_semilla(scb, dat):
         L.append(f"IF NOT EXISTS (SELECT 1 FROM mail.PLANTILLA WHERE CODIGO = {q(cod)}) "
                  f"INSERT INTO mail.PLANTILLA (CODIGO, LISTA, PERFIL_DBMAIL, ASUNTO, CUERPO_HTML, IMPORTANCIA) "
                  f"VALUES ({q(cod)}, {q(lista)}, {q(PERFIL_DBMAIL)}, {q(asunto)}, {q(cuerpo)}, '{imp}');")
-    L += ["", "COMMIT TRANSACTION;", "GO", ""]
+    L += ["", "EXEC sp_set_session_context @key = N'SEMILLA', @value = NULL;", "COMMIT TRANSACTION;", "GO", ""]
     return "\n".join(L)
 
 
@@ -815,6 +952,13 @@ def main():
     for arch, ancho in ANCHOS_ESPERADOS.items():
         assert sum(c[1] for c in CAMPOS_SALIDA[arch]) == ancho, f"{arch} debe medir {ancho}"
     assert {a[0] for a in SALIDAS_ARCHIVO} - {"SCBSDOS", "SCBSDOS_ACT", "SCBSDOS_ETI"} == set(CAMPOS_SALIDA), "salidas sin campos"
+    campos = {cod: {c[0] for c in cols} for cod, cols in COLUMNAS.items()}
+    cats = {c[0] for c in CATALOGOS}
+    for cod, campo, tipo_v, valor, pct, desc in VALIDACIONES:
+        assert cod in campos and (campo == "*" or campo in campos[cod]), f"validación sobre un campo que no existe: {cod}.{campo}"
+        assert tipo_v != "CATALOGO" or valor in cats, f"validación con un catálogo que no existe: {valor}"
+    usados = set(re.findall(r"fn_catalogo\('\{CLIENTE\}', '(\w+)'", " ".join(h[2] + " " + (h[3] or "") for h in HOMOLOGACION)))
+    assert usados <= cats, f"homologación con catálogos que no existen: {usados - cats}"
     (RAIZ / "sql" / "05_tabla_dat_486.sql").write_text(sql_dat(dat), encoding="utf-8")
     (RAIZ / "sql" / "90_semilla_486.sql").write_text(sql_semilla(scb, dat), encoding="utf-8")
     print("ok:", len(dat), "campos DAT,", len(scb), "campos SCBSDOS")
