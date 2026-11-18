@@ -25,6 +25,55 @@ Tiempo aproximado: 20 minutos, sin contar la migración.
 | **Etiquetado por catálogos estáticos:** estatus, tramo, cartera, tipo de crédito, enfoque, garantía y cosecha salen de `cfg.CATALOGO` (`cfg.sp_catalogo_alta`) | `02`, `10`, `22`, semilla |
 | Con el layout real de TDC: el saldo actualizado vacío (VEN2 y VEN3) ya no rechaza el renglón y toma el saldo PRIME; el tramo como rango (`30-59`) y el enfoque con acento (`LIQUIDACIÓN`) ya dan estatus | semilla |
 
+## Si ya instalaste la versión del 17/11 por la tarde
+
+Si ya corriste los pasos 0 a 5 con la versión de esta tarde (validación de la entrada y catálogos), no hace falta repetir todo. Cambió el orden del arribo de la asignación y la migración, y hay que volver a correr **siete scripts**:
+
+| Script | Qué cambió |
+|---|---|
+| `sql/10_funciones.sql` | `ops.fn_archivos_diferidos`: qué archivos esperan a los saldos y cuáles a la depuración de teléfonos |
+| `sql/52_sp_exportar.sql` | `ops.sp_exportar_salidas` puede dejar archivos sin escribir (`@excluir`) |
+| `sql/76_sp_arribo_cyber.sql` | El arribo en el orden del equipo: `ops.sp_tel_remesa_validar` (conteo de la remesa, error 50776), `ops.sp_arribo_gescar_sintel` y `ops.sp_arribo_automatico` |
+| `sql/77_sp_retiro_automatico.sql` | Al cerrar la asignación no escribe ni avisa los gescar ni el SCBTEL antes de tiempo |
+| `sql/78_sp_automatico.sql` | Avisos de archivos con lo que sigue en cada momento; la confirmación espera al gescar sin teléfono |
+| `sql/80_sp_migracion.sql` | Error 50905 con el diagnóstico del CSV, `ops.sp_mig_diagnostico` y fechas `AAAA/MM/DD` |
+| `sql/90_semilla_486.sql` | Parámetros nuevos `ARCHIVOS_DESPUES_SALDOS` y `ARCHIVOS_DESPUES_DEPURACION_TEL` |
+
+1. **Apaga el job** y respalda la base (paso 0).
+2. **Guarda tus parámetros** (paso 1): la semilla los vuelve a escribir.
+3. **Corre los siete scripts en este orden.** En SSMS uno por uno, o desde PowerShell en la carpeta del repositorio:
+
+```powershell
+'10_funciones', '52_sp_exportar', '76_sp_arribo_cyber', '77_sp_retiro_automatico', '78_sp_automatico', '80_sp_migracion', '90_semilla_486' | ForEach-Object {
+    Write-Host $_
+    sqlcmd -S "STCSVASIGNAC044\MULTISQLSERVER" -d BNABAJ_486 -E -b -I -f 65001 -i ".\sql\$_.sql"
+    if ($LASTEXITCODE -ne 0) { throw "Falló $_" }
+}
+```
+
+4. **Repón tus parámetros** (paso 3).
+5. **Comprueba** que quedó la versión nueva:
+
+```sql
+USE [BNABAJ_486];
+SELECT name, modify_date FROM sys.procedures
+ WHERE name IN ('sp_tel_remesa_validar', 'sp_arribo_gescar_sintel', 'sp_arribo_automatico', 'sp_aviso_archivos',
+                'sp_retiro_cerrar', 'sp_exportar_salidas', 'sp_mig_leer', 'sp_mig_diagnostico');                         -- ocho, con fecha de hoy
+SELECT OBJECT_ID('ops.fn_archivos_diferidos') AS FN_ARCHIVOS_DIFERIDOS;                                                   -- no NULL
+SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486'
+ AND CLAVE IN ('ARCHIVOS_DESPUES_SALDOS', 'ARCHIVOS_DESPUES_DEPURACION_TEL', 'ARRIBO_AUTOMATICO');                        -- GESCAR_NVA,GESCAR_REA · SCBTEL · el tuyo
+```
+
+6. **Permisos en Oracle:** además de los de antes, el usuario de `CYBER_ORACLE` debe poder hacer `SELECT` en `RCVRY.JSP_TAB_TEL_REMESA_486`, porque el job cuenta sus renglones antes de ejecutar `JSP_TELEFONOS_REMESA_486`.
+7. **Avisa al equipo de asignaciones del orden nuevo:**
+   - El primer correo de archivos listos solo trae el SCBSDOS (y el SCBPAG).
+   - Cuando suben los saldos, llega otro aviso con los gescar de nuevas y reasignadas.
+   - Enseguida corre la depuración de teléfonos. Si la remesa en CYBER tiene los mismos renglones que nuestro archivo, llega el aviso del SCBTEL. **El SCBTEL no se sube antes de ese aviso.** Si no cuadra, llega un hallazgo y no sale el SCBTEL.
+   - Cuando suben el SCBTEL, llega el aviso del gescar sin teléfono (`SCBACTH_SINTEL.TXT`).
+8. Sigue con la **migración** (paso 6) y enciende el job cuando corresponda (paso 7).
+
+Detalle del arribo: *Flujo y diagramas*, sección 05.
+
 ## 0. Antes de empezar
 
 1. Baja la última versión de `main` del repositorio (o descarga el ZIP).
@@ -71,17 +120,6 @@ SELECT COUNT(*) AS PROCEDIMIENTOS FROM sys.procedures;                          
 SELECT VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'CYBER_HOSTUP_EXPR';       -- to_char(DMHOSTUP, 'YYYYMMDD')
 SELECT CASE WHEN OBJECT_DEFINITION(OBJECT_ID('ops.sp_arribo_bajar')) LIKE '%CYBER_HOSTUP%' THEN 'nuevo' ELSE 'VIEJO' END AS SP_ARRIBO_BAJAR;
 ```
-
-**Si ya habías hecho este paso antes del 17/11 en la noche:** repite los pasos 1, 2 y 3 completos. Cambiaron `10_funciones.sql`, `52`, `76`, `77`, `78`, `80` y la semilla, y todos se pueden volver a correr. Comprueba el arribo nuevo:
-
-```sql
-USE [BNABAJ_486];
-SELECT name FROM sys.procedures WHERE name IN ('sp_tel_remesa_validar', 'sp_arribo_gescar_sintel', 'sp_mig_diagnostico');   -- tres renglones
-SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486'
- AND CLAVE IN ('ARCHIVOS_DESPUES_SALDOS', 'ARCHIVOS_DESPUES_DEPURACION_TEL');                                              -- GESCAR_NVA,GESCAR_REA y SCBTEL
-```
-
-Avisa al equipo de asignaciones del orden nuevo: el primer correo de archivos listos solo trae el SCBSDOS (y el SCBPAG). Los gescar de nuevas y reasignadas y el SCBTEL llegan en otro aviso cuando ya subieron los saldos y la depuración de teléfonos quedó bien, y el gescar sin teléfono cuando ya subieron el SCBTEL. **El SCBTEL no se sube antes de su aviso.**
 
 ## 3. Reponer tus parámetros
 
