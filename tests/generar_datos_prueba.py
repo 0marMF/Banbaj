@@ -169,7 +169,7 @@ def main(destino):
         {"TELEFONO": "5512345678", "OS": "OS-50", "FECHA": "20261101", "STATUS": ""},       # estatus vacío: deja de excluirse
         {"TELEFONO": "5598765432", "OS": "OS-51", "FECHA": "20261101", "STATUS": "X"}])
     # Migración: CSV como los deja COPY TO … TYPE CSV de FoxPro (EXPORTAR_MIGRACION.prg):
-    # encabezado en minúsculas, texto entre comillas sin espacios al final, fechas AAAAMMDD.
+    # encabezado en minúsculas, texto entre comillas sin espacios al final, fechas AAAA/MM/DD (SET DATE YMD, SET CENTURY ON).
     mig = destino / "migracion"
     vfp(mig / "DAT.csv", ["folio", "cliente", "sub_cte", "nombre1", "cuenta", "cuenta2", "segmento2", "fe_asig", "sdo_act", "etiqueta1"], [
         ["       100", "486", "NVA", "CLIENTE UNO", "20000001", "486-100", "CONSUMO", dt.date(2026, 10, 1), 1500.50, "MORA 1"],
@@ -179,7 +179,7 @@ def main(destino):
     vfp(mig / "TAB7.csv", ["folio"], [["        95"], ["       150"]])
     # Como historia.dbf: sin SUB_CTE (la primera asignación es NVA y las siguientes REA); fe_baja solo para probar si viniera
     vfp(mig / "HISTORIA.csv", ["folio", "cuenta", "riesgo", "fe_asig", "fe_baja", "sdo_act", "tel1", "direcc1", "correo1"], [
-        ["       160", "20000007", "R7", dt.date(2024, 5, 1), dt.date(2024, 9, 30), 1234.5, "5511112222", "CALLE FICTICIA 7", "uno@correo.com"],
+        ["       160", "20000007", "R7", dt.date(2024, 5, 1), dt.date(2024, 9, 30), 1234.5, "5511112222", "CALLE 'LA FICTICIA', NO. 7", "uno@correo.com"],
         ["       150", "20000009", "R9B", dt.date(2023, 3, 1), None, None, None, None, None],   # reasignación (segunda asignación)
         ["        90", "20000009", "R9", dt.date(2019, 1, 1), dt.date(2019, 6, 1), None, None, None, None],
         ["       100", "20000001", "R1", dt.date(2026, 10, 1), None, None, None, None, None]])  # periodo vigente: ya está en el DAT
@@ -197,6 +197,14 @@ def main(destino):
     vfp(mig / "BLACKLIST.csv", ["tel", "fe_agre", "os", "solicitud"], [
         ["55 0000 0000", dt.date(2026, 1, 1), "OS-1", "OPERACION"], ["551234", dt.date(2026, 1, 1), "OS-9", ""],   # el de 6 dígitos se omite
         ["5511110000", dt.date(2026, 2, 1), "OS-2", ""]])
+    # CSV como el del programa anterior: comillas dobles dentro de un campo (SQL Server no lo puede leer)
+    mala = destino / "migracion_mala"
+    mala.mkdir(parents=True, exist_ok=True)
+    with open(mala / "HISTORIA.csv", "w", encoding="cp1252", newline="") as f:
+        f.write('cuenta,folio,fe_asig,direcc1\r\n')
+        f.write('"20000001","       100",2026/10/01,"CALLE UNO"\r\n')
+        f.write('"20000002","       101",2026/10/01,"CALLE "DOS" 2"\r\n')
+        f.write('"20000003","       102",2026/10/01,"CALLE TRES"\r\n')
     print("datos de prueba en", destino)
 
 
@@ -206,7 +214,7 @@ def vfp(ruta, campos, filas):
         if x is None or x == "":
             return ""
         if isinstance(x, dt.date):
-            return x.strftime("%Y%m%d")
+            return x.strftime("%Y/%m/%d")
         if isinstance(x, (int, float)):
             return f"{x:.2f}" if isinstance(x, float) else str(x)
         return '"' + str(x).rstrip() + '"'

@@ -168,7 +168,8 @@ Desde ese día el operador solo sube SCBSDOS, SCBTEL y los gescar; correos, tel�
 
 | Situación | Qué hacer |
 |---|---|
-| Error 50900 a 50907 (`X.csv: faltan las columnas …`) | El CSV no trae un campo obligatorio. Revisar la ventana de FoxPro y la ruta del DBF |
+| Error 50900 a 50907, salvo 50905 (`X.csv: faltan las columnas …`) | El CSV no trae un campo obligatorio. Revisar la ventana de FoxPro y la ruta del DBF |
+| Error 50905 (`X.csv: SQL Server no pudo leer el CSV …`) | Comillas dentro de un campo, un carácter raro o un CSV viejo en el servidor. El mensaje trae la fecha del archivo, los renglones con otro número de comillas y los caracteres raros, sin datos. Revisar la fecha (SQL Server lee `C:\MIGRA486\` del servidor), volver a exportar con `EXPORTAR_MIGRACION.prg` actual y copiar. Renglón enmascarado: `EXEC ops.sp_mig_diagnostico N'C:\MIGRA486\HISTORIA.csv', <renglón>;` |
 | Error 50910 a 50914 (`… ya tiene registros`) | Ya hay datos. Si se quiere sobrescribir, agregar `@reemplazar = 1` |
 | Aviso `X.csv no se encontró` aunque el archivo sí está | SQL Server no ve la carpeta desde el servidor. Ver el paso 3 |
 | Se cargó y algo no cuadra | Corregir el origen y volver a correr con `@reemplazar = 1`; reemplaza todo lo migrado |

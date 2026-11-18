@@ -4,7 +4,7 @@
 
 Fuente: [`mmd/05_arribo_cyber.mmd`](mmd/05_arribo_cyber.mmd) · Código: `sql/76_sp_arribo_cyber.sql`, `ops.sp_arribo_posterior` y `ops.sp_aviso_archivos` en `sql/78_sp_automatico.sql`, `ops.fn_archivos_diferidos` en `sql/10_funciones.sql`
 
-**Orden (decisión 17/11).** Lo marcan los stores de CYBER: `JSP_TELEFONOS_REMESA_486` inactiva todo lo que no está en la remesa y el SCBTEL activa nuestros teléfonos, así que primero va la depuración de teléfonos y después se sube el SCBTEL. Los planos los sube una persona, y el job se da cuenta solo de cuándo ya están.
+**Orden (decisión 17/11).** Lo marcan los stores de CYBER: `JSP_TELEFONOS_REMESA_486` inactiva todo lo que no está en la remesa y el SCBTEL activa nuestros teléfonos, así que primero va la depuración de teléfonos y después se sube el SCBTEL. El equipo confirmó (17/11) que al subir el SCBTEL los teléfonos quedan activos en `PHONE`, también los nuevos que el store no insertó porque aún no estaban en `PHONE_G1`. Los planos los sube una persona, y el job se da cuenta solo de cuándo ya están.
 
 | # | Paso del job | Cuándo | Bitácora |
 |---|---|---|---|
