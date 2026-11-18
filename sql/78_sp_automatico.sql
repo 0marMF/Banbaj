@@ -29,14 +29,16 @@ CREATE OR ALTER PROCEDURE ops.sp_exportar_auto
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @cliente VARCHAR(10), @msg NVARCHAR(4000), @acc NVARCHAR(4000);
+    DECLARE @cliente VARCHAR(10), @msg NVARCHAR(4000), @acc NVARCHAR(4000), @diferidos NVARCHAR(400);
     SELECT @cliente = CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
     IF @cliente IS NULL OR ISNULL(cfg.fn_param(@cliente, 'EXPORTAR_AUTOMATICO'), '0') <> '1' RETURN;
+    /* Orden del arribo (17/11): el SCBTEL y los gescar se escriben cuando les toca (ops.fn_archivos_diferidos) */
+    IF @solo IS NULL SET @diferidos = ops.fn_archivos_diferidos(@id_corrida);
     BEGIN TRY
-        EXEC ops.sp_exportar_salidas @id_corrida, @solo = @solo;
-        SET @msg = CONCAT(N'Archivos escritos', ISNULL(N' (' + @solo + N')', N''));
+        EXEC ops.sp_exportar_salidas @id_corrida, @solo = @solo, @excluir = @diferidos;
+        SET @msg = CONCAT(N'Archivos escritos', ISNULL(N' (' + @solo + N')', N''), ISNULL(N' · esperan su paso del arribo: ' + @diferidos, N''));
         EXEC ops.sp_log @id_corrida, 'EXPORTAR AUTOMATICO', 'OK', NULL, @msg;
-        EXEC ops.sp_aviso_archivos @id_corrida, @solo;     -- aviso a asignaciones: ya pueden arribar
+        EXEC ops.sp_aviso_archivos @id_corrida, @solo, @excluir = @diferidos;     -- aviso a asignaciones: ya pueden arribar
     END TRY
     BEGIN CATCH
         SET @msg = ERROR_MESSAGE();
@@ -163,8 +165,9 @@ BEGIN
 END;
 GO
 
-/* Fin del arribo de la asignación: marca la hora de fin y manda CONFIRMACION_ASIG_486 cuando correos
-   y teléfonos quedaron OK en CYBER (y el blanqueo ya se intentó, si está automático). Una vez por corrida. */
+/* Fin del arribo de la asignación: marca la hora de fin y manda CONFIRMACION_ASIG_486 cuando las depuraciones
+   de teléfonos y correos quedaron OK en CYBER, ya se intentó el gescar de cuentas sin teléfono (el SCBTEL subió)
+   y, si está automático, el blanqueo. Una vez por corrida. */
 CREATE OR ALTER PROCEDURE ops.sp_confirmar_asignacion
     @id_corrida INT
 AS
@@ -175,6 +178,9 @@ BEGIN
     IF EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'CONFIRMACION AUTOMATICA') RETURN;
     IF NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'ARRIBO CORREOS' AND ESTATUS = 'OK')
        OR NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'ARRIBO TELEFONOS' AND ESTATUS = 'OK')
+        RETURN;
+    /* Al final de todo (17/11): también después del gescar de cuentas sin teléfono (con el SCBTEL ya arriba) */
+    IF NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'GESCAR SIN TELEFONO')
         RETURN;
     IF ISNULL(cfg.fn_param(@cliente, 'BLANQUEO_AUTOMATICO'), '0') = '1'
        AND NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'BLANQUEO AUTOMATICO')
@@ -315,7 +321,8 @@ GO
 CREATE OR ALTER PROCEDURE ops.sp_aviso_archivos
     @id_corrida  INT,
     @solo        NVARCHAR(400) = NULL,   -- solo estos archivos (ej. GESCAR_SINTEL)
-    @solo_prueba BIT = 0
+    @solo_prueba BIT = 0,
+    @excluir     NVARCHAR(400) = NULL    -- archivos que todavía no se avisan (ops.fn_archivos_diferidos)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -335,6 +342,7 @@ BEGIN
     WHERE a.CLIENTE = @cliente
       AND a.ARCHIVO IN (SELECT UPPER(LTRIM(RTRIM(value))) FROM STRING_SPLIT(ISNULL(cfg.fn_param(@cliente, 'ARCHIVOS_ARRIBO'), N''), N','))
       AND (@solo IS NULL OR a.ARCHIVO IN (SELECT UPPER(LTRIM(RTRIM(value))) FROM STRING_SPLIT(@solo, N',')))
+      AND a.ARCHIVO NOT IN (SELECT UPPER(LTRIM(RTRIM(value))) FROM STRING_SPLIT(ISNULL(@excluir, N''), N','))
       AND EXISTS (SELECT 1 FROM ops.SALIDA_LINEA l WHERE l.ID_CORRIDA = @id_corrida AND l.ARCHIVO = a.ARCHIVO);
     IF NOT EXISTS (SELECT 1 FROM #a) RETURN;
 
@@ -351,13 +359,26 @@ BEGIN
     DECLARE @auto_arribo BIT = CASE WHEN cfg.fn_param(@cliente, 'ARRIBO_AUTOMATICO') = '1' THEN 1 ELSE 0 END,
             @auto_act    BIT = CASE WHEN cfg.fn_param(@cliente, 'ACT_CYBER_AUTOMATICO') = '1' THEN 1 ELSE 0 END,
             @auto_ret    BIT = CASE WHEN cfg.fn_param(@cliente, 'RETIRO_CYBER_AUTOMATICO') = '1' THEN 1 ELSE 0 END;
+    /* Orden del arribo de la asignación (17/11): SCBSDOS → (saldos arriba) gescar de nuevas y reasignadas y depuración de
+       teléfonos → (la remesa cuadra) SCBTEL y depuración de correos → (SCBTEL arriba) gescar sin teléfono → confirmación */
     SET @sigue = CASE
-        WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO IN ('SCBSDOS', 'SCBTEL'))
-            THEN N'Subir primero SCBSDOS y SCBTEL con el cargador de CYBER y después los gescar. '
+        WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'SCBSDOS')
+            THEN N'Subir el SCBSDOS con el cargador de CYBER. '
                + CASE WHEN @auto_arribo = 1
-                      THEN N'En cuanto suben, el job arriba solo correos y teléfonos, genera SCBACTH_SINTEL.TXT (llega otro aviso) y manda la confirmación de la asignación.'
-                      ELSE CONCAT(N'Después correr las depuraciones a mano: EXEC ops.sp_arribar_cyber ', @id_corrida, N', ''CORREOS''; y EXEC ops.sp_arribar_cyber ', @id_corrida,
-                                  N', ''TELEFONOS''; (este último genera SCBACTH_SINTEL.TXT y llega otro aviso). Al terminar, EXEC ops.sp_avisar ', @id_corrida, N', ''CONFIRMACION_ASIG_486'';') END
+                      THEN N'En cuanto suben los saldos, el job manda los gescar de nuevas y reasignadas (llega otro aviso) y corre la depuración de teléfonos; '
+                         + N'si RCVRY.JSP_TAB_TEL_REMESA_486 queda con los mismos teléfonos que nuestro archivo, llega el aviso para subir el SCBTEL. '
+                         + N'No subir el SCBTEL antes: la depuración inactiva lo que no está en la remesa y el SCBTEL activa lo nuestro.'
+                      ELSE CONCAT(N'Con los saldos arriba: subir los gescar de nuevas y reasignadas y correr la depuración de teléfonos (EXEC ops.sp_arribar_cyber ', @id_corrida,
+                                  N', ''TELEFONOS'';). Si la remesa cuadra, subir el SCBTEL y correr la de correos (EXEC ops.sp_arribar_cyber ', @id_corrida,
+                                  N', ''CORREOS'';). Con el SCBTEL arriba: EXEC ops.sp_arribo_gescar_sintel ', @id_corrida, N'; y al final EXEC ops.sp_avisar ', @id_corrida,
+                                  N', ''CONFIRMACION_ASIG_486'';') END
+        WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'SCBTEL')
+            THEN N'La depuración de teléfonos quedó bien: RCVRY.JSP_TAB_TEL_REMESA_486 tiene los mismos teléfonos que nuestro archivo. Ya pueden subir el SCBTEL con el cargador de CYBER. '
+               + CASE WHEN @auto_arribo = 1
+                      THEN N'Mientras, el job corre la depuración de correos; en cuanto suba el SCBTEL genera SCBACTH_SINTEL.TXT (llega otro aviso) y manda la confirmación de la asignación.'
+                      ELSE CONCAT(N'Después: EXEC ops.sp_arribar_cyber ', @id_corrida, N', ''CORREOS''; y, con el SCBTEL arriba, EXEC ops.sp_arribo_gescar_sintel ', @id_corrida, N';') END
+        WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO IN ('GESCAR_NVA', 'GESCAR_REA'))
+            THEN N'Ya subieron los saldos: subir los gescar de cuentas nuevas y reasignadas con el cargador de CYBER.'
         WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'SCBPAG')
             THEN N'Subir SCBPAG con el cargador de CYBER. '
                + CASE WHEN @auto_act = 1 THEN N'Los saldos, vencido, pago mínimo y PVS/REE ya se ejecutan solos.'

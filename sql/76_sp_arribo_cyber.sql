@@ -7,21 +7,24 @@ GO
    (SCBSDOS, SCBTEL, gescar). Lo demás lo hace SQL Server por el servidor
    vinculado [CYBER], sin sqlldr ni scripts a mano:
 
-   Correos (en cuanto el SCBSDOS ya subió: lo que le faltaba a DELQMST al terminar la asignación ya llegó)
-     1. Baja los correos que tiene CYBER e inserta los nuevos en ADDRESS.
-     2. Bandera 416 encendida, vacía la remesa, la carga y ejecuta JSP_CORREOS_486.
-     3. Apaga la bandera.
-   Teléfonos (en cuanto el SCBTEL ya subió: los teléfonos que le faltaban a PHONE_G1 ya llegaron)
-     1. Vacía la remesa (y crea el renglón del validador), la carga y ejecuta
-        JSP_TELEFONOS_REMESA_486.
-     2. Baja los teléfonos activos y genera el gescar de cuentas sin teléfono
-        (SCBACTH_SINTEL.TXT), que se escribe en la carpeta de la corrida.
+   Orden (decisión 17/11):
+     1. Asignaciones sube el SCBSDOS. Saldos arriba (DMHOSTUP del día = cuentas del SCBSDOS) -> paso ARRIBO SALDOS:
+        se escriben y avisan los gescar de nuevas y reasignadas.
+     2. Depuración de teléfonos: vacía la remesa (y crea el renglón del validador) y la carga; si
+        RCVRY.JSP_TAB_TEL_REMESA_486 tiene los mismos renglones que nuestro archivo de teléfonos
+        (ops.sp_tel_remesa_validar), ejecuta JSP_TELEFONOS_REMESA_486, que inactiva lo que no está
+        en la remesa. Entonces se escribe el SCBTEL y se avisa a asignaciones que ya lo puede subir.
+     3. Depuración de correos (con la de teléfonos OK): correos nuevos en ADDRESS, bandera 416,
+        remesa y JSP_CORREOS_486, bandera apagada.
+     4. Asignaciones sube el SCBTEL (los teléfonos que le faltaban a PHONE_G1 ya llegaron) ->
+        gescar de cuentas sin teléfono (SCBACTH_SINTEL.TXT, ops.sp_arribo_gescar_sintel).
+     5. Blanqueo de status y confirmación de la asignación (ops.sp_arribo_posterior).
 
    ops.sp_arribo_automatico lo llama el job (ops.sp_diario_486) cada 30 minutos
    cuando la asignación del día ya terminó. Cada proceso corre una sola vez por
    corrida; si falla, queda ERROR en la bitácora y no se reintenta solo:
    se avisa al equipo de asignaciones (HALLAZGO_486), se corrige y se corre a mano con
-   EXEC ops.sp_arribar_cyber <corrida>, '<CORREOS|TELEFONOS>';
+   EXEC ops.sp_arribar_cyber <corrida>, '<CORREOS|TELEFONOS>';  o  EXEC ops.sp_arribo_gescar_sintel <corrida>;
    La detección compara contra lo pendiente (ops.sp_arribo_base), así funciona aunque no haya cuentas nuevas.
    ===================================================================== */
 SET NOCOUNT ON;
@@ -125,6 +128,73 @@ BEGIN
 END;
 GO
 
+/* La remesa de teléfonos que quedó en CYBER (RCVRY.JSP_TAB_TEL_REMESA_486) tiene que tener los mismos renglones que
+   nuestro archivo de teléfonos (ops.TELEFONO, lo que va en sub_mst.TXT). Si no, JSP_TELEFONOS_REMESA_486 inactivaría
+   teléfonos buenos: no se ejecuta y se avisa. @conteo_cyber sirve para probar sin servidor vinculado. */
+CREATE OR ALTER PROCEDURE ops.sp_tel_remesa_validar
+    @id_corrida   INT,
+    @conteo_cyber INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @cliente VARCHAR(10) = (SELECT CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida);
+    DECLARE @srv SYSNAME = ISNULL(cfg.fn_param(@cliente, 'CYBER_LINKED_SERVER'), 'CYBER'), @nuestro INT, @archivo INT, @msg NVARCHAR(4000), @sql NVARCHAR(MAX);
+    SET @nuestro = (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @id_corrida);
+    SET @archivo = (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id_corrida AND ARCHIVO = 'TEL_SUBMST');
+    IF @conteo_cyber IS NULL
+    BEGIN
+        DECLARE @t TABLE (N INT);
+        SET @sql = N'INSERT INTO @x (N) EXEC (N''select count(*) from RCVRY.JSP_TAB_TEL_REMESA_486'') AT ' + QUOTENAME(@srv) + N';';
+        SET @sql = REPLACE(@sql, N'@x', N'#remesa');
+        CREATE TABLE #remesa (N INT);
+        EXEC (@sql);
+        SET @conteo_cyber = (SELECT TOP (1) N FROM #remesa);
+    END;
+    SET @msg = CONCAT(N'RCVRY.JSP_TAB_TEL_REMESA_486: ', @conteo_cyber, N' · nuestro archivo de teléfonos: ', @nuestro,
+                      CASE WHEN @archivo > 0 AND @archivo <> @nuestro THEN CONCAT(N' (sub_mst.TXT: ', @archivo, N')') ELSE N'' END);
+    IF ISNULL(@conteo_cyber, -1) <> @nuestro
+    BEGIN
+        SET @msg = N'La remesa de teléfonos en CYBER no cuadra con nuestro archivo; no se ejecuta JSP_TELEFONOS_REMESA_486 (inactivaría teléfonos buenos). ' + @msg;
+        EXEC ops.sp_log @id_corrida, 'TEL REMESA VALIDADA', 'ERROR', @conteo_cyber, @msg;
+        THROW 50776, @msg, 1;
+    END;
+    EXEC ops.sp_log @id_corrida, 'TEL REMESA VALIDADA', 'OK', @conteo_cyber, @msg;
+END;
+GO
+
+/* Gescar de cuentas nuevas y reasignadas sin teléfono activo en CYBER (ges486.prg), cuando asignaciones ya subió
+   el SCBTEL: baja los teléfonos, arma SCBACTH_SINTEL.TXT, lo escribe y avisa. Paso GESCAR SIN TELEFONO, una vez. */
+CREATE OR ALTER PROCEDURE ops.sp_arribo_gescar_sintel
+    @id_corrida INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @msg NVARCHAR(4000), @n INT;
+    BEGIN TRY
+        EXEC ops.sp_bajar_cyber 'TELEFONOS', @id_corrida = @id_corrida;
+        SET @n = (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id_corrida AND ARCHIVO = 'GESCAR_SINTEL');
+        SET @msg = CONCAT(N'Cuentas nuevas o reasignadas sin teléfono activo en CYBER: ', @n);
+        BEGIN TRY
+            IF @n > 0
+            BEGIN
+                EXEC ops.sp_exportar_salidas @id_corrida, @solo = 'GESCAR_SINTEL';
+                SET @msg += N' · SCBACTH_SINTEL.TXT escrito en la carpeta de la corrida';
+                EXEC ops.sp_aviso_archivos @id_corrida, @solo = 'GESCAR_SINTEL';
+            END;
+        END TRY
+        BEGIN CATCH
+            SET @msg += CONCAT(N' · no se pudo escribir SCBACTH_SINTEL.TXT: ', ERROR_MESSAGE());
+        END CATCH;
+        EXEC ops.sp_log @id_corrida, 'GESCAR SIN TELEFONO', 'OK', @n, @msg;
+    END TRY
+    BEGIN CATCH
+        SET @msg = ERROR_MESSAGE();
+        EXEC ops.sp_log @id_corrida, 'GESCAR SIN TELEFONO', 'ERROR', NULL, @msg;
+        THROW;
+    END CATCH;
+END;
+GO
+
 /* Arribo a CYBER de correos o teléfonos de una asignación (lo llama ops.sp_arribo_automatico o se corre a mano) */
 CREATE OR ALTER PROCEDURE ops.sp_arribar_cyber
     @id_corrida   INT,
@@ -167,23 +237,18 @@ BEGIN
             EXEC ops.sp_cyber_remesa @id_corrida, 'TEL', @n OUTPUT;
             EXEC ops.sp_cyber_ejecutar @id_corrida, 'TEL_BORRA', @solo_mostrar;
             EXEC ops.sp_cyber_ejecutar @id_corrida, 'TEL_REMESA', @solo_mostrar;
+            /* La remesa en CYBER debe cuadrar con nuestro archivo antes de que el store inactive lo que no está en ella */
+            IF @solo_mostrar = 0 EXEC ops.sp_tel_remesa_validar @id_corrida;
             EXEC ops.sp_cyber_ejecutar @id_corrida, 'TEL_ACTUALIZA', @solo_mostrar;
-            SET @msg = CONCAT(N'Teléfonos arribados a CYBER: remesa de ', @n);
-            IF @solo_mostrar = 0
-            BEGIN
-                /* Gescar de nuevas y reasignadas sin teléfono activo, ya con lo que quedó en PHONE */
-                EXEC ops.sp_bajar_cyber 'TELEFONOS', @id_corrida = @id_corrida;
-                BEGIN TRY
-                    EXEC ops.sp_exportar_salidas @id_corrida, @solo = 'GESCAR_SINTEL';
-                    SET @msg += N' · SCBACTH_SINTEL.TXT escrito en la carpeta de la corrida';
-                    EXEC ops.sp_aviso_archivos @id_corrida, @solo = 'GESCAR_SINTEL';
-                END TRY
-                BEGIN CATCH
-                    SET @msg += CONCAT(N' · no se pudo escribir SCBACTH_SINTEL.TXT: ', ERROR_MESSAGE());
-                END CATCH;
-            END;
+            SET @msg = CONCAT(N'Depuración de teléfonos en CYBER: remesa de ', @n, N' (cuadra con RCVRY.JSP_TAB_TEL_REMESA_486)');
         END;
         IF @solo_mostrar = 0 EXEC ops.sp_log @id_corrida, @paso, 'OK', @n, @msg;
+        /* Con la depuración de teléfonos OK, asignaciones ya puede subir el SCBTEL: se escribe y se avisa */
+        IF @que = 'TELEFONOS' AND @solo_mostrar = 0
+        BEGIN
+            DECLARE @tel NVARCHAR(400) = ISNULL(cfg.fn_param((SELECT CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida), 'ARCHIVOS_DESPUES_DEPURACION_TEL'), N'SCBTEL');
+            EXEC ops.sp_exportar_auto @id_corrida, @solo = @tel;
+        END;
     END TRY
     BEGIN CATCH
         SET @msg = ERROR_MESSAGE();
@@ -330,7 +395,7 @@ BEGIN
     DECLARE @id INT, @srv SYSNAME = ISNULL(cfg.fn_param(@cliente, 'CYBER_LINKED_SERVER'), 'CYBER'),
             @min DECIMAL(5,2) = ISNULL(TRY_CONVERT(DECIMAL(5,2), cfg.fn_param(@cliente, 'ARRIBO_MIN_PCT')), 95),
             @p_c INT, @r_c INT, @p_d INT, @r_d INT, @p_t INT, @r_t INT, @ok_c BIT, @ok_d BIT, @ok_t BIT,
-            @hecho_c BIT, @hecho_t BIT, @fin BIT, @listo_c BIT = 0, @listo_t BIT = 0, @res NVARCHAR(400) = N'',
+            @hecho_s BIT, @hecho_c BIT, @hecho_t BIT, @hecho_g BIT, @fin BIT, @listo_s BIT = 0, @listo_g BIT = 0, @res NVARCHAR(400) = N'',
             @err NVARCHAR(4000), @acc NVARCHAR(4000);
 
     SELECT TOP (1) @id = ID_CORRIDA FROM ops.CORRIDA
@@ -342,9 +407,12 @@ BEGIN
         SELECT @resultado AS ARRIBO;
         RETURN;
     END;
+    /* Pasos ya intentados (OK o ERROR: no se reintentan solos) */
+    SET @hecho_s = CASE WHEN EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO SALDOS' AND ESTATUS = 'OK') THEN 1 ELSE 0 END;
     SET @hecho_c = CASE WHEN EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO CORREOS' AND ESTATUS IN ('OK', 'ERROR')) THEN 1 ELSE 0 END;
     SET @hecho_t = CASE WHEN EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO TELEFONOS' AND ESTATUS IN ('OK', 'ERROR')) THEN 1 ELSE 0 END;
-    IF @hecho_c = 1 AND @hecho_t = 1
+    SET @hecho_g = CASE WHEN EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'GESCAR SIN TELEFONO' AND ESTATUS IN ('OK', 'ERROR')) THEN 1 ELSE 0 END;
+    IF @hecho_s = 1 AND @hecho_c = 1 AND @hecho_t = 1 AND @hecho_g = 1
     BEGIN
         EXEC ops.sp_arribo_posterior @id;          -- blanqueo y confirmación, si quedaron pendientes (p. ej. tras un arribo a mano)
         SET @resultado = N'ARRIBO AUTOMATICO TERMINADO';
@@ -404,18 +472,39 @@ BEGIN
     SET @ok_c = CASE WHEN @p_c = 0 OR 100.0 * @r_c / @p_c >= @min THEN 1 ELSE 0 END;
     SET @ok_d = CASE WHEN @p_d = 0 OR 100.0 * @r_d / @p_d >= @min THEN 1 ELSE 0 END;
     SET @ok_t = CASE WHEN @p_t = 0 OR 100.0 * @r_t / @p_t >= @min THEN 1 ELSE 0 END;
-    IF @usa_hostup = 1
-    BEGIN
-        SET @listo_c = CASE WHEN @fin = 1 OR @ok_sdos = 1 THEN 1 ELSE 0 END;
-        SET @listo_t = CASE WHEN @fin = 1 OR (@ok_t = 1 AND @ok_sdos = 1) THEN 1 ELSE 0 END;
-    END
-    ELSE
-    BEGIN
-        SET @listo_c = CASE WHEN @fin = 1 OR (@ok_c = 1 AND @ok_d = 1) THEN 1 ELSE 0 END;
-        SET @listo_t = CASE WHEN @fin = 1 OR (@ok_t = 1 AND @ok_c = 1) THEN 1 ELSE 0 END;
-    END;
+    /* Saldos arriba: validación del equipo por DMHOSTUP; sin ella, por cuentas y domicilios pendientes */
+    SET @listo_s = CASE WHEN @fin = 1 OR (@usa_hostup = 1 AND @ok_sdos = 1) OR (@usa_hostup = 0 AND @ok_c = 1 AND @ok_d = 1) THEN 1 ELSE 0 END;
+    /* SCBTEL arriba: los teléfonos que le faltaban a PHONE_G1 ya llegaron (solo cuenta después de la depuración de teléfonos) */
+    SET @listo_g = CASE WHEN @fin = 1 OR @ok_t = 1 THEN 1 ELSE 0 END;
 
-    IF @listo_c = 1 AND @hecho_c = 0
+    /* 1. Saldos arriba: se marca el paso y salen los gescar de nuevas y reasignadas */
+    IF @listo_s = 1 AND @hecho_s = 0
+    BEGIN
+        SET @acc = CONCAT(N'Saldos del día en CYBER', CASE WHEN @usa_hostup = 1 THEN CONCAT(N': ', @n_hoy, N' de ', @n_sdos, N' cuentas con DMHOSTUP del día') ELSE N' (por cuentas y domicilios pendientes)' END);
+        EXEC ops.sp_log @id, 'ARRIBO SALDOS', 'OK', @n_hoy, @acc;
+        SET @hecho_s = 1;
+        SET @acc = ISNULL(cfg.fn_param(@cliente, 'ARCHIVOS_DESPUES_SALDOS'), N'GESCAR_NVA,GESCAR_REA');
+        EXEC ops.sp_exportar_auto @id, @solo = @acc;
+        SET @res += N'SALDOS OK · ';
+    END;
+    /* 2. Depuración de teléfonos (con los saldos arriba; si la remesa cuadra, sale el aviso para subir el SCBTEL) */
+    IF @hecho_s = 1 AND @hecho_t = 0
+    BEGIN
+        BEGIN TRY
+            EXEC ops.sp_arribar_cyber @id, 'TELEFONOS';
+            SET @res += N'TELEFONOS OK · ';
+        END TRY
+        BEGIN CATCH
+            SET @res += N'TELEFONOS ERROR · ';
+            SET @err = ERROR_MESSAGE();
+            SET @acc = CONCAT(N'No subir el SCBTEL todavía. Corregir la causa (si la remesa no cuadró, revisar RCVRY.JSP_TAB_TEL_REMESA_486 contra sub_mst.TXT) y correr EXEC ops.sp_arribar_cyber ', @id,
+                              N', ''TELEFONOS''; (con @solo_mostrar = 1 se ven los bloques sin ejecutar). Los correos esperan a que esta depuración quede bien. El job no lo reintenta solo.');
+            EXEC mail.sp_hallazgo @id, N'Depuración de teléfonos en CYBER con error', @err, @acc;
+        END CATCH;
+    END;
+    DECLARE @tel_ok BIT = CASE WHEN EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO TELEFONOS' AND ESTATUS = 'OK') THEN 1 ELSE 0 END;
+    /* 3. Depuración de correos, después de la de teléfonos */
+    IF @tel_ok = 1 AND @hecho_c = 0
     BEGIN
         BEGIN TRY
             EXEC ops.sp_arribar_cyber @id, 'CORREOS';
@@ -425,25 +514,30 @@ BEGIN
             SET @res += N'CORREOS ERROR · ';
             SET @err = ERROR_MESSAGE();
             SET @acc = CONCAT(N'Corregir la causa y correr EXEC ops.sp_arribar_cyber ', @id, N', ''CORREOS''; (con @solo_mostrar = 1 se ven los bloques sin ejecutar). El job no lo reintenta solo.');
-            EXEC mail.sp_hallazgo @id, N'Arribo de correos a CYBER con error', @err, @acc;
+            EXEC mail.sp_hallazgo @id, N'Depuración de correos en CYBER con error', @err, @acc;
         END CATCH;
     END;
-    IF @listo_t = 1 AND @hecho_t = 0
+    /* 4. SCBTEL arriba: gescar de cuentas sin teléfono */
+    IF @tel_ok = 1 AND @listo_g = 1 AND @hecho_g = 0
     BEGIN
         BEGIN TRY
-            EXEC ops.sp_arribar_cyber @id, 'TELEFONOS';
-            SET @res += N'TELEFONOS OK · ';
+            EXEC ops.sp_arribo_gescar_sintel @id;
+            SET @res += N'GESCAR SIN TELEFONO OK · ';
         END TRY
         BEGIN CATCH
-            SET @res += N'TELEFONOS ERROR · ';
+            SET @res += N'GESCAR SIN TELEFONO ERROR · ';
             SET @err = ERROR_MESSAGE();
-            SET @acc = CONCAT(N'Corregir la causa y correr EXEC ops.sp_arribar_cyber ', @id, N', ''TELEFONOS''; (con @solo_mostrar = 1 se ven los bloques sin ejecutar). El job no lo reintenta solo.');
-            EXEC mail.sp_hallazgo @id, N'Arribo de teléfonos a CYBER con error', @err, @acc;
+            SET @acc = CONCAT(N'Corregir la causa y correr EXEC ops.sp_arribo_gescar_sintel ', @id, N';');
+            EXEC mail.sp_hallazgo @id, N'Gescar de cuentas sin teléfono con error', @err, @acc;
         END CATCH;
     END;
 
     EXEC ops.sp_arribo_posterior @id;              -- blanqueo de status y confirmación de la asignación
-    SET @resultado = CASE WHEN @res = N'' THEN N'ESPERANDO ARRIBO' ELSE RTRIM(LEFT(@res, LEN(@res) - 1)) END;
+    SET @resultado = CASE WHEN @res <> N'' THEN RTRIM(LEFT(@res, LEN(@res) - 1))
+                          WHEN @hecho_s = 0 THEN N'ESPERANDO SALDOS'
+                          WHEN @tel_ok = 0 THEN N'DEPURACION DE TELEFONOS CON ERROR'
+                          WHEN @hecho_g = 0 THEN N'ESPERANDO SCBTEL'
+                          ELSE N'ESPERANDO ARRIBO' END;
     SELECT @resultado AS ARRIBO, @id AS CORRIDA,
            CASE WHEN @usa_hostup = 1 THEN CONCAT(@n_hoy, N' de ', @n_sdos) END AS SALDOS_DEL_DIA_EN_CYBER,
            CONCAT(@r_c, N' de ', @p_c) AS CUENTAS_PENDIENTES_EN_CYBER, CONCAT(@r_d, N' de ', @p_d) AS DOMICILIOS_PENDIENTES_EN_CYBER,

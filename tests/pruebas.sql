@@ -307,36 +307,41 @@ INSERT INTO stg.CYBER_HOSTUP (FECHA, CUENTAS) VALUES (N'20261030', 1), (N'202611
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- saldos incompletos: espera
 TRUNCATE TABLE stg.CYBER_HOSTUP;
 INSERT INTO stg.CYBER_HOSTUP (FECHA, CUENTAS) VALUES (N'02/11/26', @nsdos);                            -- fecha del día (DD/MM/AA, como val.txt) y número igual al SCBSDOS
-EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- saldos subidos: correos (sin servidor vinculado -> ERROR)
-EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- correos ya intentados; teléfonos esperando
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- saldos arriba: gescar NVA/REA y depuración de teléfonos (sin servidor vinculado -> ERROR)
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- teléfonos con error: los correos esperan
+DELETE FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO TELEFONOS';
+EXEC ops.sp_log @id, 'ARRIBO TELEFONOS', 'OK', 7, N'Prueba: depuración de teléfonos corregida';
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- teléfonos OK: correos; el gescar sin teléfono espera al SCBTEL
 INSERT INTO stg.CYBER_PHONE_G1 (CUENTA, AREA, TELEFONO) SELECT CUENTA2, AREA, TELEFONO FROM ops.TELEFONO WHERE ID_CORRIDA = @id;
-EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- SCBTEL subido: teléfonos
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- SCBTEL arriba: gescar sin teléfono
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar;           -- ya no repite
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'ARRIBO AUTO: saldos del día por DMHOSTUP (el número debe coincidir con el SCBSDOS), SCBTEL por PHONE_G1, una vez cada uno' AS p,
-             N'ESPERANDO ARRIBO,ESPERANDO ARRIBO,CORREOS ERROR,ESPERANDO ARRIBO,TELEFONOS ERROR,ARRIBO AUTOMATICO TERMINADO|1|1|2' AS e,
+FROM (SELECT N'ARRIBO AUTO (orden 17/11): saldos por DMHOSTUP, luego depuración de teléfonos, correos después de teléfonos, gescar sin teléfono con el SCBTEL arriba' AS p,
+             N'ESPERANDO SALDOS,ESPERANDO SALDOS,SALDOS OK · TELEFONOS ERROR,DEPURACION DE TELEFONOS CON ERROR,CORREOS ERROR,GESCAR SIN TELEFONO ERROR,ARRIBO AUTOMATICO TERMINADO|1|1|1|3' AS e,
              CONCAT(@ars, '|',
+                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO SALDOS' AND ESTATUS = 'OK'), '|',
                     (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO CORREOS' AND ESTATUS = 'ERROR'), '|',
-                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO TELEFONOS' AND ESTATUS = 'ERROR'), '|',
-                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'HALLAZGO' AND MENSAJE LIKE N'Arribo de % a CYBER con error:%')) AS o) x;
+                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'GESCAR SIN TELEFONO' AND ESTATUS = 'ERROR'), '|',
+                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'HALLAZGO'
+                     AND (MENSAJE LIKE N'Depuración de % en CYBER con error:%' OR MENSAJE LIKE N'Gescar de cuentas sin teléfono con error:%'))) AS o) x;
 
 /* Sin validación por DMHOSTUP (CYBER_HOSTUP_EXPR vacío): se detecta por lo pendiente.
    Día sin cuentas nuevas ni teléfonos nuevos: CYBER ya tiene todo salvo un domicilio que cambió.
    Los teléfonos se arriban de inmediato; los correos esperan a que el SCBSDOS suba el domicilio nuevo. */
 UPDATE cfg.PARAMETRO SET VALOR = N'' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_HOSTUP_EXPR';
 TRUNCATE TABLE stg.CYBER_HOSTUP;
-DELETE FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO IN ('ARRIBO CORREOS', 'ARRIBO TELEFONOS', 'ARRIBO BASE', 'HALLAZGO');
+DELETE FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO IN ('ARRIBO SALDOS', 'ARRIBO CORREOS', 'ARRIBO TELEFONOS', 'GESCAR SIN TELEFONO', 'ARRIBO BASE', 'HALLAZGO');
 DECLARE @cta_dom NVARCHAR(28) = (SELECT MIN(CUENTA) FROM stg.CYBER_DELQMST_ACT WHERE ISNULL(DOMICILIO, N'') <> N'');
 UPDATE stg.CYBER_DELQMST_ACT SET DOMICILIO = N'DOMICILIO ANTERIOR' WHERE CUENTA = @cta_dom;
 SET @ars = N'';
-EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- toma la foto (1 domicilio pendiente) y arriba teléfonos
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- toma la foto (1 domicilio pendiente): los saldos no han subido
 UPDATE s SET DOMICILIO = pru.fn_campo(l.LINEA, 'DMADDR1')
 FROM stg.CYBER_DELQMST_ACT s JOIN ops.SALIDA_LINEA l ON l.ID_CORRIDA = @id AND l.ARCHIVO = 'SCBSDOS' AND pru.fn_campo(l.LINEA, 'CUENTA') = s.CUENTA
 WHERE s.CUENTA = @cta_dom;
-EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar;           -- SCBSDOS con el domicilio nuevo: correos
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar;           -- SCBSDOS con el domicilio nuevo: saldos arriba y depuración de teléfonos
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'ARRIBO AUTO sin DMHOSTUP y sin cuentas nuevas: detecta por domicilio pendiente; sin teléfonos pendientes arriba de inmediato' AS p,
-             N'0|1|0|TELEFONOS ERROR,CORREOS ERROR' AS e,
+FROM (SELECT N'ARRIBO AUTO sin DMHOSTUP y sin cuentas nuevas: los saldos se detectan por el domicilio pendiente y hasta entonces no hay depuración' AS p,
+             N'0|1|0|ESPERANDO SALDOS,SALDOS OK · TELEFONOS ERROR' AS e,
              CONCAT((SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'CUENTA'), '|',
                     (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'DOMICILIO'), '|',
                     (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id AND TIPO = 'TELEFONO'), '|', @ars) AS o) x;
@@ -390,9 +395,33 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'AVISO ARCHIVOS: a asign
                  AND ASUNTO LIKE N'Banbaj 486: archivos listos para arribar (ASIG, corrida%'
                  AND CUERPO LIKE N'%_corrida%' AND CUERPO LIKE N'%>SCBSDOS.TXT</td>%' AND CUERPO LIKE N'%>SCBTEL.TXT</td>%'
                  AND CUERPO LIKE N'%>SCBACTH_486.TXT</td>%' AND CUERPO NOT LIKE N'%sub[_]mst%'
-                 AND CUERPO LIKE N'%Subir primero SCBSDOS y SCBTEL%' AND CUERPO LIKE N'%Hubo retiro%' AND CUERPO LIKE N'%Copiar a mano el archivo MX[_]G1MCT[_]DVBJIG%' THEN 1 ELSE 0 END,
+                 AND CUERPO LIKE N'%Subir el SCBSDOS%' AND CUERPO LIKE N'%No subir el SCBTEL antes%' AND CUERPO LIKE N'%Hubo retiro%' AND CUERPO LIKE N'%Copiar a mano el archivo MX[_]G1MCT[_]DVBJIG%' THEN 1 ELSE 0 END,
        LEFT(CONCAT(ASUNTO, ' | ', CUERPO), 4000)
 FROM @hz;
+
+/* Orden del arribo (17/11): la remesa de teléfonos en CYBER debe cuadrar con nuestro archivo antes del store */
+DECLARE @nt INT = (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @id), @ve INT = 0, @rv NVARCHAR(4000);
+BEGIN TRY
+    EXEC ops.sp_tel_remesa_validar @id, @conteo_cyber = 3;
+END TRY
+BEGIN CATCH
+    SET @ve = ERROR_NUMBER();
+END CATCH;
+EXEC ops.sp_tel_remesa_validar @id, @conteo_cyber = @nt;
+SET @rv = CONCAT(@ve, '|', (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'TEL REMESA VALIDADA' AND ESTATUS = 'ERROR'
+                            AND MENSAJE LIKE CONCAT(N'%JSP[_]TAB[_]TEL[_]REMESA[_]486: 3 · nuestro archivo de teléfonos: ', @nt, N'%')), '|',
+                 (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'TEL REMESA VALIDADA' AND ESTATUS = 'OK'));
+EXEC pru.sp_igual N'ARRIBO TEL: la remesa en CYBER que no cuadra con nuestro archivo detiene el store (50776); la que cuadra pasa', N'50776|1|1', @rv;
+/* El SCBTEL y los gescar esperan su paso: la exportación los omite y cada aviso dice qué sigue */
+DECLARE @px TABLE (ORDEN INT, TIPO VARCHAR(10), ARCHIVO VARCHAR(50), RUTA NVARCHAR(400), CHARSET VARCHAR(30), EOL VARCHAR(4), ENCABEZADO BIT, LINEAS INT, COMANDO NVARCHAR(4000));
+INSERT INTO @px EXEC ops.sp_exportar_salidas @id_corrida = @id, @solo_mostrar = 1, @excluir = N'SCBTEL,GESCAR_NVA,GESCAR_REA';
+SET @rv = CONCAT((SELECT COUNT(*) FROM @px WHERE ARCHIVO IN ('SCBTEL', 'GESCAR_NVA', 'GESCAR_REA')), '|', (SELECT COUNT(*) FROM @px WHERE ARCHIVO = 'SCBSDOS'));
+DELETE FROM @hz;
+INSERT INTO @hz EXEC ops.sp_aviso_archivos @id, @solo = 'SCBTEL', @solo_prueba = 1;
+INSERT INTO @hz EXEC ops.sp_aviso_archivos @id, @solo = 'GESCAR_NVA,GESCAR_REA', @solo_prueba = 1;
+SET @rv = CONCAT(@rv, '|', (SELECT COUNT(*) FROM @hz WHERE CUERPO LIKE N'%Ya pueden subir el SCBTEL%' AND CUERPO LIKE N'%depuración de correos%'), '|',
+                 (SELECT COUNT(*) FROM @hz WHERE CUERPO LIKE N'%Ya subieron los saldos%'));
+EXEC pru.sp_igual N'ARRIBO: la exportación omite el SCBTEL y los gescar diferidos; avisos de SCBTEL (tras la depuración) y de gescar (tras los saldos)', N'0|1|1|1', @rv;
 
 /* op9.prg: las cuentas nuevas guardan sus teléfonos como AREA + TELEFONO; las existentes, como llegan */
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
@@ -1073,17 +1102,32 @@ UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'CUADRE_A
 DECLARE @g INT;
 EXEC ops.sp_corrida_iniciar '486', 'ASIG', '2030-01-07', NULL, @g OUTPUT;
 EXEC ops.sp_corrida_finalizar @g, 'OK', N'Prueba de confirmación';
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE = 'ARRIBO_AUTOMATICO';
+DECLARE @dif0 NVARCHAR(400) = ops.fn_archivos_diferidos(@g);       -- recién terminada: SCBTEL y gescar esperan
 UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE = 'CONFIRMACION_AUTOMATICA';
 EXEC ops.sp_log @g, 'ARRIBO CORREOS', 'OK', 1, N'prueba';
 EXEC ops.sp_arribo_posterior @g;                               -- falta teléfonos: no confirma
 SET @rs = CAST((SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @g AND PLANTILLA = 'CONFIRMACION_ASIG_486') AS NVARCHAR(10));
 EXEC ops.sp_log @g, 'ARRIBO TELEFONOS', 'OK', 1, N'prueba';
+EXEC ops.sp_arribo_posterior @g;                               -- falta el gescar sin teléfono (el SCBTEL no ha subido): no confirma
+SET @rs = CONCAT(@rs, '|', (SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @g AND PLANTILLA = 'CONFIRMACION_ASIG_486'));
+/* Archivos diferidos de esta corrida en cada momento del arribo */
+DECLARE @dif NVARCHAR(1000) = CONCAT(ops.fn_archivos_diferidos(@g), '|');
+EXEC ops.sp_log @g, 'GESCAR SIN TELEFONO', 'OK', 0, N'prueba';
 EXEC ops.sp_arribo_posterior @g;
 EXEC ops.sp_arribo_posterior @g;                               -- no repite
 SET @rs = CONCAT(@rs, '|', (SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @g AND PLANTILLA = 'CONFIRMACION_ASIG_486'), '|',
                  (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @g AND PASO = 'ARRIBO FIN'), '|',
                  (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @g AND PASO = 'CONFIRMACION AUTOMATICA' AND ESTATUS = 'OK'));
-EXEC pru.sp_igual N'CONFIRMACION AUTO: espera correos y teléfonos OK, marca el fin y manda el correo una sola vez', N'0|1|1|1', @rs;
+EXEC pru.sp_igual N'CONFIRMACION AUTO: espera teléfonos, correos y el gescar sin teléfono, marca el fin y manda el correo una sola vez', N'0|0|1|1|1', @rs;
+EXEC ops.sp_log @g, 'ARRIBO SALDOS', 'OK', 0, N'prueba';
+SET @dif = CONCAT(@dif0, '|', @dif, ISNULL(ops.fn_archivos_diferidos(@g), N'(nada)'));
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'ARRIBO_AUTOMATICO';
+DELETE FROM ops.BITACORA WHERE ID_CORRIDA = @g AND PASO = 'ARRIBO SALDOS';
+SET @dif = CONCAT(@dif, '|', ISNULL(ops.fn_archivos_diferidos(@g), N'(nada)'));
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE = 'ARRIBO_AUTOMATICO';
+EXEC pru.sp_igual N'ARRIBO: archivos diferidos (al terminar SCBTEL y gescar; con teléfonos OK solo gescar; con saldos nada; sin arribo automático nada)',
+     N'GESCAR_NVA,GESCAR_REA,SCBTEL|GESCAR_NVA,GESCAR_REA|(nada)|(nada)', @dif;
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'CONFIRMACION_AUTOMATICA';
 
 /* Blanqueo: fuera de los días 1 a 10 no hace nada; dentro, sin CYBER queda en ERROR con hallazgo */

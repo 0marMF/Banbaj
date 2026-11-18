@@ -119,7 +119,8 @@ CREATE OR ALTER PROCEDURE ops.sp_exportar_salidas
     @carpeta_zip  NVARCHAR(400) = NULL,     -- NULL = parámetro CARPETA_ZIP (C:\)
     @enviar_zip   BIT           = 0,        -- 1 = correo de devolución: Operación con el ZIP, AEM en copia oculta sin él
     @solo_mostrar BIT           = 0,
-    @sin_subcarpeta BIT         = 0         -- 1 = escribe directo en @carpeta, sin <aaaammdd>_corrida<id>\ (copia de la devolución a CYBER)
+    @sin_subcarpeta BIT         = 0,        -- 1 = escribe directo en @carpeta, sin <aaaammdd>_corrida<id>\ (copia de la devolución a CYBER)
+    @excluir      NVARCHAR(400) = NULL      -- archivos que todavía no se escriben (ops.fn_archivos_diferidos: SCBTEL y gescar esperan su paso del arribo)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -139,6 +140,8 @@ BEGIN
 
     DECLARE @solo_t TABLE (A VARCHAR(50) PRIMARY KEY);
     INSERT INTO @solo_t SELECT DISTINCT UPPER(LTRIM(RTRIM(value))) FROM STRING_SPLIT(ISNULL(@solo, N''), N',') WHERE LTRIM(value) <> N'';
+    DECLARE @excluir_t TABLE (A VARCHAR(50) PRIMARY KEY);
+    INSERT INTO @excluir_t SELECT DISTINCT UPPER(LTRIM(RTRIM(value))) FROM STRING_SPLIT(ISNULL(@excluir, N''), N',') WHERE LTRIM(value) <> N'';
 
     /* Plan: un renglón por archivo */
     CREATE TABLE #plan (ORDEN INT IDENTITY(1,1), TIPO VARCHAR(10), ARCHIVO VARCHAR(50), NOMBRE NVARCHAR(260), RUTA NVARCHAR(400),
@@ -156,6 +159,7 @@ BEGIN
     LEFT JOIN cfg.SALIDA_ARCHIVO s ON s.CLIENTE = @cliente AND s.ARCHIVO = l.ARCHIVO
     WHERE l.ID_CORRIDA = @id_corrida
       AND (NOT EXISTS (SELECT 1 FROM @solo_t) OR UPPER(l.ARCHIVO) IN (SELECT A FROM @solo_t))
+      AND UPPER(l.ARCHIVO) NOT IN (SELECT A FROM @excluir_t)
     GROUP BY l.ARCHIVO
     ORDER BY l.ARCHIVO;
     UPDATE #plan SET LINEAS = LINEAS + 1 WHERE ENCABEZADO = 1;

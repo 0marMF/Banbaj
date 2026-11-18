@@ -85,7 +85,7 @@ CREATE OR ALTER PROCEDURE ops.sp_retiro_cerrar
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @cliente VARCHAR(10), @srv SYSNAME, @ruta NVARCHAR(400), @msg NVARCHAR(4000), @n INT, @tabla NVARCHAR(MAX), @accion NVARCHAR(4000),
+    DECLARE @cliente VARCHAR(10), @srv SYSNAME, @ruta NVARCHAR(400), @msg NVARCHAR(4000), @n INT, @tabla NVARCHAR(MAX), @accion NVARCHAR(4000), @diferidos NVARCHAR(400),
             @ok_a BIT, @ok_c BIT, @ok_d BIT;
     SELECT @cliente = CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
     IF @cliente IS NULL THROW 50770, 'La corrida no existe.', 1;
@@ -122,9 +122,10 @@ BEGIN
     IF @ok_a = 0
     BEGIN
     BEGIN TRY
-        EXEC ops.sp_exportar_salidas @id_corrida, @zip = 'RETIROS', @enviar_zip = 1;
+        SET @diferidos = ops.fn_archivos_diferidos(@id_corrida);   -- SCBTEL y gescar esperan su paso del arribo (decisión 17/11)
+        EXEC ops.sp_exportar_salidas @id_corrida, @zip = 'RETIROS', @enviar_zip = 1, @excluir = @diferidos;
         EXEC ops.sp_log @id_corrida, 'RETIRO ARCHIVOS', 'OK', NULL, N'Archivos escritos, ZIP y correo de devolución enviados';
-        EXEC ops.sp_aviso_archivos @id_corrida;            -- aviso a asignaciones: ya pueden arribar
+        EXEC ops.sp_aviso_archivos @id_corrida, @excluir = @diferidos;    -- aviso a asignaciones: ya pueden arribar
         SET @ok_a = 1;
     END TRY
     BEGIN CATCH
