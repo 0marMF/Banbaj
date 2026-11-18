@@ -29,7 +29,7 @@ Este documento explica cómo funciona por dentro. La instalación, la migración
 
 Decisión 15/11: la actualización toma sus archivos solo en `.txt` y la asignación las bases maestras solo en `.csv` (el patrón de cada uno está en `cfg.ARCHIVO.PATRON_NOMBRE`). Los `.txt` del banco vienen separados por comas, con comillas opcionales, y se leen igual que un CSV.
 
-Cada columna de las bases maestras se busca por su **encabezado** (`cfg.ARCHIVO_COLUMNA.PATRON_ENCABEZADO`), no por su posición: si el banco las cambia de lugar no hay que hacer nada. Solo hay que tocar la matriz (`COLUMNAS` en `tools/generar_sql_486.py`) si cambia el nombre de una columna que usamos, y `NUM_COLUMNAS` si cambia el total de columnas. Layout vigente desde el 11/11/2026: TDC con 100 columnas y Consumo con 115. `SALDO2` se lee de `MONTO A CUBRIR PLAZOS PAGO LIQUIDACION` (TDC) y `MONTO A PAGO LIQUIDACION PLAZOS` (Consumo), que antes traían la leyenda `<= 6`.
+Cada columna de las bases maestras se busca por su **encabezado** (`cfg.ARCHIVO_COLUMNA.PATRON_ENCABEZADO`), no por su posición: si el banco las cambia de lugar no hay que hacer nada. El número de columnas se cuenta en el encabezado del archivo, así que tampoco hay que tocar `NUM_COLUMNAS`. Si el banco le cambia el nombre a una columna que usamos, el equipo de asignaciones actualiza la matriz con `cfg.sp_layout_cambiar` (ver *Validación de la entrada*). Layout vigente desde el 11/11/2026: TDC con 100 columnas y Consumo con 115. `SALDO2` se lee de `MONTO A CUBRIR PLAZOS PAGO LIQUIDACION` (TDC) y `MONTO A PAGO LIQUIDACION PLAZOS` (Consumo), que antes traían la leyenda `<= 6`. En TDC, el saldo actualizado viene vacío en VEN2 y VEN3: ya no se rechaza el renglón y se toma el saldo PRIME.
 
 `Q:` es `\\192.168.50.13\q`.
 
@@ -125,6 +125,25 @@ En cada vuelta con el día completo, `ops.sp_arribo_automatico` revisa:
 Lo pendiente sale de una foto que se toma al terminar la asignación, antes de que existan los TXT (`ops.sp_arribo_base`, tabla `ops.ARRIBO_PENDIENTE`); por eso funciona aunque no haya cuentas nuevas. Si la remesa saliera vacía no se ejecuta el procedimiento de CYBER, para no inactivar todo el 486. Detalle en el diagrama 05.
 
 Si una corrida falla, se revierte sola (ver *Respaldo y retroceso*) y el job no la vuelve a intentar ese día. Para reintentar se corre a mano.
+
+# Validación de la entrada (desde el 17/11)
+
+Antes de tocar el DAT, la actualización y la asignación revisan cada archivo. Detalle y diagrama: *Flujo y diagramas*, sección 09.
+
+- **Layout:** cada campo que toma el proceso (`cfg.ARCHIVO_COLUMNA`) tiene que estar en el archivo, obligatorio u opcional (`VALIDAR_LAYOUT`).
+- **Datos:** reglas de `cfg.VALIDACION_DATO` sobre el texto tal como llegó (`VALIDAR_DATOS`): importes que no son importes, saldos fuera de rango o negativos, teléfonos con letras o mal medidos, correos sin forma de correo, segmentos y estatus fuera de catálogo, cuentas repetidas, columnas vacías y archivos con muchos menos o más renglones que la última carga buena. Cada regla tiene su tolerancia (`PCT_MAX`).
+- Si algo no pasa, se manda `VALIDACION_ENTRADA_486` al equipo de asignaciones con lo que falta, los encabezados nuevos, las anomalías con ejemplos enmascarados y qué hacer. La corrida queda **CANCELADA** (error 50025) y el DAT no cambia. El job no la repite: el equipo corrige y la vuelve a correr con `EXEC ops.sp_asignacion_486 @fecha = '…';` o `ops.sp_actualizacion_486`.
+
+Lo que el equipo puede cambiar sin tocar código:
+
+| Qué | Cómo | Dónde queda |
+|---|---|---|
+| Encabezado de un campo | `EXEC cfg.sp_layout_cambiar 'MAESTRA_TDC', 'SALDO2', N'encabezado como viene';` | `cfg.ARCHIVO_COLUMNA` + `cfg.LAYOUT_HISTORIAL` |
+| Nombre o carpeta de un archivo | `UPDATE cfg.ARCHIVO SET PATRON_NOMBRE = …` | `cfg.ARCHIVO` + `cfg.LAYOUT_HISTORIAL` |
+| Etiquetas (estatus, tramo, cartera, tipo de crédito, enfoque, cosecha) | `EXEC cfg.sp_catalogo_alta 'ESTATUS_CONSUMO', N'VALOR', N'ETIQUETA';` | `cfg.CATALOGO` |
+| Tolerancia o tope de una regla de datos | `UPDATE cfg.VALIDACION_DATO SET PCT_MAX = … / VALOR = … / ACTIVO = 0` | `cfg.VALIDACION_DATO` |
+
+La semilla (`90_semilla_486.sql`) conserva todos esos cambios al reinstalar: en el layout respeta los renglones marcados con `EDITADO_POR`, y en catálogos y reglas solo agrega lo que falta. Para ver el estado: `SELECT * FROM cfg.v_LAYOUT;` y `SELECT * FROM cfg.v_CATALOGO;`.
 
 # Actualización (ACT)
 
@@ -364,7 +383,11 @@ Se mandan con `mail.sp_enviar` usando plantillas de `mail.PLANTILLA` y listas de
 | `dat.FOLIO_CONSECUTIVO` | Último folio usado |
 | `dat.PAGO_ARRIBADO` | Pagos ya arribados (para no repetirlos) |
 | `dat.BASE_RECIBIDA` / `_ARCHIVO` | Bases maestras completas (vigente y anterior por segmento) |
-| `cfg.ARCHIVO` | Archivos de entrada: ruta, patrón de nombre, columnas, tabla de paso |
+| `cfg.ARCHIVO`, `cfg.ARCHIVO_COLUMNA` | Archivos de entrada (ruta, patrón de nombre, tabla de paso) y el encabezado de cada campo: el layout que edita el equipo |
+| `cfg.LAYOUT_HISTORIAL` | Quién cambió el layout, cuándo y de qué a qué |
+| `cfg.CATALOGO`, `cfg.CATALOGO_DEF` | Catálogos estáticos de etiquetado (estatus, tramo, cartera, tipo de crédito, enfoque, cosecha) |
+| `cfg.VALIDACION_DATO` | Reglas de datos de la entrada y su tolerancia |
+| `ops.VALIDACION_ENTRADA` | Resultado de la validación de la entrada por corrida, archivo y regla |
 | `cfg.SALIDA_ARCHIVO`, `cfg.SALIDA` | Archivos de salida y sus campos |
 | `cfg.REGLA`, `cfg.HOMOLOGACION` | Validaciones y transformaciones |
 | `cfg.PARAMETRO` | Parámetros del cliente |
@@ -411,6 +434,8 @@ Todos los que cambian datos tienen modo de revisión (`@confirmar = 0` o `@solo_
 | RUTA\_MIS | `\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\` | Copia del DAT para MIS |
 | CARPETA\_ZIP | `C:\` | ZIP de retiros |
 | ASIG\_REQUIERE\_ACT | 1 | La asignación exige la actualización OK del día |
+| VALIDAR\_LAYOUT | 1 | Si falta cualquier campo del layout en un archivo, se detiene y se avisa |
+| VALIDAR\_DATOS | 1 | Revisa los datos con `cfg.VALIDACION_DATO`; si una regla supera su tolerancia, se detiene y se avisa |
 | ALERTA\_NUEVAS | 100 | Umbral del correo de nuevas |
 | NEGATIVO\_MODO | CERO | Importes negativos suben en cero |
 | RETROCESO\_AUTOMATICO | 1 | Revertir sola una corrida que falla |

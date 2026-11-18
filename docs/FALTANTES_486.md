@@ -209,3 +209,14 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [x] La actualización toma sus archivos en `.txt` y la asignación en `.csv`.
 - [x] (15/11) `DELQMST.DMHOSTUP` es fecha sin hora: `val.txt` da un solo renglón (`13/11/26`, 6,855 cuentas activas del 486). Queda `to_char(DMHOSTUP, 'YYYYMMDD')`; también se acepta `DD/MM/AA`.
 - [x] Columnas de PURGA (486.txt): no trae fecha de retiro; sigue sin usarse.
+
+## 14. Validación de la entrada, layout editable y catálogos (17/11)
+
+- [x] Layout editable por el equipo en `cfg.ARCHIVO` y `cfg.ARCHIVO_COLUMNA` (`cfg.sp_layout_cambiar`), con historial; la semilla conserva lo que el equipo cambia. El número de columnas se cuenta en el encabezado.
+- [x] Si falta cualquier campo que toma el proceso, la actualización o la asignación se detiene antes de tocar el DAT y se avisa al equipo (`VALIDACION_ENTRADA_486`); se vuelve a correr a mano.
+- [x] Validación de datos con tolerancia por regla (`cfg.VALIDACION_DATO`): importes, máximos, negativos, enteros, teléfonos, correos, catálogos, cuentas repetidas, columnas vacías y volumen. Calibrada con las bases reales del 11 y 13/11.
+- [x] Etiquetado por catálogos estáticos (`cfg.CATALOGO`, `cfg.sp_catalogo_alta`): estatus y tramo de TDC, estatus, cartera y tipo de crédito de Consumo, estatus y enfoque de Hipotecario, garantía, cosecha.
+- [x] Con el layout real de TDC (11/11): el saldo actualizado viene vacío en VEN2 y VEN3 y antes se rechazaba el renglón; ahora toma el saldo PRIME. El tramo llega como rango (`30-59`) y antes no daba estatus; ahora sale por el catálogo. El enfoque `LIQUIDACIÓN` con acento ya da CAS en 90+.
+- [ ] **Hipotecario:** sigue sin archivo de ejemplo. Como ahora falta cualquier encabezado detiene, el primer archivo de Hipotecario probablemente va a parar la asignación hasta que el equipo ajuste su matriz con `cfg.sp_layout_cambiar` (el correo dice qué falta y qué encabezados trae el archivo). Conviene pasar un ejemplo antes.
+- [ ] **Catálogos de TDC:** solo se conocen los estatus CCAS, VEN2, VEN3, VEN4 (y BCOB, BOPE, FALL de reestructura). Si llega otro (por ejemplo VEN1), la asignación se detiene hasta agregarlo con `cfg.sp_catalogo_alta 'ESTATUS_TDC', N'VEN1', N''`.
+- [ ] **Tolerancias:** revisarlas con el equipo después de unas semanas (`SELECT * FROM ops.VALIDACION_ENTRADA ORDER BY ID DESC;`).

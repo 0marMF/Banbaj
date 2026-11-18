@@ -567,6 +567,9 @@ EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486';     -- correo de fin de asignac
 | Cuadre de pagos a mano (lo hace solo el job) | `EXEC ops.sp_bajar_cyber 'PAGOS', @id_corrida = @id, @fecha = '…';` |
 | Lista negra o exclusiones | `EXEC cfg.sp_exclusion_cargar @tipo = 'TELEFONO', @archivo = N'…', @req = '…', @solicita = N'…';` Los teléfonos deben tener 10 dígitos. |
 | Correr el día a mano | `EXEC ops.sp_diario_486 @fecha = '…', @forzar = 1;` o directamente `ops.sp_actualizacion_486` / `ops.sp_asignacion_486`. |
+| El banco le cambió el nombre a una columna (llega `VALIDACION_ENTRADA_486`) | `EXEC cfg.sp_layout_cambiar 'MAESTRA_TDC', 'SALDO2', N'encabezado como viene en el archivo';` Dice en qué columna del último archivo lo encontró. Luego volver a correr el proceso. Estado del layout: `SELECT * FROM cfg.v_LAYOUT;` |
+| Llegó un estatus, tramo, cartera o tipo de crédito nuevo | `EXEC cfg.sp_catalogo_alta 'ESTATUS_CONSUMO', N'VALOR', N'ETIQUETA';` (`@activo = 0` lo quita). Catálogos: `SELECT * FROM cfg.v_CATALOGO;` |
+| Una regla de datos es demasiado estricta | `UPDATE cfg.VALIDACION_DATO SET PCT_MAX = 5 WHERE CODIGO = '…' AND CAMPO = '…' AND TIPO = '…';` (o `ACTIVO = 0`). Qué encontró cada corrida: `SELECT * FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @id;` |
 
 Los procesos que generan archivos los escriben solos al terminar (también el etiquetado y el SCBSDOS fuera de proceso). Si `EXPORTAR_AUTOMATICO = 0`, correr `ops.sp_exportar_salidas` con su corrida.
 
@@ -702,6 +705,8 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 | 50853 | 7-Zip no terminó bien | Revisar `RUTA_7ZIP`, que xp\_cmdshell esté activo y que se pueda escribir en `CARPETA_ZIP` |
 | 50110 | Falta la actualización OK del día, o no hay consecutivo de folios | Correr primero la ACT. Si falta el consecutivo, migrar CONSECUTIVO |
 | 50040 | Una validación canceló la corrida | El mensaje dice cuál. Corregir el archivo y correr el proceso a mano |
+| 50025 (llega `VALIDACION_ENTRADA_486`) | La entrada no pasó la validación: falta un encabezado, un valor no está en el catálogo o una regla de datos superó su tolerancia. La corrida queda CANCELADA y el DAT no cambió | Seguir el correo: `cfg.sp_layout_cambiar`, `cfg.sp_catalogo_alta`, ajustar `cfg.VALIDACION_DATO` o pedir el archivo corregido; luego `EXEC ops.sp_asignacion_486 @fecha = '…';` o `ops.sp_actualizacion_486`. Detalle: *Flujo y diagramas*, 09 |
+| 50041–50045 | `cfg.sp_layout_cambiar` o `cfg.sp_catalogo_alta` con un archivo, campo o catálogo que no existe | Revisar los nombres en `cfg.v_LAYOUT` y `cfg.v_CATALOGO` |
 | 50300–50304 | Retroceso no permitido | Ver *Retroceso manual* |
 | 50900–50906 | A un CSV de migración le faltan columnas | Revisar la exportación de ese DBF |
 | 50910–50914 | El destino de la migración ya tiene datos | Agregar `@reemplazar = 1` si de verdad se quiere sobrescribir |

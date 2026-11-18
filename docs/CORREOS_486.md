@@ -34,6 +34,7 @@ Uno para cualquier retiro: asignación, actualización o retiro por solicitud. S
 |---|---|---|
 | Archivos listos para arribar | `ARCHIVOS_LISTOS_486` | En cuanto se escriben los planos que se suben a CYBER: carpeta, archivos con sus líneas y qué sigue. Otro aviso cuando aparece `SCBACTH_SINTEL.TXT` |
 | Hallazgos | `HALLAZGO_486` | Lo que el proceso no resolvió solo: retiro sobre el tope de 50 %, pagos que no subieron a las 17:00, cualquier paso automático con error. Trae una tabla con el detalle y el comando para resolverlo |
+| Validación de la entrada (17/11) | `VALIDACION_ENTRADA_486` | La actualización o la asignación se detuvo antes de tocar el DAT: falta un encabezado (cambió el layout), un valor no está en el catálogo o una regla de datos superó su tolerancia. Trae los encabezados que faltan, los encabezados nuevos del archivo, las anomalías con ejemplos enmascarados, qué hacer y el comando para volver a correr |
 
 Diagrama de todos los correos: `docs/flujo/07_correos.md`.
 
