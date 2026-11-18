@@ -173,7 +173,9 @@ SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clav
 | CYBER\_ORACLE\_ORIGEN | (vacío) | Lo llena el script 03 |
 | RETROCESO\_AUTOMATICO | 1 | 0 para apagarlo |
 | NEGATIVO\_MODO | CERO | Saldos negativos suben como cero |
-| ARRIBO\_AUTOMATICO | 1 | El job corre las depuraciones de correos y teléfonos al detectar el SCBSDOS y el SCBTEL (0 = a mano) |
+| ARRIBO\_AUTOMATICO | 1 | Al detectar los saldos (SCBSDOS) el job escribe los gescar de nuevas y reasignadas y corre la depuración de teléfonos, el SCBTEL y la de correos; al detectar el SCBTEL, el gescar sin teléfono (0 = a mano) |
+| ARCHIVOS\_DESPUES\_SALDOS | GESCAR\_NVA,GESCAR\_REA | Archivos que no se escriben ni se avisan hasta que suben los saldos |
+| ARCHIVOS\_DESPUES\_DEPURACION\_TEL | SCBTEL | Archivos que no se escriben ni se avisan hasta que la depuración de teléfonos queda OK |
 | CYBER\_HOSTUP\_EXPR | to\_char(DMHOSTUP, 'YYYYMMDD') | Validación de saldos del equipo: fecha de `DMHOSTUP` con la que se cuentan las cuentas activas del 486. Si `DMHOSTUP` no es DATE, ajustarla; vacío = se detecta por lo pendiente |
 | ARRIBO\_SDOS\_MIN\_PCT | 100 | % de las cuentas del SCBSDOS que deben tener `DMHOSTUP` del día (100 = que el número coincida) |
 | ARRIBO\_MIN\_PCT | 95 | Porcentaje de lo pendiente al terminar la asignación que ya debe estar en CYBER para dar por subido el SCBSDOS o el SCBTEL |
@@ -396,8 +398,10 @@ Cada 30 minutos el job llama `ops.sp_diario_486`. Esto es lo que hace:
    - Si hay validaciones, manda sus avisos: saldo ≤0 en Consumo, pagos negativos (al equipo de asignaciones) o números cortados por Excel en la base maestra.
    - Con más de 100 cuentas nuevas avisa con ALERTA\_NUEVAS\_486.
 4. Si la ACT y la ASIG del día ya están hechas, contesta "DIA COMPLETO" y no repite nada. En ese momento revisa el **arribo automático a CYBER** (`ops.sp_arribo_automatico`, `ARRIBO_AUTOMATICO = 1`):
-   - **Correos:** en cuanto detecta que el operador ya subió el SCBSDOS (lo que le faltaba a `DELQMST` al terminar la asignación ya llegó), inserta los correos nuevos en `ADDRESS`, enciende la bandera 416, carga la remesa, ejecuta `JSP_CORREOS_486` y apaga la bandera.
-   - **Teléfonos:** en cuanto detecta que ya subió el SCBTEL (los teléfonos que le faltaban a `PHONE_G1` ya llegaron), carga la remesa, crea el renglón del validador, ejecuta `JSP_TELEFONOS_REMESA_486` y escribe `SCBACTH_SINTEL.TXT` en la carpeta de la corrida.
+   - **Saldos:** en cuanto detecta que el operador ya subió el SCBSDOS (cuentas con `DMHOSTUP` del día = cuentas del SCBSDOS), escribe y avisa los gescar de nuevas y reasignadas.
+   - **Teléfonos:** enseguida carga la remesa y, si tiene los mismos renglones que nuestro archivo de teléfonos, crea el renglón del validador y ejecuta `JSP_TELEFONOS_REMESA_486`. Luego escribe y avisa el SCBTEL. Si no cuadra (50776), no se ejecuta nada en CYBER, no sale el SCBTEL y llega un hallazgo.
+   - **Correos:** con los teléfonos OK, inserta los correos nuevos en `ADDRESS`, enciende la bandera 416, carga la remesa, ejecuta `JSP_CORREOS_486` y apaga la bandera.
+   - **Gescar sin teléfono:** en cuanto detecta que ya subió el SCBTEL (los teléfonos que le faltaban a `PHONE_G1` ya llegaron), escribe y avisa `SCBACTH_SINTEL.TXT`.
    - Cada uno corre una sola vez por corrida. Si falla queda `ERROR` en la bitácora y no se reintenta solo.
 
 Las devoluciones que detectan la asignación y la actualización **se aplican solas** salvo que en algún segmento superen el 50 % de sus cuentas en el DAT. Después se escriben los archivos y sale el ZIP con el correo de devolución. El retiro en CYBER también es automático (`RETIRO_CYBER_AUTOMATICO`); solo el archivo `MX_G1MCT_DVBJIG_*` se copia a mano a `\\192.168.50.1\Cyber_00\dev\`, porque el servidor no tiene acceso a esa carpeta. Si superan el tope, o algún paso automático falla, llega el **correo de hallazgos** (`HALLAZGO_486`) solo al equipo de asignaciones con el detalle y qué hacer.
@@ -504,9 +508,10 @@ El operador **solo sube los planos de ancho fijo** con el cargador de CYBER; el 
 
 **Asignación:**
 
-1. Subir `SCBSDOS.TXT` y `SCBTEL.TXT`, y después los gescar (`SCBACTH_486NU.TXT`, `SCBACTH_486REA.TXT`).
-2. En la siguiente vuelta del job (máximo 30 minutos) se corren solas las depuraciones de correos y teléfonos, el blanqueo (días 1 a 10) y la confirmación. Aparece `SCBACTH_SINTEL.TXT` en la carpeta (llega otro aviso).
-3. Subir `SCBACTH_SINTEL.TXT`.
+1. Subir `SCBSDOS.TXT` (el primer aviso solo trae el SCBSDOS y el SCBPAG).
+2. En la siguiente vuelta del job (máximo 30 minutos) aparecen los gescar de nuevas y reasignadas y, si la depuración de teléfonos quedó bien, el `SCBTEL.TXT` (llega un aviso por cada uno). Subirlos. **No subir el SCBTEL antes de su aviso.**
+3. Con el SCBTEL arriba, el job escribe `SCBACTH_SINTEL.TXT` (otro aviso), hace el blanqueo (días 1 a 10) y manda la confirmación.
+4. Subir `SCBACTH_SINTEL.TXT`.
 
 **Actualización:** subir `SCBPAG.TXT`. Los scripts `ACT_*` ya se ejecutaron solos en CYBER y el cuadre de pagos avisa si algo no subió.
 
@@ -714,7 +719,8 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 | 50763–50765 | Arribo pedido sobre una corrida que no es ASIG, con un tipo que no es CORREOS/TELEFONOS o dentro de una transacción abierta | Pasar el número de la asignación y correrlo fuera de `BEGIN TRAN` |
 | 50766–50767 | La remesa salió vacía | No se ejecuta para no inactivar todos los teléfonos o correos del 486. Revisar la asignación |
 | `ARRIBO CORREOS` / `ARRIBO TELEFONOS` en ERROR (llega el correo de hallazgos) | Oracle rechazó un bloque (permisos, columnas, tabla bloqueada) | El mensaje trae el error de Oracle. Corregir y correr `EXEC ops.sp_arribar_cyber <id>, '<CORREOS\|TELEFONOS>';` |
-| El arribo se queda en `ESPERANDO ARRIBO` | No se han subido los saldos (las cuentas con `DMHOSTUP` del día no coinciden con el SCBSDOS) o el SCBTEL | `EXEC ops.sp_arribo_automatico;` muestra `SALDOS_DEL_DIA_EN_CYBER` (x de y) y los teléfonos pendientes. Si faltan pocas cuentas por un rechazo del cargador, bajar `ARRIBO_SDOS_MIN_PCT` o dar todo por subido con `EXEC ops.sp_marcar_arribo <id>, 'FIN';` |
+| El arribo se queda en `ESPERANDO SALDOS` o `ESPERANDO SCBTEL` | No se han subido los saldos (las cuentas con `DMHOSTUP` del día no coinciden con el SCBSDOS) o el SCBTEL | `EXEC ops.sp_arribo_automatico;` muestra `SALDOS_DEL_DIA_EN_CYBER` (x de y) y los teléfonos pendientes. Si faltan pocas cuentas por un rechazo del cargador, bajar `ARRIBO_SDOS_MIN_PCT` o dar todo por subido con `EXEC ops.sp_marcar_arribo <id>, 'FIN';` |
+| El arribo dice `DEPURACION DE TELEFONOS CON ERROR` y no salió el SCBTEL | La remesa de CYBER no tiene los mismos renglones que nuestro archivo (50776) o Oracle dio error | Ver el mensaje en la bitácora (`ARRIBO TELEFONOS`), corregir y `EXEC ops.sp_arribar_cyber <id>, 'TELEFONOS';`. Al quedar OK sale el SCBTEL |
 | Correo de hallazgos: retiro detenido por el tope | La devolución de un segmento supera el 50 % de sus cuentas | Revisar la base maestra o el archivo de saldos. Si es correcto: `EXEC ops.sp_retiro <id>; EXEC ops.sp_retiro_cerrar <id>;` |
 | Correo de hallazgos: actualización en CYBER con error | Oracle rechazó un script `ACT_*` | Corregir y `EXEC ops.sp_act_cyber <id>;` |
 | Correo de hallazgos: pagos que no subieron a CYBER | A la hora límite hay pagos del SCBPAG que no están en `PMTFIL` | Revisar si se subió el SCBPAG o si CYBER lo rechazó; la lista completa está en `ops.RECHAZO` (`CUADRE_PAGOS`) |

@@ -92,16 +92,18 @@ Cada proceso es una **corrida** (`ops.CORRIDA`) con número, tipo (ACT, ASIG, RE
 | Aplicar las devoluciones, con tope de 50 % por segmento | **Job** | `ops.sp_retiro_decidir` (`RETIRO_AUTOMATICO`) |
 | Archivos de retiro, ZIP, correo de devolución y RETIRO en CYBER | **Job** | `ops.sp_retiro_cerrar` (`RETIRO_CYBER_AUTOMATICO`) |
 | Scripts de la actualización en CYBER (`ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN`, `ACT_PVS_REE`) | **Job** | `ops.sp_act_cyber` (`ACT_CYBER_AUTOMATICO`) |
-| Subir a CYBER los planos de ancho fijo (SCBSDOS, SCBTEL, SCBPAG, gescar) | Asignaciones | Cargador de CYBER |
-| Depuración de correos (`JSP_CORREOS_486`) en cuanto subió el SCBSDOS | **Job** | `ops.sp_arribo_automatico` (`ARRIBO_AUTOMATICO`) |
-| Depuración de teléfonos (`JSP_TELEFONOS_REMESA_486`) y `SCBACTH_SINTEL.TXT` en cuanto subió el SCBTEL | **Job** | `ops.sp_arribo_automatico` |
+| Subir a CYBER los planos de ancho fijo (SCBSDOS, SCBTEL, SCBPAG, gescar), cada uno cuando llega su aviso | Asignaciones | Cargador de CYBER |
+| Gescar de nuevas y reasignadas en cuanto subieron los saldos (SCBSDOS) | **Job** | `ops.sp_arribo_automatico` (`ARRIBO_AUTOMATICO`) |
+| Depuración de teléfonos (`JSP_TELEFONOS_REMESA_486`, si la remesa tiene los mismos renglones que nuestro archivo) y SCBTEL en cuanto subieron los saldos | **Job** | `ops.sp_arribo_automatico` |
+| Depuración de correos (`JSP_CORREOS_486`) después de la de teléfonos | **Job** | `ops.sp_arribo_automatico` |
+| `SCBACTH_SINTEL.TXT` (gescar sin teléfono) en cuanto subió el SCBTEL | **Job** | `ops.sp_arribo_gescar_sintel` |
 | Blanqueo de status (días 1 a 10) | **Job** | `ops.sp_blanqueo_automatico` (`BLANQUEO_AUTOMATICO`) |
 | Fin del arribo y correo CONFIRMACION\_ASIG\_486 | **Job** | `ops.sp_confirmar_asignacion` (`CONFIRMACION_AUTOMATICA`) |
 | Cuadre de pagos contra CYBER (avisa si a las 17:00 falta alguno) | **Job** | `ops.sp_cuadre_automatico` (`CUADRE_AUTOMATICO`) |
 | Copiar `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` | Asignaciones | A mano: el servidor no tiene acceso a esa carpeta (`RUTA_DEVOLUCION_CYBER` vacío). El correo de archivos listos lo recuerda |
 | Atender el correo de hallazgos | Asignaciones | Trae qué pasó y el comando para resolverlo |
 
-En un día normal: llega ARCHIVOS\_LISTOS\_486 → asignaciones sube los planos → el job detecta que ya están, corre las depuraciones, deja `SCBACTH_SINTEL.TXT` (llega otro aviso) y manda la confirmación → asignaciones sube el `SCBACTH_SINTEL.TXT`.
+En un día normal (orden del 17/11): llega ARCHIVOS\_LISTOS\_486 con el SCBSDOS → asignaciones lo sube → el job detecta los saldos y escribe los gescar de nuevas y reasignadas (aviso), corre la depuración de teléfonos y, si la remesa cuadra, escribe el SCBTEL (aviso) y corre la de correos → asignaciones sube los gescar y el SCBTEL → el job detecta el SCBTEL, escribe `SCBACTH_SINTEL.TXT` (aviso) y manda la confirmación → asignaciones sube el `SCBACTH_SINTEL.TXT`. El SCBTEL va después de la depuración porque `JSP_TELEFONOS_REMESA_486` inactiva lo que no está en la remesa y el SCBTEL activa nuestros teléfonos.
 
 Todo paso automático corre una vez por corrida, deja su paso en la bitácora y, si falla, avisa con el correo de hallazgos; no se reintenta solo. Cada uno se puede correr a mano con el número de corrida (`ops.sp_arribar_cyber`, `ops.sp_act_cyber`, `ops.sp_retiro_cerrar`, `ops.sp_blanqueo_automatico`) y cada uno se apaga con su parámetro. Para volver a dejar solo la generación de archivos:
 
@@ -119,8 +121,8 @@ En cada vuelta con el día completo, `ops.sp_arribo_automatico` revisa:
 
 | Detecta | Cómo | Hace |
 |---|---|---|
-| El SCBSDOS ya subió | **Validación de saldos del equipo:** las cuentas activas del 486 con `DMHOSTUP` del día son tantas como las del SCBSDOS (`ARRIBO_SDOS_MIN_PCT` = 100: que coincidan) | **Correos:** baja los correos de CYBER, inserta los nuevos en `ADDRESS`, bandera 416, remesa `JSP_TAB_MAIL_REMESA_486`, `JSP_CORREOS_486` y apaga la bandera |
-| El SCBTEL ya subió | Ya llegó al menos el 95 % de los teléfonos que le faltaban a `PHONE_G1`, y las cuentas pendientes ya están activas | **Teléfonos:** remesa `JSP_TAB_TEL_REMESA_486`, renglón del validador, `JSP_TELEFONOS_REMESA_486`, y escribe `SCBACTH_SINTEL.TXT` |
+| El SCBSDOS ya subió | **Validación de saldos del equipo:** las cuentas activas del 486 con `DMHOSTUP` del día son tantas como las del SCBSDOS (`ARRIBO_SDOS_MIN_PCT` = 100: que coincidan) | 1. Escribe y avisa los gescar de nuevas y reasignadas (`ARCHIVOS_DESPUES_SALDOS`). 2. **Teléfonos:** remesa `JSP_TAB_TEL_REMESA_486`, compara sus renglones contra `ops.TELEFONO` (error 50776 si no cuadra), renglón del validador y `JSP_TELEFONOS_REMESA_486`; escribe y avisa el SCBTEL (`ARCHIVOS_DESPUES_DEPURACION_TEL`). 3. **Correos** (con teléfonos OK): correos nuevos en `ADDRESS`, bandera 416, remesa `JSP_TAB_MAIL_REMESA_486`, `JSP_CORREOS_486` y apaga la bandera |
+| El SCBTEL ya subió | Ya llegó al menos el 95 % de los teléfonos que le faltaban a `PHONE_G1` (solo cuenta después de la depuración de teléfonos) | **Gescar sin teléfono:** baja los teléfonos activos y escribe `SCBACTH_SINTEL.TXT` con su aviso |
 
 Lo pendiente sale de una foto que se toma al terminar la asignación, antes de que existan los TXT (`ops.sp_arribo_base`, tabla `ops.ARRIBO_PENDIENTE`); por eso funciona aunque no haya cuentas nuevas. Si la remesa saliera vacía no se ejecuta el procedimiento de CYBER, para no inactivar todo el 486. Detalle en el diagrama 05.
 
@@ -250,7 +252,7 @@ Reglas de `telbnx.prg` con los ajustes del 01/11, que siguen el procedimiento `G
    - **Fijo:** área 01 + lada; 8 o 7 dígitos; tipo 1 (TEL1), 2 (TEL2) o 4 (resto).
    - **No está en el plan:** se descarta (`TEL_EXIGIR_PNM = 1`).
 
-Salen en SCBTEL (ancho fijo) y en sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL). En CYBER, `RCVRY.JSP_TELEFONOS_REMESA_486` inserta los teléfonos nuevos (los que dejó el arribo del SCBTEL en `PHONE_G1`), inactiva los activos que no vienen en la remesa y activa los de la remesa que estaban inactivos. Respeta los gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`): esos no se tocan. Por eso el SCBTEL se arriba antes de la remesa: el job espera a ver los teléfonos en `PHONE_G1` antes de cargarla. El script `TEL_BORRA` también inserta el renglón del día en `RCVRY.JSP_VALIDADOR_TELEFONOS` con el total enviado, y el procedimiento lo completa (diferencia contra lo cargado, activados, inactivados y nuevos).
+Salen en SCBTEL (ancho fijo) y en sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL). En CYBER, `RCVRY.JSP_TELEFONOS_REMESA_486` inserta los teléfonos nuevos (los que dejó el arribo del SCBTEL en `PHONE_G1`), inactiva los activos que no vienen en la remesa y activa los de la remesa que estaban inactivos. Respeta los gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`): esos no se tocan. Desde el 17/11 el orden es el del equipo: primero la depuración (la remesa debe tener los mismos renglones que nuestro archivo de teléfonos) y después se sube el SCBTEL, que activa nuestros teléfonos. Ver el diagrama 05. El script `TEL_BORRA` también inserta el renglón del día en `RCVRY.JSP_VALIDADOR_TELEFONOS` con el total enviado, y el procedimiento lo completa (diferencia contra lo cargado, activados, inactivados y nuevos).
 
 # Exclusiones
 

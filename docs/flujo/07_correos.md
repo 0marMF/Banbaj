@@ -7,11 +7,11 @@ Fuente: [`mmd/07_correos.mmd`](mmd/07_correos.mmd) · Código: `mail.sp_enviar` 
 | Plantilla | Lista | Cuándo | Quién lo manda |
 |---|---|---|---|
 | `INICIO_ASIG_486` | `OPERACION_ASIG_486` | Al arrancar la asignación | `ops.sp_asignacion_486` |
-| `CONFIRMACION_ASIG_486` | `OPERACION_ASIG_486` | Al terminar OK la depuración de correos y teléfonos | `ops.sp_confirmar_asignacion` |
+| `CONFIRMACION_ASIG_486` | `OPERACION_ASIG_486` | Al terminar OK la depuración de teléfonos, la de correos y el gescar sin teléfono | `ops.sp_confirmar_asignacion` |
 | `ALERTA_NUEVAS_486` | `AEM_486` | Más de `ALERTA_NUEVAS` cuentas nuevas | asignación |
 | `ALERTA_SDO_ACT_CONS_486` | `OPERACION_ASIG_486` | Consumo con saldo actual ≤ 0 | validaciones |
 | `DEVOLUCION_486` / `_AEM` | `DEVOLUCION_OPERACION_486` / AEM en copia oculta | Al cerrar un retiro (con ZIP para Operación, sin ZIP para AEM) | `ops.sp_retiro_cerrar` → `ops.sp_exportar_salidas` |
-| `ARCHIVOS_LISTOS_486` | `ASIGNACIONES_486` | En cuanto se escriben los planos que se suben a CYBER (`ARCHIVOS_ARRIBO`) | `ops.sp_aviso_archivos` |
+| `ARCHIVOS_LISTOS_486` | `ASIGNACIONES_486` | En cuanto se escriben los planos que se suben a CYBER (`ARCHIVOS_ARRIBO`): primero el SCBSDOS, luego los gescar de nuevas y reasignadas, el SCBTEL y el gescar sin teléfono, cada uno con lo que sigue | `ops.sp_aviso_archivos` |
 | `HALLAZGO_486` | `ASIGNACIONES_486` | Lo que el proceso no resolvió solo: retiro sobre el tope, pagos que no subieron, cualquier paso automático con error | `mail.sp_hallazgo` |
 | `PAGOS_NEGATIVOS_486` | `ASIGNACIONES_486` | Llegan pagos negativos | actualización |
 | `MAESTRA_NUMEROS_EXCEL_486` | `ASIGNACIONES_486` | Base maestra con números cortados por Excel (se detiene) | asignación |
