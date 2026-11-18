@@ -124,23 +124,7 @@ Quita a `sa` y a `acfvm` de la lista de `sql/instalacion/04_accesos_remotos.sql`
 
 ## 6. Migración
 
-1. Copia el `cyber/486/EXPORTAR_MIGRACION.prg` nuevo a la PC de FoxPro y córrelo (`DO EXPORTAR_MIGRACION.prg`). En la ventana final ya no debe aparecer PURGA, y en BLACKLIST ya no debe decir que faltan TELEFONO ni FECHA. Usa la versión de esta tarde: además de las comillas dobles, ahora quita los caracteres de control (nulos, tabuladores, saltos de línea) de los campos `C` y `V`. Con la anterior, `HISTORIA.csv` seguía fallando en el renglón 151946, columna 29 (`DIRECC2`). **Vuelve a exportar todo**: los CSV anteriores no sirven.
-
-   Si `HISTORIA.csv` vuelve a fallar, corre esto en PowerShell en el servidor. Muestra los renglones alrededor del error **enmascarados**: cada letra sale como `x`, cada dígito como `9` y cada carácter de control como `<NN>`, así que no aparece ningún dato del banco. Mándame lo que salga.
-
-   ```powershell
-   $err = 151946                                   # el renglón que dice el error
-   $n = 0
-   foreach ($l in [IO.File]::ReadLines('C:\MIGRA486\HISTORIA.csv', [Text.Encoding]::GetEncoding(1252))) {
-       $n++
-       if ($n -ge $err - 2) {
-           $m = $l -replace '\p{L}', 'x' -replace '\d', '9'
-           $m = [regex]::Replace($m, '[\x00-\x1F\x7F-\x9F]', { param($c) '<{0:X2}>' -f [int][char]$c.Value })
-           '{0}  comillas={1}  {2}' -f $n, ($l.Split('"').Count - 1), $m
-       }
-       if ($n -ge $err + 2) { break }
-   }
-   ```
+1. Corre `sql/80_sp_migracion.sql` (versión del 17/11 en la noche). Copia el `cyber/486/EXPORTAR_MIGRACION.prg` nuevo a la PC de FoxPro y córrelo (`DO EXPORTAR_MIGRACION.prg`). En la ventana final ya no debe aparecer PURGA, y en BLACKLIST ya no debe decir que faltan TELEFONO ni FECHA. Esta versión cambia por apóstrofo las comillas dobles y también las tipográficas (‘ ’ “ ” ´ `), y por espacio los caracteres de control y los bytes que no existen en Windows-1252. **Vuelve a exportar todo**: los CSV anteriores no sirven.
 2. Copia los CSV a `C:\MIGRA486\` del servidor y revisa sin escribir:
 
 ```sql
@@ -154,6 +138,25 @@ EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\';
 USE [BNABAJ_486];
 EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;
 ```
+
+   **Si un CSV no se puede leer** (antes: `Bulk load failed due to invalid column value… row 151946, column 29`), ahora sale el error 50905 con lo que ve el servidor, sin datos del banco:
+
+   ```
+   C:\MIGRA486\HISTORIA.csv: SQL Server no pudo leer el CSV (…). El servidor ve 1804214 renglones, modificado el 2026-11-17 20:40, … bytes.
+   Casi todos traen 62 comillas; con otro número: 1 (renglones 151946: comillas dentro de un campo). Caracteres raros: U+2019 en 3 renglones (primero el 151946).
+   ```
+
+   - **Revisa la fecha de modificación.** SQL Server lee `C:\MIGRA486\` **del servidor**, no el de la PC de FoxPro. Si la fecha es anterior a la última exportación, copia otra vez los CSV.
+   - **Comillas con otro número:** el CSV salió con un programa anterior; vuelve a exportar.
+   - **Caracteres raros:** mándame los códigos `U+…` y lo agrego a la limpieza del programa.
+   - Para ver un renglón y sus vecinos enmascarados (letra = `x`, dígito = `9`, raros = `<U+…>`), con cuántas comillas y campos tiene cada uno:
+
+   ```sql
+   USE [BNABAJ_486];
+   EXEC ops.sp_mig_diagnostico N'C:\MIGRA486\HISTORIA.csv', 151946;
+   ```
+
+   El renglón 1 es el encabezado, igual que en el Bloc de notas. El diagnóstico lee el archivo dos veces; con HISTORIA tarda un par de minutos.
 
 4. Borra `C:\MIGRA486\` en los dos equipos.
 
