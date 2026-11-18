@@ -1,0 +1,16 @@
+flowchart TD
+    F(["Archivo del día en Q:<br/>cfg.ARCHIVO (nombre y carpeta)"]) --> H["ops.sp_cargar_archivo<br/>cuenta las columnas en el encabezado<br/>(ya no depende de NUM_COLUMNAS)"]
+    H --> L{"Layout: ¿están todos los campos<br/>de cfg.ARCHIVO_COLUMNA?<br/>VALIDAR_LAYOUT = 1"}
+    L -- "falta alguno" --> LX["ops.VALIDACION_ENTRADA tipo LAYOUT<br/>el archivo no se carga"]
+    L -- "todos" --> D
+    LX --> D["Datos: ops.sp_validar_datos_archivo<br/>reglas de cfg.VALIDACION_DATO<br/>importe · máximo · negativos · entero · teléfono · correo<br/>catálogo · cuenta repetida · vacío · volumen<br/>VALIDAR_DATOS = 1"]
+    D --> T{"¿Alguna regla supera<br/>su tolerancia PCT_MAX?"}
+    T -- no --> C["Carga a stg.* y sigue<br/>con el siguiente archivo"]
+    T -- sí --> DX["ops.VALIDACION_ENTRADA DETIENE = 1"]
+    DX --> C
+    C --> P{"ops.sp_cargar_proceso<br/>¿algún archivo con DETIENE?"}
+    P -- no --> S(["Homologación con catálogos<br/>cfg.CATALOGO → ops.sp_homologar"])
+    P -- sí --> M["VALIDACION_ENTRADA_486 al equipo de asignaciones<br/>qué falta, encabezados nuevos, anomalías<br/>con ejemplos enmascarados y qué hacer"]
+    M --> X["THROW 50025 → corrida CANCELADA<br/>retroceso automático: el DAT no cambia<br/>el job no la repite sola"]
+    X --> E["El equipo corrige<br/>cfg.sp_layout_cambiar · cfg.sp_catalogo_alta<br/>cfg.VALIDACION_DATO · o pide el archivo corregido"]
+    E --> R(["Vuelve a correr a mano<br/>EXEC ops.sp_asignacion_486 / ops.sp_actualizacion_486 @fecha"])

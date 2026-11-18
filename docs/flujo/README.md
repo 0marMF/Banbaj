@@ -22,6 +22,7 @@ Cada diagrama tiene tres partes:
 | 06 | [Retiro](06_retiro.md) | Tope de 50 %, aplicación y cierre del retiro |
 | 07 | [Correos](07_correos.md) | Qué correo sale, cuándo y a quién |
 | 08 | [Migración](08_migracion.md) | De los DBF de FoxPro a las tablas de Banbaj |
+| 09 | [Validación de la entrada](09_validacion_entrada.md) | Layout y datos de cada archivo antes de tocar el DAT; layout y etiquetas editables por el equipo |
 
 # Cómo modificar un flujo con Claude Code
 
@@ -54,4 +55,5 @@ SELECT ID, PASO, ESTATUS, REGISTROS, MENSAJE FROM ops.BITACORA WHERE ID_CORRIDA 
 | ARRIBO BASE, ARRIBO CORREOS, ARRIBO TELEFONOS, CORREOS NUEVOS, CYBER BAJADA, CYBER EJECUTA, BLANQUEO AUTOMATICO, BLANQUEO STATUS, CONFIRMACION AUTOMATICA, ARRIBO FIN | 05 Arribo a CYBER |
 | RETIRO AUTOMATICO, RETIRO, RETIRO ARCHIVOS, RETIRO CYBER, RETIRO DEVOL CYBER, RETIRO CERRAR | 06 Retiro |
 | EXPORTAR ARCHIVOS, EXPORTAR AUTOMATICO, AVISO ARCHIVOS, CORREO, HALLAZGO | 07 Correos |
+| CARGA *archivo*, VALIDACION DATOS *archivo*, VALIDACION ENTRADA | 09 Validación de la entrada |
 | RETROCESO, RETROCESO AUTOMATICO | Cualquier corrida que falla |

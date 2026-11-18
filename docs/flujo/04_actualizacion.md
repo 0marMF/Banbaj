@@ -8,7 +8,7 @@ Fuente: [`mmd/04_actualizacion.mmd`](mmd/04_actualizacion.mmd) · Código: `ops.
 
 | Paso | Procedimiento | Qué hace |
 |---|---|---|
-| Respaldo y carga | `ops.sp_respaldo`, `ops.sp_cargar_proceso`, `ops.sp_homologar_entradas` | Saldos y pagos del banco |
+| Respaldo, carga y validación | `ops.sp_respaldo`, `ops.sp_cargar_proceso`, `ops.sp_homologar_entradas` | Saldos y pagos del banco; layout y datos se revisan antes de tocar el DAT ([09](09_validacion_entrada.md)) |
 | Validar | `ops.sp_validar 'POST_CARGA'` | Pagos negativos: se excluyen y sale `PAGOS_NEGATIVOS_486`; pagos a T-1 quedan en la bitácora |
 | Preparar | `ops.sp_act_preparar` | Junta saldos con el DAT |
 | Reglas de retiro | `ops.sp_validar 'RETIRO'` y `ops.sp_retiro_decidir` | Cuentas a devolver → `ops.DEVOLUCION`; tope de 50 % por segmento |

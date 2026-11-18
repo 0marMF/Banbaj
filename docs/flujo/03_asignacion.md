@@ -9,8 +9,8 @@ Fuente: [`mmd/03_asignacion.mmd`](mmd/03_asignacion.mmd) · Código: `ops.sp_asi
 | Paso | Procedimiento (archivo) | Qué hace |
 |---|---|---|
 | Respaldo | `ops.sp_respaldo` (35) | Copia el DAT antes de tocarlo |
-| Carga | `ops.sp_cargar_proceso` (20) | Lee las bases maestras de Q: (`cfg.ARCHIVO`, proceso ASIG) |
-| Homologar y validar | `ops.sp_homologar_entradas` (60), `ops.sp_validar 'POST_CARGA'` (20) | Formatos, números cortados por Excel (`MAESTRA_NUMEROS_EXCEL_486`), saldos ≤ 0 en Consumo |
+| Carga y validación de la entrada | `ops.sp_cargar_proceso` (20), `ops.sp_validar_datos_archivo` (22) | Lee las bases maestras de Q: (`cfg.ARCHIVO`, proceso ASIG) y revisa layout y datos; si algo no pasa, detiene antes de tocar el DAT y avisa (`VALIDACION_ENTRADA_486`). Ver [09](09_validacion_entrada.md) |
+| Homologar y validar | `ops.sp_homologar_entradas` (60), `ops.sp_validar 'POST_CARGA'` (20) | Etiquetas desde los catálogos estáticos (`cfg.CATALOGO`: estatus, tramo, tipo de crédito, cartera, enfoque…), números cortados por Excel (`MAESTRA_NUMEROS_EXCEL_486`), saldos ≤ 0 en Consumo |
 | Unir layout | `ops.sp_asig_unir_layout`, `ops.sp_homologar 'stg.LAYOUT_486'` (30, 20) | Junta los segmentos en `stg.LAYOUT_486` |
 | Devoluciones | `ops.sp_asig_devolucion` (30) | Cuentas del DAT que no vienen en la base maestra → `ops.DEVOLUCION`. `TOPE_DEVOLUCION_PCT` cancela la asignación si son demasiadas |
 | Decidir retiro | `ops.sp_retiro_decidir` (77) | Tope de 50 % por segmento (diagrama 06) |

@@ -83,7 +83,9 @@ BEGIN
         OPEN val; FETCH NEXT FROM val INTO @k, @v;
         WHILE @@FETCH_STATUS = 0
         BEGIN
-            SET @asunto = REPLACE(@asunto, N'{{' + @k + N'}}', ISNULL(@v, N''));
+            /* El asunto es NVARCHAR(255): sin CAST a MAX, un valor de más de 4000 caracteres (las tablas HTML_*) da error 8152 */
+            IF @k NOT LIKE N'HTML[_]%'
+                SET @asunto = LEFT(REPLACE(CAST(@asunto AS NVARCHAR(MAX)), N'{{' + @k + N'}}', ISNULL(@v, N'')), 255);
             SET @cuerpo = REPLACE(@cuerpo, N'{{' + @k + N'}}',
                           CASE WHEN @k LIKE N'HTML[_]%' THEN ISNULL(@v, N'')       -- HTML_*: ya viene armado y escapado (mail.sp_hallazgo)
                                ELSE REPLACE(REPLACE(REPLACE(ISNULL(@v, N''), N'&', N'&amp;'), N'<', N'&lt;'), N'>', N'&gt;') END);

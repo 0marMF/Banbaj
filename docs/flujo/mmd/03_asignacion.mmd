@@ -4,7 +4,7 @@ flowchart LR
     S0 -- sí --> S1["ops.sp_corrida_iniciar<br/>correo INICIO_ASIG_486"]
     subgraph F1["1 · Carga y validación"]
         direction TB
-        A1["ops.sp_respaldo<br/>copia del DAT"] --> A2["ops.sp_cargar_proceso<br/>BULK INSERT de Q:"]
+        A1["ops.sp_respaldo<br/>copia del DAT"] --> A2["ops.sp_cargar_proceso<br/>BULK INSERT de Q:<br/>+ validación de layout y datos (09)"]
         A2 --> A3["ops.sp_homologar_entradas<br/>ops.sp_validar POST_CARGA"]
         A3 --> A4["ops.sp_asig_unir_layout<br/>ops.sp_homologar stg.LAYOUT_486"]
     end
