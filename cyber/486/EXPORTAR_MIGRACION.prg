@@ -96,18 +96,22 @@ FOR i = 1 TO ALEN(laF, 1)
                 LOOP
             ENDIF
         ENDIF
-        *!* Copia limpia de los campos de texto (C y V): comillas dobles -> sencillas, y CHR(0) a CHR(31)
+        *!* Copia limpia de los campos de texto (C y V): comillas dobles y tipográficas -> sencillas, y CHR(0) a CHR(31)
         *!* (saltos de línea, tabuladores, nulos) -> espacio. Cualquiera de ellos rompe el CSV para SQL Server.
         SELECT &lcCampos FROM fuente INTO CURSOR limpio READWRITE NOFILTER
         lcCtl = ""
         FOR j = 0 TO 31
             lcCtl = lcCtl + CHR(j)
         ENDFOR
+        *!* DEL y los bytes que no existen en Windows-1252 (17/11): también a espacio
+        lcCtl = lcCtl + CHR(127) + CHR(129) + CHR(141) + CHR(143) + CHR(144) + CHR(157)
+        *!* Comillas dobles y tipográficas (‘ ’ “ ” ´ `) -> comilla sencilla
+        lcCom = CHR(34) + CHR(145) + CHR(146) + CHR(147) + CHR(148) + CHR(180) + CHR(96)
         lcRepl = ""
         FOR j = 1 TO AFIELDS(laCampo, "limpio")
             IF INLIST(laCampo[j, 2], "C", "V")
                 lcRepl = lcRepl + IIF(EMPTY(lcRepl), "", ", ") + laCampo[j, 1] ;
-                       + " WITH CHRTRAN(CHRTRAN(" + laCampo[j, 1] + ", CHR(34), CHR(39)), lcCtl, SPACE(32))"
+                       + " WITH CHRTRAN(CHRTRAN(" + laCampo[j, 1] + ", lcCom, REPLICATE(CHR(39), LEN(lcCom))), lcCtl, SPACE(LEN(lcCtl)))"
             ENDIF
         ENDFOR
         SELECT limpio
