@@ -13,6 +13,7 @@ Tiempo aproximado: 20 minutos, sin contar la migración.
 | Archivos de la actualización solo en `.txt`; bases maestras solo en `.csv` | semilla (`cfg.ARCHIVO`) |
 | `cfg.sp_cyber_conectar` vuelve a crear el servidor vinculado y avisa si el origen de Oracle trae solo la IP | `74_sp_cyber.sql` |
 | Histórico migrado sin fechas; PURGA sin usarse | `01_esquemas_tablas.sql`, `80_sp_migracion.sql` |
+| Migración (17/11 en la noche): si un CSV no se puede leer, el error 50905 dice qué ve el servidor y `ops.sp_mig_diagnostico` muestra el renglón enmascarado; fechas `AAAA/MM/DD`; el `.prg` limpia también las comillas tipográficas | `80_sp_migracion.sql`, `EXPORTAR_MIGRACION.prg` |
 | Exportación de FoxPro sin comillas dobles ni caracteres de control (nulos, tabuladores, saltos de línea) en los campos de texto `C` y `V`: el error de `HISTORIA.csv`, renglón 151946, columna 29 (`DIRECC2`) | `cyber/486/EXPORTAR_MIGRACION.prg` (versión del 15/11 en la tarde) |
 | Accesos: se saltan `sa`, los sysadmin, el dueño de la base y quien corre el script | `sql/instalacion/04_accesos_remotos.sql` |
 | Layout nuevo de las bases maestras (11/11): TDC con 100 columnas y Consumo con 115; `SALDO2` sin la leyenda `<= 6`. Las columnas que solo cambiaron de lugar no requieren nada | semilla (`cfg.ARCHIVO` y `cfg.ARCHIVO_COLUMNA`) |
@@ -124,43 +125,71 @@ Quita a `sa` y a `acfvm` de la lista de `sql/instalacion/04_accesos_remotos.sql`
 
 ## 6. Migración
 
-1. Corre `sql/80_sp_migracion.sql` (versión del 17/11 en la noche). Copia el `cyber/486/EXPORTAR_MIGRACION.prg` nuevo a la PC de FoxPro y córrelo (`DO EXPORTAR_MIGRACION.prg`). En la ventana final ya no debe aparecer PURGA, y en BLACKLIST ya no debe decir que faltan TELEFONO ni FECHA. Esta versión cambia por apóstrofo las comillas dobles y también las tipográficas (‘ ’ “ ” ´ `), y por espacio los caracteres de control y los bytes que no existen en Windows-1252. **Vuelve a exportar todo**: los CSV anteriores no sirven.
-2. Copia los CSV a `C:\MIGRA486\` del servidor y revisa sin escribir:
+Si ya hiciste los pasos 0 a 5, retoma aquí. Para la migración solo hay que actualizar su procedimiento; no hace falta volver a correr los demás scripts.
+
+**6.1 Actualizar el procedimiento de migración.** Abre `sql/80_sp_migracion.sql` (versión del 17/11 en la noche) y córrelo completo. Solo reemplaza procedimientos y no toca datos. Revisa que haya quedado:
+
+```sql
+USE [BNABAJ_486];
+SELECT name, modify_date FROM sys.procedures
+ WHERE name IN ('sp_migrar_486', 'sp_mig_leer', 'sp_mig_diagnostico');   -- tres renglones, con la fecha de hoy
+```
+
+**6.2 Exportar los DBF.** Copia el `cyber/486/EXPORTAR_MIGRACION.prg` nuevo a la PC de FoxPro y córrelo (`DO EXPORTAR_MIGRACION.prg`).
+
+- En la ventana final ya no debe aparecer PURGA, y en BLACKLIST ya no debe decir que faltan TELEFONO ni FECHA.
+- Esta versión cambia por apóstrofo las comillas dobles y las tipográficas (‘ ’ “ ” ´ `), y por espacio los caracteres de control y los bytes que no existen en Windows-1252.
+- **Vuelve a exportar todo**: los CSV anteriores no sirven.
+
+**6.3 Copiar los CSV al servidor.** Cópialos a `C:\MIGRA486\` **del servidor** y reemplaza los que ya estaban. SQL Server lee esa carpeta del servidor, no la de la PC de FoxPro: si ahí quedó un CSV viejo, sigue fallando aunque el nuevo esté bien.
+
+**6.4 Revisar sin escribir:**
 
 ```sql
 USE [BNABAJ_486];
 EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\';
 ```
 
-3. Si los avisos están bien, carga (si ya habías cargado algo, agrega `@reemplazar = 1`):
+Detalle de cada aviso: *Migración paso a paso Banbaj 486*.
+
+**6.5 Si un CSV no se puede leer.** Antes salía `Bulk load failed due to invalid column value… row 151946, column 29`. Ahora sale el error 50905 con lo que ve el servidor, sin datos del banco:
+
+```
+C:\MIGRA486\HISTORIA.csv: SQL Server no pudo leer el CSV (…). El servidor ve 1804214 renglones, modificado el 2026-11-17 20:40, … bytes.
+Casi todos traen 62 comillas; con otro número: 1 (renglones 151946: comillas dentro de un campo). Caracteres raros: U+2019 en 3 renglones (primero el 151946).
+```
+
+- **Fecha de modificación anterior a la última exportación:** el servidor tiene un CSV viejo; repite el 6.3.
+- **Comillas con otro número:** el CSV salió con un programa anterior; repite el 6.2 y el 6.3.
+- **Caracteres raros:** mándame los códigos `U+…` y los agrego a la limpieza del programa.
+- Para ver un renglón y sus vecinos enmascarados (letra = `x`, dígito = `9`, raros = `<U+…>`), con cuántas comillas y campos tiene cada uno, y mandármelo:
+
+```sql
+USE [BNABAJ_486];
+EXEC ops.sp_mig_diagnostico N'C:\MIGRA486\HISTORIA.csv', 151946;
+```
+
+El renglón 1 es el encabezado, igual que en el Bloc de notas. Con HISTORIA el diagnóstico tarda un par de minutos.
+
+**6.6 Cargar.** Si los avisos están bien (si ya habías cargado algo, agrega `@reemplazar = 1`):
 
 ```sql
 USE [BNABAJ_486];
 EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;
 ```
 
-   **Si un CSV no se puede leer** (antes: `Bulk load failed due to invalid column value… row 151946, column 29`), ahora sale el error 50905 con lo que ve el servidor, sin datos del banco:
+Carga todo en una sola transacción: si algo falla, no queda nada a medias.
 
-   ```
-   C:\MIGRA486\HISTORIA.csv: SQL Server no pudo leer el CSV (…). El servidor ve 1804214 renglones, modificado el 2026-11-17 20:40, … bytes.
-   Casi todos traen 62 comillas; con otro número: 1 (renglones 151946: comillas dentro de un campo). Caracteres raros: U+2019 en 3 renglones (primero el 151946).
-   ```
+**6.7 Revisar lo cargado:**
 
-   - **Revisa la fecha de modificación.** SQL Server lee `C:\MIGRA486\` **del servidor**, no el de la PC de FoxPro. Si la fecha es anterior a la última exportación, copia otra vez los CSV.
-   - **Comillas con otro número:** el CSV salió con un programa anterior; vuelve a exportar.
-   - **Caracteres raros:** mándame los códigos `U+…` y lo agrego a la limpieza del programa.
-   - Para ver un renglón y sus vecinos enmascarados (letra = `x`, dígito = `9`, raros = `<U+…>`), con cuántas comillas y campos tiene cada uno:
+```sql
+USE [BNABAJ_486];
+SELECT COUNT(*) AS CUENTAS, MIN(FE_ASIG) AS PRIMERA, MAX(FE_ASIG) AS ULTIMA,
+       SUM(CASE WHEN FE_ASIG IS NULL THEN 1 ELSE 0 END) AS SIN_FECHA FROM dat.DAT_486;    -- SIN_FECHA debe ser 0 (fechas AAAA/MM/DD)
+SELECT ESTATUS, COUNT(*) FROM dat.HISTORIA_FOLIO WHERE CLIENTE = '486' GROUP BY ESTATUS;   -- A = activas del DAT, B = periodos anteriores
+```
 
-   ```sql
-   USE [BNABAJ_486];
-   EXEC ops.sp_mig_diagnostico N'C:\MIGRA486\HISTORIA.csv', 151946;
-   ```
-
-   El renglón 1 es el encabezado, igual que en el Bloc de notas. El diagnóstico lee el archivo dos veces; con HISTORIA tarda un par de minutos.
-
-4. Borra `C:\MIGRA486\` en los dos equipos.
-
-Detalle de cada aviso: *Migración paso a paso Banbaj 486*.
+**6.8 Borrar** `C:\MIGRA486\` en los dos equipos (trae datos de clientes).
 
 ## 7. El job
 
