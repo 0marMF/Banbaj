@@ -1414,8 +1414,8 @@ SET @rs = CONCAT(@n, '|',
     (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @idt AND TIPO <> 'TELEFONO'), '|',
     (SELECT TOP (1) ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @idt AND PASO = 'TEL NUEVOS' ORDER BY ID DESC));
 SET @n = (SELECT COUNT(*) FROM @pend WHERE TIPO <> 'TELEFONO');
-EXEC pru.sp_igual N'TEL NUEVOS: se marcan, el SCBTEL lleva solo esos y el arribo espera solo esos (cuentas y domicilios igual)',
-     CONCAT('2|', @total - 2, '|2|2|', @n, '|OK'), @rs;
+DECLARE @esp NVARCHAR(400) = CONCAT('2|', @total - 2, '|2|2|', @n, '|OK');
+EXEC pru.sp_igual N'TEL NUEVOS: se marcan, el SCBTEL lleva solo esos y el arribo espera solo esos (cuentas y domicilios igual)', @esp, @rs;
 
 /* Sin nuevos: SCBTEL vacío y nada que esperar para el gescar sin teléfono */
 TRUNCATE TABLE stg.CYBER_TEL_NUEVOS;
@@ -1436,7 +1436,8 @@ INSERT INTO @pl EXEC ops.sp_arribar_cyber @idt, 'TELEFONOS', @solo_mostrar = 1;
 SET @rs = CONCAT((SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idt AND SCRIPT = 'TEL_ACTUALIZA' AND NUM = 1), '|',
                  (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @idt AND ARCHIVO = 'SCBTEL'), '|', @total);
 SET @n = (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @idt AND ARCHIVO = 'SCBTEL');
-EXEC pru.sp_igual N'TEL NUEVOS: con TEL_DEPURACION = ACTUAL, el store de hoy y el SCBTEL con todos', CONCAT(N'EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;|', @total, '|', @total), @rs;
+SET @esp = CONCAT(N'EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;|', @total, '|', @total);
+EXEC pru.sp_igual N'TEL NUEVOS: con TEL_DEPURACION = ACTUAL, el store de hoy y el SCBTEL con todos', @esp, @rs;
 GO
 
 /* ---------------------------------------------------------------------
