@@ -153,9 +153,9 @@ BEGIN
     /* Columnas del DAT y llaves que existen en CYBER y en las bases maestras */
     SELECT c.name AS CAMPO, t.name AS TIPO INTO #dat
     FROM sys.columns c JOIN sys.types t ON t.user_type_id = c.user_type_id WHERE c.object_id = OBJECT_ID('dat.DAT_486');
-    SELECT DISTINCT j.[key] AS CAMPO INTO #cyber
+    SELECT DISTINCT CAST(j.[key] AS NVARCHAR(400)) COLLATE DATABASE_DEFAULT AS CAMPO INTO #cyber
     FROM (SELECT TOP (50) DATOS FROM dat.CYBER_DAT WHERE CLIENTE = @cliente) x CROSS APPLY OPENJSON(x.DATOS) j;
-    SELECT DISTINCT j.[key] AS CAMPO INTO #maestra
+    SELECT DISTINCT CAST(j.[key] AS NVARCHAR(400)) COLLATE DATABASE_DEFAULT AS CAMPO INTO #maestra
     FROM (SELECT CODIGO, MAX(LLAVE) AS LLAVE FROM dat.BASE_MAESTRA_CUENTA WHERE CLIENTE = @cliente GROUP BY CODIGO) k
     JOIN dat.BASE_MAESTRA_CUENTA m ON m.CLIENTE = @cliente AND m.CODIGO = k.CODIGO AND m.LLAVE = k.LLAVE
     CROSS APPLY OPENJSON(m.DATOS) j;
@@ -355,7 +355,7 @@ BEGIN
     IF @origen = 'CYBER' AND @campo LIKE N'%[^A-Za-z0-9_]%'
         THROW 50838, 'La columna de CYBER solo puede tener letras, números y _.', 1;
     IF @origen = 'MAESTRA' AND NOT EXISTS (SELECT 1 FROM dat.BASE_MAESTRA_CUENTA m CROSS APPLY OPENJSON(m.DATOS) j
-                                           WHERE m.CLIENTE = @cliente AND j.[key] = @campo
+                                           WHERE m.CLIENTE = @cliente AND j.[key] COLLATE DATABASE_DEFAULT = @campo
                                              AND m.LLAVE = (SELECT MAX(x.LLAVE) FROM dat.BASE_MAESTRA_CUENTA x WHERE x.CLIENTE = @cliente AND x.CODIGO = m.CODIGO))
         SET @existe = 0;
 
