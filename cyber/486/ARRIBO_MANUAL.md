@@ -65,8 +65,8 @@ Los pasos de teléfonos, correos y gescar sin teléfono que siguen son **lo que 
 1. Que ya hayan subido los saldos (SCBSDOS).
 2. `cyber\TEL_BORRA.sql` (vacía la remesa).
 3. Cargar `sub_mst.TXT` en `RCVRY.JSP_TAB_TEL_REMESA_486` con `LOAD_TEL_REMESA.CTL` (sqlldr, igual que hoy) y revisar que la tabla tenga **los mismos renglones que `sub_mst.TXT`**. Si no, no seguir.
-4. Ejecutar `cyber\TEL_ACTUALIZA.sql` (`EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486`).
-5. Subir `SCBTEL.TXT`: activa nuestros teléfonos, también los nuevos (confirmado por el equipo el 17/11). Después, los correos y, cuando el SCBTEL ya está, el gescar sin teléfono.
+4. Ejecutar `cyber\TEL_ACTUALIZA.sql`: `EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486`, o con `TEL_DEPURACION = NUEVOS` (18/11) `EXECUTE RCVRY.JSP_TELEFONOS_DEPURA_486`. Con el segundo, los nuevos se ven con `select CUENTA, AREA, TELEFONO from RCVRY.JSP_TAB_TEL_REMESA_486 where NUEVO = 1`, y `EXEC ops.sp_tel_nuevos <id>;` deja el SCBTEL solo con ellos.
+5. Subir `SCBTEL.TXT`: activa nuestros teléfonos, también los nuevos (confirmado por el equipo el 17/11). Con `NUEVOS` lleva solo los nuevos, y si no hay, no se sube. Después, los correos y, cuando el SCBTEL ya está, el gescar sin teléfono.
 
 Qué hace el procedimiento de CYBER (revisado 02/11, versión del 27/12/2025; la versión optimizada para instalar está en `cyber/486/oracle/JSP_TELEFONOS_REMESA_486.sql`):
 - Inserta en `PHONE` los teléfonos de la remesa que están en `PHONE_G1` y no en `PHONE`, solo de cuentas activas del 486 (`dmstatus` nulo).

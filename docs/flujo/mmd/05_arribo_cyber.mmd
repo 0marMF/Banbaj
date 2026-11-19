@@ -7,11 +7,14 @@ flowchart TD
     S1 --> T1["Depuración de teléfonos<br/>vacía y carga RCVRY.JSP_TAB_TEL_REMESA_486"]
     T1 --> T2{"¿La remesa en CYBER tiene los mismos<br/>teléfonos que nuestro archivo?<br/>ops.sp_tel_remesa_validar"}
     T2 -- no --> TX["No se ejecuta el store<br/>TEL REMESA VALIDADA ERROR + HALLAZGO_486<br/>no subir el SCBTEL"]
-    T2 -- sí --> T3["JSP_TELEFONOS_REMESA_486<br/>inactiva lo que no está en la remesa"]
-    T3 --> T4["Se escribe el SCBTEL<br/>ARCHIVOS_LISTOS_486: ya pueden subir el SCBTEL"]
-    T4 --> C1["Depuración de correos<br/>correos nuevos → bandera 416 → remesa → JSP_CORREOS_486"]
-    T4 --> U2(["Asignaciones sube el SCBTEL<br/>(activa nuestros teléfonos)"])
-    U2 --> G{"¿Ya están en PHONE_G1 los teléfonos<br/>que faltaban? (≥ 95 %)"}
+    T2 -- sí --> T3["JSP_TELEFONOS_DEPURA_486 (TEL_DEPURACION = NUEVOS)<br/>inactiva lo activo que no está en la remesa (también lo recién agregado)<br/>activa lo de la remesa · marca NUEVO lo que no existe en PHONE"]
+    T3 --> TN["ops.sp_tel_nuevos: baja los NUEVO = 1<br/>el SCBTEL se genera solo con esos"]
+    TN --> TQ{"¿Hay teléfonos nuevos?"}
+    TQ -- sí --> T4["Se escribe el SCBTEL (solo nuevos)<br/>ARCHIVOS_LISTOS_486: ya pueden subir el SCBTEL"]
+    TQ -- no --> G1
+    TN --> C1["Depuración de correos<br/>correos nuevos → bandera 416 → remesa → JSP_CORREOS_486"]
+    T4 --> U2(["Asignaciones sube el SCBTEL<br/>(da de alta activos los nuevos)"])
+    U2 --> G{"¿Ya están en PHONE_G1 los teléfonos<br/>nuevos? (≥ 95 %)"}
     G -- no --> GW["ESPERANDO SCBTEL"]
     G -- sí --> G1["GESCAR SIN TELEFONO<br/>baja teléfonos → SCBACTH_SINTEL.TXT + aviso"]
     C1 --> P["ops.sp_arribo_posterior"]

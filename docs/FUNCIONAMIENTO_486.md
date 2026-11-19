@@ -94,7 +94,7 @@ Cada proceso es una **corrida** (`ops.CORRIDA`) con número, tipo (ACT, ASIG, RE
 | Scripts de la actualización en CYBER (`ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN`, `ACT_PVS_REE`) | **Job** | `ops.sp_act_cyber` (`ACT_CYBER_AUTOMATICO`) |
 | Subir a CYBER los planos de ancho fijo (SCBSDOS, SCBTEL, SCBPAG, gescar), cada uno cuando llega su aviso | Asignaciones | Cargador de CYBER |
 | Gescar de nuevas y reasignadas en cuanto subieron los saldos (SCBSDOS) | **Job** | `ops.sp_arribo_automatico` (`ARRIBO_AUTOMATICO`) |
-| Depuración de teléfonos (`JSP_TELEFONOS_REMESA_486`, si la remesa tiene los mismos renglones que nuestro archivo) y SCBTEL en cuanto subieron los saldos | **Job** | `ops.sp_arribo_automatico` |
+| Depuración de teléfonos (`JSP_TELEFONOS_REMESA_486`, o `JSP_TELEFONOS_DEPURA_486` con `TEL_DEPURACION = NUEVOS`, si la remesa tiene los mismos renglones que nuestro archivo) y SCBTEL en cuanto subieron los saldos. Con `NUEVOS` el SCBTEL lleva solo los teléfonos nuevos y, si no hay, no sale | **Job** | `ops.sp_arribo_automatico` |
 | Depuración de correos (`JSP_CORREOS_486`) después de la de teléfonos | **Job** | `ops.sp_arribo_automatico` |
 | `SCBACTH_SINTEL.TXT` (gescar sin teléfono) en cuanto subió el SCBTEL | **Job** | `ops.sp_arribo_gescar_sintel` |
 | Blanqueo de status (días 1 a 10) | **Job** | `ops.sp_blanqueo_automatico` (`BLANQUEO_AUTOMATICO`) |

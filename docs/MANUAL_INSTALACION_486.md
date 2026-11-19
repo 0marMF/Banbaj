@@ -176,6 +176,8 @@ SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clav
 | ARRIBO\_AUTOMATICO | 1 | Al detectar los saldos (SCBSDOS) el job escribe los gescar de nuevas y reasignadas y corre la depuración de teléfonos, el SCBTEL y la de correos; al detectar el SCBTEL, el gescar sin teléfono (0 = a mano) |
 | ARCHIVOS\_DESPUES\_SALDOS | GESCAR\_NVA,GESCAR\_REA | Archivos que no se escriben ni se avisan hasta que suben los saldos |
 | ARCHIVOS\_DESPUES\_DEPURACION\_TEL | SCBTEL | Archivos que no se escriben ni se avisan hasta que la depuración de teléfonos queda OK |
+| TEL\_DEPURACION | ACTUAL | ACTUAL = store de hoy y SCBTEL con todos los teléfonos. NUEVOS (cuando el DBA instale `RCVRY.JSP_TELEFONOS_DEPURA_486`) = la depuración marca los nuevos y el SCBTEL lleva solo esos; sin nuevos no hay SCBTEL |
+| CYBER\_PROC\_TEL\_DEPURA | RCVRY.JSP\_TELEFONOS\_DEPURA\_486 | Store de depuración con `TEL_DEPURACION = NUEVOS` |
 | VISTAS\_USUARIO | 1 | Al terminar la actualización y la asignación, y cuando suben los saldos: ejecuta `RCVRY.PROC_DAT_486`, baja sus columnas y arma la tabla de cada usuario (AEM, MIS). 0 = no se actualizan |
 | DAT\_CYBER\_STORE · DAT\_CYBER\_TABLA · DAT\_CYBER\_LLAVE | RCVRY.PROC\_DAT\_486 · RCVRY.RPT\_DAT\_486\_1 · CUENTA | Store que se ejecuta, tabla de donde se bajan las columnas `CYBER` de las vistas y su columna de cuenta |
 | CYBER\_HOSTUP\_EXPR | to\_char(DMHOSTUP, 'YYYYMMDD') | Validación de saldos del equipo: fecha de `DMHOSTUP` con la que se cuentan las cuentas activas del 486. Si `DMHOSTUP` no es DATE, ajustarla; vacío = se detecta por lo pendiente |

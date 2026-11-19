@@ -111,6 +111,24 @@ EXEC cfg.sp_vista_usuario_login 'MIS', 'mis_banbaj', N'<contraseña>';
 
 6. **Avisa a AEM** que ya no se deja `MX_G1MCT_DVBJIG_*` en Cyber_00: las cuentas retiradas del día están en `aem.RETIROS_HOY`.
 
+### SCBTEL solo con los teléfonos nuevos (18/11)
+
+Esta parte ya viene en los scripts de arriba (`01`, `76` y la semilla). Queda apagada (`TEL_DEPURACION = ACTUAL`) hasta que el DBA de CYBER instale el store:
+
+1. Pásale al DBA `cyber/486/oracle/JSP_TELEFONOS_DEPURA_486.sql`. En el encabezado viene qué hace, cómo instalarlo y el `GRANT EXECUTE` para el usuario de `CYBER_ORACLE`.
+2. Cuando esté instalado, prende el modo:
+
+```sql
+USE [BNABAJ_486];
+UPDATE cfg.PARAMETRO SET VALOR = 'NUEVOS' WHERE CLIENTE = '486' AND CLAVE = 'TEL_DEPURACION';
+```
+
+3. **Avisa al equipo de asignaciones:**
+   - El aviso del SCBTEL llega igual que ahora, pero el archivo trae **solo los teléfonos nuevos**.
+   - Si un día no hay nuevos, no llega aviso de SCBTEL y el gescar sin teléfono sale solo.
+
+Para regresar al store de antes: `VALOR = 'ACTUAL'`.
+
 Detalle: *Flujo y diagramas*, sección 10.
 
 ## 0. Antes de empezar
