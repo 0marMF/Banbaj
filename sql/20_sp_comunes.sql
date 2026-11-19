@@ -355,10 +355,10 @@ BEGIN
             MERGE dat.BASE_MAESTRA_CUENTA AS t
             USING (SELECT LLAVE, DATOS FROM n WHERE RN = 1) AS s
                ON t.CLIENTE = @cliente AND t.CODIGO = @codigo AND t.LLAVE = s.LLAVE
-            WHEN MATCHED AND t.ID_CORRIDA <> @id_corrida THEN
-                UPDATE SET ID_CORRIDA_ANT = t.ID_CORRIDA, DATOS_ANT = t.DATOS, ID_CORRIDA = @id_corrida, DATOS = s.DATOS, FE_CARGA = SYSDATETIME()
             WHEN MATCHED THEN
-                UPDATE SET DATOS = s.DATOS, FE_CARGA = SYSDATETIME()
+                UPDATE SET ID_CORRIDA_ANT = CASE WHEN t.ID_CORRIDA <> @id_corrida THEN t.ID_CORRIDA ELSE t.ID_CORRIDA_ANT END,
+                           DATOS_ANT      = CASE WHEN t.ID_CORRIDA <> @id_corrida THEN t.DATOS ELSE t.DATOS_ANT END,
+                           ID_CORRIDA = @id_corrida, DATOS = s.DATOS, FE_CARGA = SYSDATETIME()
             WHEN NOT MATCHED THEN
                 INSERT (CLIENTE, CODIGO, LLAVE, ID_CORRIDA, DATOS) VALUES (@cliente, @codigo, s.LLAVE, @id_corrida, s.DATOS);';
         EXEC sp_executesql @sql, N'@id_corrida INT, @codigo VARCHAR(50), @cliente VARCHAR(10)', @id_corrida = @id_corrida, @codigo = @codigo, @cliente = @cliente;
