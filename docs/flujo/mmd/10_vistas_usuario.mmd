@@ -1,0 +1,19 @@
+flowchart TD
+    A(["Actualización OK<br/>(después de los scripts ACT en CYBER)"]) --> R
+    B(["Asignación OK<br/>(después de escribir los archivos)"]) --> R
+    S(["Arribo: subieron los saldos<br/>las cuentas nuevas ya existen en CYBER"]) --> R
+    R{"ops.sp_vistas_usuario_refrescar<br/>VISTAS_USUARIO = 1 y el paso no está OK"}
+    R --> C["ops.sp_dat_cyber_bajar<br/>1. EXECUTE RCVRY.PROC_DAT_486 (ops.sp_cyber_ejecutar)<br/>2. baja de RCVRY.RPT_DAT_486_1 solo las columnas<br/>ORIGEN = CYBER que pide alguna vista"]
+    C -- "OK" --> J["dat.CYBER_DAT<br/>JSON por cuenta (CUENTA = DAT.CUENTA2)"]
+    C -- "falla o llega vacía" --> JX["Se queda lo que bajó la vez anterior<br/>DAT CYBER = ERROR"]
+    J --> V
+    JX --> V
+    M["dat.BASE_MAESTRA_CUENTA<br/>último renglón de la base maestra por cuenta<br/>(se actualiza en cada asignación)"] --> V
+    D["dat.DAT_486"] --> V
+    K["cfg.VISTA_USUARIO · cfg.VISTA_COLUMNA<br/>las edita el equipo de asignaciones<br/>DAT · CYBER · MAESTRA · CONSTANTE"] --> V
+    V["ops.sp_vistas_usuario_armar<br/>por usuario activo: esquema, rol y tabla<br/>textos recortados · se arma aparte y se cambia de golpe"]
+    V --> T1["aem.DAT_486<br/>aem.RETIROS_HOY"]
+    V --> T2["mis.DAT_486"]
+    V -- "campo que no existe" --> AV["Se arma sin él (DAT) o vacío<br/>VISTA USUARIO = AVISO + hallazgo"]
+    T1 --> U(["Login de SQL Server de cada usuario<br/>cfg.sp_vista_usuario_login<br/>solo SELECT en su esquema"])
+    T2 --> U

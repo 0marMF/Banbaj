@@ -147,7 +147,7 @@ BEGIN
     SET NOCOUNT ON;
     IF @id_corrida IS NOT NULL SET @cliente = (SELECT CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida);
     DECLARE @v VARCHAR(30), @esq SYSNAME, @rol SYSNAME, @activo BIT, @ret BIT, @sql NVARCHAR(MAX), @sel NVARCHAR(MAX),
-            @join_m NVARCHAR(MAX) = N'', @aviso NVARCHAR(MAX), @n INT, @msg NVARCHAR(4000), @mc NVARCHAR(MAX), @ml NVARCHAR(MAX);
+            @join_m NVARCHAR(MAX) = N'', @aviso NVARCHAR(MAX), @n INT, @msg NVARCHAR(4000), @mc NVARCHAR(MAX), @ml NVARCHAR(MAX), @ddl NVARCHAR(MAX);
     SET @avisos = NULL;
 
     /* Columnas del DAT y llaves que existen en CYBER y en las bases maestras */
@@ -179,14 +179,14 @@ BEGIN
         SET @rol = N'rol_' + @esq;
         SET @aviso = NULL;
         /* Esquema y rol del usuario: solo SELECT sobre su esquema */
-        IF SCHEMA_ID(@esq) IS NULL EXEC (N'CREATE SCHEMA ' + QUOTENAME(@esq) + N' AUTHORIZATION dbo;');
-        IF DATABASE_PRINCIPAL_ID(@rol) IS NULL EXEC (N'CREATE ROLE ' + QUOTENAME(@rol) + N' AUTHORIZATION dbo;');
-        EXEC (N'GRANT SELECT ON SCHEMA::' + QUOTENAME(@esq) + N' TO ' + QUOTENAME(@rol) + N';');
+        IF SCHEMA_ID(@esq) IS NULL BEGIN SET @ddl = N'CREATE SCHEMA ' + QUOTENAME(@esq) + N' AUTHORIZATION dbo;'; EXEC (@ddl); END;
+        IF DATABASE_PRINCIPAL_ID(@rol) IS NULL BEGIN SET @ddl = N'CREATE ROLE ' + QUOTENAME(@rol) + N' AUTHORIZATION dbo;'; EXEC (@ddl); END;
+        BEGIN SET @ddl = N'GRANT SELECT ON SCHEMA::' + QUOTENAME(@esq) + N' TO ' + QUOTENAME(@rol) + N';'; EXEC (@ddl); END;
 
         IF @activo = 0
         BEGIN
             /* Usuario dado de baja: deja de ver datos */
-            EXEC (N'DROP VIEW IF EXISTS ' + QUOTENAME(@esq) + N'.RETIROS_HOY; DROP TABLE IF EXISTS ' + QUOTENAME(@esq) + N'.DAT_486;');
+            BEGIN SET @ddl = N'DROP VIEW IF EXISTS ' + QUOTENAME(@esq) + N'.RETIROS_HOY; DROP TABLE IF EXISTS ' + QUOTENAME(@esq) + N'.DAT_486;'; EXEC (@ddl); END;
             IF @id_corrida IS NOT NULL
             BEGIN
                 SET @msg = CONCAT(@v, N' inactivo: sin datos');
@@ -236,7 +236,7 @@ BEGIN
                      + N' WHERE d.CLIENTE = @cliente OR d.CLIENTE IS NULL; SET @n = @@ROWCOUNT;';
             EXEC sp_executesql @sql, N'@cliente VARCHAR(10), @n INT OUTPUT', @cliente = @cliente, @n = @n OUTPUT;
             BEGIN TRANSACTION;
-                EXEC (N'DROP TABLE IF EXISTS ' + QUOTENAME(@esq) + N'.DAT_486;');
+                BEGIN SET @ddl = N'DROP TABLE IF EXISTS ' + QUOTENAME(@esq) + N'.DAT_486;'; EXEC (@ddl); END;
                 SET @sql = QUOTENAME(@esq) + N'.DAT_486_NUEVA';
                 EXEC sp_rename @sql, N'DAT_486';
             COMMIT TRANSACTION;
@@ -244,16 +244,16 @@ BEGIN
 
         /* Retiros del día (actualización y asignación; un cierre por reasignación no es retiro) */
         IF @ret = 1
-            EXEC (N'CREATE OR ALTER VIEW ' + QUOTENAME(@esq) + N'.RETIROS_HOY
+            BEGIN SET @ddl = N'CREATE OR ALTER VIEW ' + QUOTENAME(@esq) + N'.RETIROS_HOY
 AS
 SELECT DISTINCT h.CUENTA2 AS CUENTA
 FROM dat.HISTORIA_FOLIO h
 JOIN ops.CORRIDA c ON c.ID_CORRIDA = h.ID_CORRIDA_BAJA
 WHERE h.CLIENTE = ''' + @cliente + N''' AND h.ESTATUS = ''B'' AND c.PROCESO IN (''ACT'', ''ASIG'')
   AND c.FECHA_PROCESO = CAST(SYSDATETIME() AS DATE)
-  AND ISNULL(h.MOTIVO_BAJA, '''') <> ''CIERRE POR REASIGNACION'';');
+  AND ISNULL(h.MOTIVO_BAJA, '''') <> ''CIERRE POR REASIGNACION'';'; EXEC (@ddl); END
         ELSE
-            EXEC (N'DROP VIEW IF EXISTS ' + QUOTENAME(@esq) + N'.RETIROS_HOY;');
+            BEGIN SET @ddl = N'DROP VIEW IF EXISTS ' + QUOTENAME(@esq) + N'.RETIROS_HOY;'; EXEC (@ddl); END;
 
         SET @msg = LEFT(CONCAT(@v, N': ', ISNULL(@n, 0), N' cuentas', CASE WHEN @aviso IS NOT NULL THEN N' · ' + @aviso END), 4000);
         IF @id_corrida IS NOT NULL
@@ -379,7 +379,7 @@ CREATE OR ALTER PROCEDURE cfg.sp_vista_usuario_login
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @esq SYSNAME = LOWER(@vista), @rol SYSNAME, @sql NVARCHAR(MAX), @msg NVARCHAR(4000);
+    DECLARE @esq SYSNAME = LOWER(@vista), @rol SYSNAME, @sql NVARCHAR(MAX), @msg NVARCHAR(4000), @ddl NVARCHAR(MAX);
     SET @rol = N'rol_' + @esq;
     IF NOT EXISTS (SELECT 1 FROM cfg.VISTA_USUARIO WHERE CLIENTE = @cliente AND VISTA = @vista)
     BEGIN
@@ -400,9 +400,9 @@ BEGIN
     SET @sql = REPLACE(@sql, N'@p', N'N''' + REPLACE(@password, N'''', N'''''') + N'''');
     EXEC (@sql);
     IF DATABASE_PRINCIPAL_ID(@login) IS NULL
-        EXEC (N'CREATE USER ' + QUOTENAME(@login) + N' FOR LOGIN ' + QUOTENAME(@login) + N' WITH DEFAULT_SCHEMA = ' + QUOTENAME(@esq) + N';');
+        BEGIN SET @ddl = N'CREATE USER ' + QUOTENAME(@login) + N' FOR LOGIN ' + QUOTENAME(@login) + N' WITH DEFAULT_SCHEMA = ' + QUOTENAME(@esq) + N';'; EXEC (@ddl); END;
     IF IS_ROLEMEMBER(@rol, @login) = 0 OR IS_ROLEMEMBER(@rol, @login) IS NULL
-        EXEC (N'ALTER ROLE ' + QUOTENAME(@rol) + N' ADD MEMBER ' + QUOTENAME(@login) + N';');
+        BEGIN SET @ddl = N'ALTER ROLE ' + QUOTENAME(@rol) + N' ADD MEMBER ' + QUOTENAME(@login) + N';'; EXEC (@ddl); END;
     UPDATE cfg.VISTA_USUARIO SET LOGIN = @login WHERE CLIENTE = @cliente AND VISTA = @vista;
     SET @msg = CONCAT(N'Login ', @login, N' listo: solo ve el esquema ', @esq, N' (', @esq, N'.DAT_486',
                       CASE WHEN EXISTS (SELECT 1 FROM cfg.VISTA_USUARIO WHERE CLIENTE = @cliente AND VISTA = @vista AND VER_RETIROS = 1) THEN N' y ' + @esq + N'.RETIROS_HOY' ELSE N'' END, N').');

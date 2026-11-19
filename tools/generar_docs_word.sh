@@ -13,7 +13,7 @@ pandoc docs/MIGRACION_PASO_A_PASO_486.md -f markdown --reference-doc=tools/plant
   --toc --toc-depth=1 -M toc-title=Contenido -M lang=es-MX -s \
   -o "docs/Migracion paso a paso Banbaj 486.docx"
 # Flujo y diagramas: índice + un capítulo por diagrama (las imágenes salen de docs/flujo/img, ver tools/generar_diagramas.sh)
-pandoc docs/flujo/README.md docs/flujo/0*.md -f markdown --resource-path=docs/flujo --lua-filter=tools/ajustar_imagenes.lua --reference-doc=tools/plantilla_word.docx \
+pandoc docs/flujo/README.md docs/flujo/[0-9]*.md -f markdown --resource-path=docs/flujo --lua-filter=tools/ajustar_imagenes.lua --reference-doc=tools/plantilla_word.docx \
   --toc --toc-depth=1 -M toc-title=Contenido -M lang=es-MX -s \
   -o "docs/Flujo y diagramas Banbaj 486.docx"
 echo "Listo: docs/*.docx"
