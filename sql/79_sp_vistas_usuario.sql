@@ -257,7 +257,10 @@ WHERE h.CLIENTE = ''' + @cliente + N''' AND h.ESTATUS = ''B'' AND c.PROCESO IN (
 
         SET @msg = LEFT(CONCAT(@v, N': ', ISNULL(@n, 0), N' cuentas', CASE WHEN @aviso IS NOT NULL THEN N' · ' + @aviso END), 4000);
         IF @id_corrida IS NOT NULL
-            EXEC ops.sp_log @id_corrida, 'VISTA USUARIO', CASE WHEN @aviso IS NULL THEN 'OK' ELSE 'AVISO' END, @n, @msg;
+        BEGIN
+            SET @ddl = CASE WHEN @aviso IS NULL THEN N'OK' ELSE N'AVISO' END;
+            EXEC ops.sp_log @id_corrida, 'VISTA USUARIO', @ddl, @n, @msg;
+        END
         ELSE
             PRINT @msg;
         IF @aviso IS NOT NULL
@@ -310,7 +313,8 @@ BEGIN
     SET @msg = LEFT(CONCAT(CASE WHEN @err IS NULL THEN N'Vistas de usuarios actualizadas'
                                 ELSE N'Vistas actualizadas con los datos de CYBER de la vez anterior (' + @err + N')' END,
                            CASE WHEN @avisos IS NOT NULL THEN N' · ' + @avisos END), 4000);
-    EXEC ops.sp_log @id_corrida, @paso, CASE WHEN @err IS NULL AND @avisos IS NULL THEN 'OK' ELSE 'AVISO' END, NULL, @msg;
+    SET @acc = CASE WHEN @err IS NULL AND @avisos IS NULL THEN N'OK' ELSE N'AVISO' END;
+    EXEC ops.sp_log @id_corrida, @paso, @acc, NULL, @msg;
     IF @err IS NOT NULL OR @avisos IS NOT NULL
     BEGIN
         SET @acc = CASE WHEN @err IS NOT NULL
