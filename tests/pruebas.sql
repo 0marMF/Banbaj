@@ -1404,6 +1404,10 @@ BEGIN TRY EXEC cfg.sp_vista_columna_alta 'MIS', N'MALA', 'DAT', N'NO_EXISTE'; EN
 EXEC pru.sp_igual N'VISTAS: alta de columna revisa que el campo exista en el DAT', N'50837', @err;
 
 EXEC ops.sp_vistas_usuario_refrescar @idv, 'VISTAS PRUEBA', @sin_ejecutar = 1, @sin_bajar = 1, @forzar = 1, @solo_prueba = 1;
+SET @rs = (SELECT STRING_AGG(CONCAT(PASO, ': ', LEFT(MENSAJE, 600)), ' || ') FROM ops.BITACORA WHERE ID_CORRIDA = @idv AND ESTATUS = 'ERROR' AND PASO IN ('VISTAS PRUEBA', 'DAT CYBER', 'VISTA USUARIO'));
+IF @rs IS NOT NULL PRINT CONCAT(N'FALLA vistas: ', @rs);
+GO
+DECLARE @idv INT = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE CLIENTE = '486' AND ESTATUS = 'OK'), @rs NVARCHAR(4000), @err NVARCHAR(4000);
 
 SET @rs = (SELECT STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY c.column_id) FROM sys.columns c WHERE c.object_id = OBJECT_ID('aem.DAT_486'));
 EXEC pru.sp_igual N'VISTAS: aem.DAT_486 con los encabezados del mapeo, en orden',
