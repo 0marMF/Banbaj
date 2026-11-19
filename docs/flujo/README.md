@@ -27,7 +27,7 @@ Cada diagrama tiene tres partes:
 
 # Cómo modificar un flujo con Claude Code
 
-1. Pídele a Claude Code el cambio nombrando el flujo, por ejemplo: *"en el arribo a CYBER, que la confirmación espere también a que se suba el gescar"*. Claude Code lee `CLAUDE.md` en la raíz y, desde ahí, este índice y el diagrama del flujo.
+1. Pídele a Claude Code el cambio nombrando el flujo, por ejemplo: *"en el arribo a CYBER, que la confirmación espere también a que se suba el gescar"*. Claude Code lee este índice y el diagrama del flujo.
 2. El cambio se hace en el procedimiento que indica la explicación del diagrama, con su prueba en `tests/pruebas.sql`.
 3. Se actualizan el `.mmd` y el `.md` del diagrama, y se regeneran las imágenes y los Word:
 
