@@ -505,8 +505,42 @@ VALIDACIONES = (
     + v_importes("PAGOS", ["IMPORTE"], TOPE_SALDO["CONSUMO"], negativos=False)
 )
 
+# Vistas de usuarios (18/11): qué ve cada usuario externo. El equipo de asignaciones las edita en
+# cfg.VISTA_USUARIO / cfg.VISTA_COLUMNA; la semilla solo agrega lo que falta. ORIGEN: DAT, CYBER (columna de
+# RCVRY.RPT_DAT_486_1 después de PROC_DAT_486), MAESTRA (encabezado de la base maestra) o CONSTANTE.
+VISTAS = [
+    # vista, ver retiros, activa, descripción, [(encabezado, origen, campo)]
+    ("AEM", 1, 1, "Equipo de AEM (MAPEO_USUARIOS.xlsx, 18/11). También ve las cuentas retiradas del día (antes MX_G1MCT_DVBJIG_* en Cyber_00)", [
+        ("GRUPO", "CONSTANTE", "1"),
+        ("CUENTA", "DAT", "CUENTA2"),
+        ("CLIENTE", "DAT", "CLIENTE"),
+        ("FOLIO", "DAT", "FOLIO"),
+        ("NOMBRE1", "DAT", "NOMBRE1"),
+        ("PVS", "DAT", "PVS"),
+        ("SDO_ACT", "DAT", "SDO_ACT"),
+        ("ESTATUS_CYBER", "CYBER", "ESTATUS"),
+        ("FE_ASIG", "DAT", "FE_ASIG"),
+        ("ESTADO", "DAT", "ESTADO"),
+        ("ABANDONO_SR", "CYBER", "ABAN_SR"),
+        ("ETIQUETA03", "DAT", "TIPO"),
+        ("ETIQUETA01", "DAT", "ETIQUETA1"),
+        ("ETIQUETA02", "DAT", "ESTRA3"),
+        ("ETIQUETA50", "DAT", "RFC"),
+        ("ETIQUETA04", "DAT", "SEG"),
+        ("CAPITAL", "DAT", "CAPITAL"),
+        ("SALDO01", "DAT", "SALDO1"),
+        ("SALDO02", "DAT", "SALDO2"),
+        ("SALDO03", "DAT", "SALDO3"),
+    ]),
+    ("MIS", 0, 0, "Equipo de MIS: usa datos de las bases maestras que no están en el DAT. El equipo de asignaciones agrega sus columnas (cfg.sp_vista_columna_alta) y la activa", []),
+]
+
 PARAMETROS = [
     ("PREFIJO_CUENTA2", "486-", "Prefijo de la cuenta en CYBER"),
+    ("VISTAS_USUARIO", "1", "1 (18/11) = al terminar la actualización y la asignación, y cuando suben los saldos, se ejecuta RCVRY.PROC_DAT_486 en CYBER, se bajan sus columnas y se arma la tabla de cada usuario (cfg.VISTA_USUARIO: AEM, MIS); 0 = no se actualizan"),
+    ("DAT_CYBER_STORE", "RCVRY.PROC_DAT_486", "Store de CYBER que llena la tabla de datos para las vistas de usuarios (se ejecuta antes de bajarla)"),
+    ("DAT_CYBER_TABLA", "RCVRY.RPT_DAT_486_1", "Tabla de CYBER de donde se bajan las columnas ORIGEN = CYBER de las vistas de usuarios"),
+    ("DAT_CYBER_LLAVE", "CUENTA", "Columna de esa tabla que es la cuenta de CYBER (DMACCT = DAT.CUENTA2)"),
     ("VALIDAR_LAYOUT", "1", "1 (17/11) = si a un archivo le falta cualquier campo que toma el proceso (cfg.ARCHIVO_COLUMNA, obligatorio u opcional), la corrida se detiene antes de tocar el DAT y se avisa al equipo de asignaciones (VALIDACION_ENTRADA_486); 0 = como antes: solo los obligatorios detienen"),
     ("VALIDAR_DATOS", "1", "1 (17/11) = cada archivo se revisa con las reglas de cfg.VALIDACION_DATO (importes, teléfonos, correos, catálogos, cuentas repetidas, volumen); si una supera su tolerancia, la corrida se detiene antes de tocar el DAT y se avisa (VALIDACION_ENTRADA_486); 0 = no se revisan"),
     ("TOPE_DEVOLUCION_PCT", "", "Vacío = sin tope: la base maestra se trabaja como llega. Con un número (ej. 10) se detiene si la devolución de un segmento supera ese %"),
@@ -870,6 +904,15 @@ def sql_semilla(scb, dat):
                  f"INSERT INTO cfg.VALIDACION_DATO (CLIENTE, CODIGO, CAMPO, TIPO, VALOR, PCT_MAX, DESCRIPCION) VALUES ({cli}, {q(cod)}, {q(campo)}, {q(tipo_v)}, {q(valor)}, {pct}, {q(desc)});")
     L.append("")
 
+    L.append("/* Vistas de usuarios (18/11): solo se agrega lo que falta */")
+    for vista, ret, act, desc, cols in VISTAS:
+        L.append(f"IF NOT EXISTS (SELECT 1 FROM cfg.VISTA_USUARIO WHERE CLIENTE = {cli} AND VISTA = {q(vista)}) "
+                 f"INSERT INTO cfg.VISTA_USUARIO (CLIENTE, VISTA, VER_RETIROS, ACTIVO, DESCRIPCION, USUARIO) VALUES ({cli}, {q(vista)}, {ret}, {act}, {q(desc)}, 'SEMILLA');")
+        for i, (enc, origen, campo) in enumerate(cols, 1):
+            L.append(f"IF NOT EXISTS (SELECT 1 FROM cfg.VISTA_COLUMNA WHERE CLIENTE = {cli} AND VISTA = {q(vista)} AND ENCABEZADO = {q(enc)}) "
+                     f"INSERT INTO cfg.VISTA_COLUMNA (CLIENTE, VISTA, ORDEN, ENCABEZADO, ORIGEN, CAMPO, USUARIO) VALUES ({cli}, {q(vista)}, {i * 10}, {q(enc)}, {q(origen)}, {q(campo)}, 'SEMILLA');")
+    L.append("")
+
     L.append("/* Homologación */")
     orden = {}
     for tabla, campo, valor, cond, desc, req in HOMOLOGACION:
@@ -959,6 +1002,11 @@ def main():
     for cod, campo, tipo_v, valor, pct, desc in VALIDACIONES:
         assert cod in campos and (campo == "*" or campo in campos[cod]), f"validación sobre un campo que no existe: {cod}.{campo}"
         assert tipo_v != "CATALOGO" or valor in cats, f"validación con un catálogo que no existe: {valor}"
+    cols_dat = {c[0] for c in dat}
+    for vista, ret, act, desc, cols in VISTAS:
+        for enc, origen, campo in cols:
+            assert origen in ("DAT", "CYBER", "MAESTRA", "CONSTANTE"), f"vista {vista}: origen inválido {origen}"
+            assert origen != "DAT" or campo in cols_dat, f"vista {vista}: el DAT no tiene {campo}"
     usados = set(re.findall(r"fn_catalogo\('\{CLIENTE\}', '(\w+)'", " ".join(h[2] + " " + (h[3] or "") for h in HOMOLOGACION)))
     assert usados <= cats, f"homologación con catálogos que no existen: {usados - cats}"
     (RAIZ / "sql" / "05_tabla_dat_486.sql").write_text(sql_dat(dat), encoding="utf-8")

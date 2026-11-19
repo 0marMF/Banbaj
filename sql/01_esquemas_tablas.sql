@@ -341,6 +341,34 @@ CREATE TABLE dat.BASE_RECIBIDA (
     CONSTRAINT PK_BASE_RECIBIDA PRIMARY KEY (ID_CORRIDA, CODIGO, FILA)
 );
 GO
+/* Último renglón conocido de la base maestra por cuenta (18/11, vistas de usuarios): se actualiza en cada
+   asignación con la llave del archivo (cfg.ARCHIVO.LLAVE_DAT: RIESGO en TDC, DES_PROD en Consumo e Hipotecario).
+   DATOS_ANT guarda el renglón anterior para revertir la corrida. */
+IF OBJECT_ID('dat.BASE_MAESTRA_CUENTA') IS NULL
+CREATE TABLE dat.BASE_MAESTRA_CUENTA (
+    CLIENTE         VARCHAR(10)    NOT NULL,
+    CODIGO          VARCHAR(50)    NOT NULL,           -- MAESTRA_TDC, MAESTRA_CONSUMO, MAESTRA_HIPO
+    LLAVE           NVARCHAR(60)   NOT NULL,
+    ID_CORRIDA      INT            NOT NULL,
+    DATOS           NVARCHAR(MAX)  NOT NULL,
+    ID_CORRIDA_ANT  INT            NULL,
+    DATOS_ANT       NVARCHAR(MAX)  NULL,
+    FE_CARGA        DATETIME2(0)   NOT NULL CONSTRAINT DF_BASE_MAESTRA_CUENTA_FE DEFAULT SYSDATETIME(),
+    CONSTRAINT PK_BASE_MAESTRA_CUENTA PRIMARY KEY (CLIENTE, CODIGO, LLAVE)
+);
+GO
+/* Lo que bajó de CYBER para las vistas de usuarios (RPT_DAT_486_1 después de RCVRY.PROC_DAT_486): solo las
+   columnas que pide alguna vista, como JSON por cuenta (CUENTA = DMACCT = DAT.CUENTA2) */
+IF OBJECT_ID('dat.CYBER_DAT') IS NULL
+CREATE TABLE dat.CYBER_DAT (
+    CLIENTE     VARCHAR(10)    NOT NULL,
+    CUENTA      VARCHAR(28)    NOT NULL,
+    DATOS       NVARCHAR(MAX)  NOT NULL,
+    ID_CORRIDA  INT            NULL,
+    FE_CARGA    DATETIME2(0)   NOT NULL CONSTRAINT DF_CYBER_DAT_FE DEFAULT SYSDATETIME(),
+    CONSTRAINT PK_CYBER_DAT PRIMARY KEY (CLIENTE, CUENTA)
+);
+GO
 /* La base maestra vigente de cada segmento */
 CREATE OR ALTER VIEW dat.v_BASE_VIGENTE
 AS

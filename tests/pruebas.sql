@@ -45,7 +45,7 @@ INSERT INTO dat.FOLIO_CONSECUTIVO (CLIENTE, ULTIMO_FOLIO) VALUES ('486', 100000)
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'ASIG_REQUIERE_ACT';
 /* El retiro automático se prueba aparte (sql/77); el escenario usa @aplicar_retiro explícito */
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486'
-   AND CLAVE IN ('RETIRO_AUTOMATICO', 'EXPORTAR_AUTOMATICO', 'ACT_CYBER_AUTOMATICO', 'BLANQUEO_AUTOMATICO', 'CONFIRMACION_AUTOMATICA', 'CUADRE_AUTOMATICO');
+   AND CLAVE IN ('RETIRO_AUTOMATICO', 'EXPORTAR_AUTOMATICO', 'ACT_CYBER_AUTOMATICO', 'BLANQUEO_AUTOMATICO', 'CONFIRMACION_AUTOMATICA', 'CUADRE_AUTOMATICO', 'VISTAS_USUARIO');
 /* Proceso autónomo (07/11): el arribo automático y el retiro en CYBER vienen prendidos de fábrica;
    se dejan explícitos para que las pruebas no dependan de la semilla */
 UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE IN ('ARRIBO_AUTOMATICO', 'RETIRO_CYBER_AUTOMATICO');
@@ -1382,6 +1382,101 @@ EXEC pru.sp_igual N'DATOS: volumen fuera de rango contra la última carga buena 
 GO
 
 /* ---------------------------------------------------------------------
+   Vistas de usuarios (18/11): tabla de AEM con su mapeo, MIS con una columna de la base maestra,
+   datos de CYBER simulados (stg.CYBER_DAT_486 con @sin_bajar), avisos, error de CYBER y accesos.
+   --------------------------------------------------------------------- */
+DECLARE @idv INT = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE CLIENTE = '486' AND ESTATUS = 'OK'), @rs NVARCHAR(4000), @err NVARCHAR(4000), @llave_m NVARCHAR(200);
+DROP TABLE IF EXISTS stg.CYBER_DAT_486;
+CREATE TABLE stg.CYBER_DAT_486 (CUENTA NVARCHAR(60) NULL, ESTATUS NVARCHAR(400) NULL, ABAN_SR NVARCHAR(400) NULL);
+INSERT INTO stg.CYBER_DAT_486 (CUENTA, ESTATUS, ABAN_SR)
+SELECT CUENTA2 + '  ', N'CD ', N'7' FROM dat.DAT_486 WHERE CUENTA2 IS NOT NULL
+UNION ALL SELECT N'486-999999999', N'XX', N'1';
+/* MIS: una columna del DAT, un encabezado que sí trae la base maestra y otro que no */
+SET @llave_m = (SELECT TOP (1) j.[key] FROM dat.BASE_MAESTRA_CUENTA m CROSS APPLY OPENJSON(m.DATOS) j
+                WHERE m.CLIENTE = '486' AND m.CODIGO = 'MAESTRA_TDC' AND NULLIF(LTRIM(j.value), N'') IS NOT NULL ORDER BY j.[key]);
+UPDATE cfg.VISTA_USUARIO SET ACTIVO = 1 WHERE CLIENTE = '486' AND VISTA = 'MIS';
+EXEC cfg.sp_vista_columna_alta 'MIS', N'CUENTA', 'DAT', N'CUENTA2';
+EXEC cfg.sp_vista_columna_alta 'MIS', N'DATO_MAESTRA', 'MAESTRA', @llave_m;
+INSERT INTO cfg.VISTA_COLUMNA (CLIENTE, VISTA, ORDEN, ENCABEZADO, ORIGEN, CAMPO) VALUES ('486', 'MIS', 99, N'NO_LLEGA', 'MAESTRA', N'NO_EXISTE_XYZ');
+SET @err = NULL;
+BEGIN TRY EXEC cfg.sp_vista_columna_alta 'MIS', N'MALA', 'DAT', N'NO_EXISTE'; END TRY BEGIN CATCH SET @err = CAST(ERROR_NUMBER() AS NVARCHAR(10)); END CATCH;
+EXEC pru.sp_igual N'VISTAS: alta de columna revisa que el campo exista en el DAT', N'50837', @err;
+
+EXEC ops.sp_vistas_usuario_refrescar @idv, 'VISTAS PRUEBA', @sin_ejecutar = 1, @sin_bajar = 1, @forzar = 1, @solo_prueba = 1;
+
+SET @rs = (SELECT STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY c.column_id) FROM sys.columns c WHERE c.object_id = OBJECT_ID('aem.DAT_486'));
+EXEC pru.sp_igual N'VISTAS: aem.DAT_486 con los encabezados del mapeo, en orden',
+     N'GRUPO,CUENTA,CLIENTE,FOLIO,NOMBRE1,PVS,SDO_ACT,ESTATUS_CYBER,FE_ASIG,ESTADO,ABANDONO_SR,ETIQUETA03,ETIQUETA01,ETIQUETA02,ETIQUETA50,ETIQUETA04,CAPITAL,SALDO01,SALDO02,SALDO03', @rs;
+SET @rs = CONCAT(
+    (SELECT COUNT(*) FROM aem.DAT_486), '|', (SELECT COUNT(*) FROM dat.DAT_486), '|',
+    (SELECT COUNT(*) FROM aem.DAT_486 WHERE ESTATUS_CYBER = N'CD' AND ABANDONO_SR = N'7' AND GRUPO = 1), '|',
+    (SELECT COUNT(*) FROM aem.DAT_486 WHERE DATALENGTH(NOMBRE1) <> DATALENGTH(LTRIM(RTRIM(NOMBRE1))) OR LEFT(NOMBRE1, 1) = ' '), '|',
+    (SELECT COUNT(*) FROM aem.DAT_486 a JOIN dat.DAT_486 d ON d.CUENTA2 = a.CUENTA WHERE ISNULL(a.SDO_ACT, -1) = ISNULL(d.SDO_ACT, -1) AND ISNULL(a.FE_ASIG, '19000101') = ISNULL(d.FE_ASIG, '19000101')), '|',
+    (SELECT COUNT(*) FROM dat.CYBER_DAT WHERE CLIENTE = '486'));
+SET @err = CONCAT((SELECT COUNT(*) FROM dat.DAT_486), '|', (SELECT COUNT(*) FROM dat.DAT_486), '|', (SELECT COUNT(*) FROM dat.DAT_486 WHERE CUENTA2 IS NOT NULL), '|0|',
+                  (SELECT COUNT(*) FROM dat.DAT_486 WHERE CUENTA2 IS NOT NULL), '|', (SELECT COUNT(*) FROM dat.DAT_486 WHERE CUENTA2 IS NOT NULL) + 1);
+EXEC pru.sp_igual N'VISTAS: todas las cuentas del DAT, datos de CYBER recortados, textos recortados, importes y fechas como en el DAT', @err, @rs;
+
+SET @rs = CONCAT(
+    (SELECT STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY c.column_id) FROM sys.columns c WHERE c.object_id = OBJECT_ID('mis.DAT_486')), '|',
+    CASE WHEN (SELECT COUNT(*) FROM mis.DAT_486 WHERE DATO_MAESTRA IS NOT NULL) > 0 THEN 1 ELSE 0 END, '|',
+    (SELECT COUNT(*) FROM mis.DAT_486 WHERE NO_LLEGA IS NOT NULL), '|',
+    (SELECT TOP (1) ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @idv AND PASO = 'VISTA USUARIO' AND MENSAJE LIKE N'MIS:%' ORDER BY ID DESC), '|',
+    CASE WHEN (SELECT TOP (1) MENSAJE FROM ops.BITACORA WHERE ID_CORRIDA = @idv AND PASO = 'VISTA USUARIO' AND MENSAJE LIKE N'MIS:%' ORDER BY ID DESC) LIKE N'%NO_LLEGA: la base maestra no trae el encabezado NO_EXISTE_XYZ%' THEN 1 ELSE 0 END, '|',
+    (SELECT TOP (1) ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @idv AND PASO = 'VISTAS PRUEBA' ORDER BY ID DESC), '|',
+    CASE WHEN OBJECT_ID('aem.RETIROS_HOY') IS NOT NULL THEN 1 ELSE 0 END, CASE WHEN OBJECT_ID('mis.RETIROS_HOY') IS NULL THEN 1 ELSE 0 END);
+EXEC pru.sp_igual N'VISTAS: MIS toma la base maestra; el encabezado que no existe queda vacío con aviso; RETIROS_HOY solo para AEM',
+     N'CUENTA,DATO_MAESTRA,NO_LLEGA|1|0|AVISO|1|AVISO|11', @rs;
+
+/* Retiros del día: lo mismo que dice el histórico (cuenta CYBER, retiros de ACT y ASIG de hoy, sin cierres por reasignación) */
+SET @rs = CONCAT((SELECT COUNT(*) FROM aem.RETIROS_HOY), '|',
+    (SELECT COUNT(DISTINCT h.CUENTA2) FROM dat.HISTORIA_FOLIO h JOIN ops.CORRIDA c ON c.ID_CORRIDA = h.ID_CORRIDA_BAJA
+     WHERE h.CLIENTE = '486' AND h.ESTATUS = 'B' AND c.PROCESO IN ('ACT', 'ASIG') AND c.FECHA_PROCESO = CAST(SYSDATETIME() AS DATE)
+       AND ISNULL(h.MOTIVO_BAJA, '') <> 'CIERRE POR REASIGNACION'), '|',
+    (SELECT STRING_AGG(c.name, ',') FROM sys.columns c WHERE c.object_id = OBJECT_ID('aem.RETIROS_HOY')));
+SET @err = CONCAT(SUBSTRING(@rs, 1, CHARINDEX('|', @rs) - 1), '|', SUBSTRING(@rs, 1, CHARINDEX('|', @rs) - 1), '|CUENTA');
+EXEC pru.sp_igual N'VISTAS: RETIROS_HOY = retiros de hoy del histórico, solo la cuenta', @err, @rs;
+
+/* Base maestra por cuenta: hay renglones y ninguno de una corrida revertida */
+SET @rs = CONCAT(CASE WHEN EXISTS (SELECT 1 FROM dat.BASE_MAESTRA_CUENTA WHERE CLIENTE = '486') THEN 1 ELSE 0 END, '|',
+    (SELECT COUNT(*) FROM dat.BASE_MAESTRA_CUENTA m JOIN ops.CORRIDA c ON c.ID_CORRIDA = m.ID_CORRIDA WHERE c.ESTATUS = 'REVERTIDA' OR c.REVERTIDA_AUTO = 1));
+EXEC pru.sp_igual N'VISTAS: último renglón de la base maestra por cuenta, sin corridas revertidas', N'1|0', @rs;
+
+/* Sin servidor vinculado: el store falla, la tabla se arma con lo último de CYBER y queda aviso */
+EXEC ops.sp_vistas_usuario_refrescar @idv, 'VISTAS PRUEBA 2', @forzar = 1, @solo_prueba = 1;
+SET @rs = CONCAT(
+    (SELECT TOP (1) ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @idv AND PASO = 'DAT CYBER' ORDER BY ID DESC), '|',
+    (SELECT TOP (1) ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @idv AND PASO = 'VISTAS PRUEBA 2' ORDER BY ID DESC), '|',
+    (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idv AND SCRIPT = 'DAT_CYBER' AND NUM = 1), '|',
+    CASE WHEN (SELECT COUNT(*) FROM aem.DAT_486 WHERE ESTATUS_CYBER = N'CD') = (SELECT COUNT(*) FROM dat.DAT_486 WHERE CUENTA2 IS NOT NULL) THEN 1 ELSE 0 END);
+EXEC pru.sp_igual N'VISTAS: si CYBER falla se arma con lo último que bajó, con aviso; el store va primero', N'ERROR|AVISO|EXECUTE RCVRY.PROC_DAT_486;|1', @rs;
+
+/* Sin el parámetro no hace nada; con el paso ya OK no repite */
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'VISTAS_USUARIO';
+EXEC ops.sp_vistas_usuario_refrescar @idv, 'VISTAS PRUEBA 3', @sin_ejecutar = 1, @sin_bajar = 1;
+EXEC pru.sp_igual N'VISTAS: VISTAS_USUARIO = 0 no actualiza', N'0',
+     (SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.BITACORA WHERE ID_CORRIDA = @idv AND PASO = 'VISTAS PRUEBA 3');
+GO
+
+/* Accesos: el login de AEM solo ve su esquema */
+DECLARE @rs NVARCHAR(4000), @a NVARCHAR(100) = N'-', @b NVARCHAR(100) = N'-', @c NVARCHAR(100) = N'-', @n INT;
+EXEC cfg.sp_vista_usuario_login 'AEM', 'pru_aem', N'Pru#Aem2026_x9';
+EXECUTE AS LOGIN = 'pru_aem';
+    BEGIN TRY SELECT @n = COUNT(*) FROM aem.DAT_486; SET @a = N'si'; END TRY BEGIN CATCH SET @a = N'no'; END CATCH;
+    BEGIN TRY SELECT @n = COUNT(*) FROM aem.RETIROS_HOY; SET @a += N'si'; END TRY BEGIN CATCH SET @a += N'no'; END CATCH;
+    BEGIN TRY SELECT @n = COUNT(*) FROM dat.DAT_486; SET @b = N'si'; END TRY BEGIN CATCH SET @b = N'no'; END CATCH;
+    BEGIN TRY SELECT @n = COUNT(*) FROM mis.DAT_486; SET @c = N'si'; END TRY BEGIN CATCH SET @c = N'no'; END CATCH;
+    BEGIN TRY SELECT @n = COUNT(*) FROM cfg.VISTA_COLUMNA; SET @c += N'si'; END TRY BEGIN CATCH SET @c += N'no'; END CATCH;
+REVERT;
+SET @rs = CONCAT(@a, '|', @b, '|', @c, '|', (SELECT LOGIN FROM cfg.VISTA_USUARIO WHERE CLIENTE = '486' AND VISTA = 'AEM'), '|',
+                 CASE WHEN IS_ROLEMEMBER('rol_aem', 'pru_aem') = 1 THEN 1 ELSE 0 END);
+EXEC pru.sp_igual N'VISTAS: el login de AEM ve aem.DAT_486 y aem.RETIROS_HOY, y no el DAT, MIS ni la configuración', N'sisi|no|nono|pru_aem|1', @rs;
+DROP USER pru_aem;
+DROP LOGIN pru_aem;
+UPDATE cfg.VISTA_USUARIO SET LOGIN = NULL WHERE CLIENTE = '486' AND VISTA = 'AEM';
+GO
+
+/* ---------------------------------------------------------------------
    La semilla conserva lo que cambió el equipo (layout, catálogos, tolerancias).
    Va al final porque la semilla regresa los parámetros a los de fábrica. :r es de sqlcmd (CI).
    --------------------------------------------------------------------- */
@@ -1405,7 +1500,11 @@ DECLARE @rs NVARCHAR(4000) = CONCAT(
     (SELECT VALOR_DESTINO FROM cfg.CATALOGO WHERE CLIENTE = '486' AND CATALOGO = 'ESTATUS_CONSUMO' AND VALOR_ORIGEN = N'VENCIDA'), '|',
     ISNULL(CAST(SESSION_CONTEXT(N'SEMILLA') AS NVARCHAR(10)), N'(nulo)'));
 EXEC pru.sp_igual N'SEMILLA: conserva layout, carpeta, catálogos y tolerancias del equipo; lo no editado queda de fábrica',
-     N'MONTO PLAZO NUEVO:1|MONTO A CUBRIR PLAZOS PAGO LIQUIDACION|/datos/asig/|7.00|EQUIPO|VENC|(nulo)', @rs;
+     N'MONTO PLAZO NUEVO:1|MONTO A CUBRIR PLAZOS PA LIQUIDACION|/datos/asig/|7.00|EQUIPO|VENC|(nulo)', @rs;
+EXEC pru.sp_igual N'SEMILLA: conserva las vistas de usuarios que cambió el equipo (MIS activa con sus columnas, AEM con 20)',
+     N'1|3|20', CONCAT((SELECT CAST(ACTIVO AS INT) FROM cfg.VISTA_USUARIO WHERE CLIENTE = '486' AND VISTA = 'MIS'), '|',
+                       (SELECT COUNT(*) FROM cfg.VISTA_COLUMNA WHERE CLIENTE = '486' AND VISTA = 'MIS'), '|',
+                       (SELECT COUNT(*) FROM cfg.VISTA_COLUMNA WHERE CLIENTE = '486' AND VISTA = 'AEM')));
 GO
 
 /* ---------------------------------------------------------------------

@@ -117,6 +117,10 @@ BEGIN
     FROM dat.BASE_RECIBIDA_ARCHIVO a
     WHERE a.CLIENTE = @cliente AND a.CODIGO IN (SELECT CODIGO FROM #bases_rev)
       AND a.ID_CORRIDA = (SELECT MAX(x.ID_CORRIDA) FROM dat.BASE_RECIBIDA_ARCHIVO x WHERE x.CLIENTE = @cliente AND x.CODIGO = a.CODIGO);
+    /* Último renglón de la base maestra por cuenta: regresa el anterior (o se borra si la cuenta llegó en esta corrida) */
+    DELETE FROM dat.BASE_MAESTRA_CUENTA WHERE CLIENTE = @cliente AND ID_CORRIDA = @id_corrida AND ID_CORRIDA_ANT IS NULL;
+    UPDATE dat.BASE_MAESTRA_CUENTA SET ID_CORRIDA = ID_CORRIDA_ANT, DATOS = DATOS_ANT, ID_CORRIDA_ANT = NULL, DATOS_ANT = NULL
+    WHERE CLIENTE = @cliente AND ID_CORRIDA = @id_corrida;
     UPDATE ops.DEVOLUCION SET PROCESADA = 0 WHERE ID_CORRIDA = @id_corrida;
 
     IF @automatico = 1

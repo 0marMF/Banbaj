@@ -440,3 +440,60 @@ BEGIN
     FROM cfg.VALIDACION_DATO v JOIN inserted i ON i.ID = v.ID;
 END;
 GO
+
+/* =====================================================================
+   Vistas de usuarios (18/11): qué datos ve cada usuario externo (AEM, MIS…).
+   Las edita el equipo de asignaciones; ops.sp_vistas_usuario_armar arma con
+   ellas la tabla <ESQUEMA>.DAT_486 de cada usuario en la actualización y en
+   la asignación. La semilla solo agrega lo que falta.
+   ===================================================================== */
+IF OBJECT_ID('cfg.VISTA_USUARIO') IS NULL
+CREATE TABLE cfg.VISTA_USUARIO (
+    CLIENTE      VARCHAR(10)    NOT NULL,
+    VISTA        VARCHAR(30)    NOT NULL,           -- AEM, MIS…; también es el esquema (en minúsculas)
+    LOGIN        SYSNAME        NULL,               -- login de SQL Server (cfg.sp_vista_usuario_login)
+    VER_RETIROS  BIT            NOT NULL CONSTRAINT DF_VISTA_USUARIO_RET DEFAULT 0,   -- 1 = también ve <esquema>.RETIROS_HOY
+    ACTIVO       BIT            NOT NULL CONSTRAINT DF_VISTA_USUARIO_ACT DEFAULT 1,   -- 0 = se borra su tabla y deja de ver datos
+    DESCRIPCION  NVARCHAR(400)  NULL,
+    USUARIO      SYSNAME        NOT NULL CONSTRAINT DF_VISTA_USUARIO_USR DEFAULT SUSER_SNAME(),
+    FE_MOD       DATETIME2(0)   NOT NULL CONSTRAINT DF_VISTA_USUARIO_FE DEFAULT SYSDATETIME(),
+    CONSTRAINT PK_VISTA_USUARIO PRIMARY KEY (CLIENTE, VISTA),
+    CONSTRAINT CK_VISTA_USUARIO_NOMBRE CHECK (VISTA NOT LIKE '%[^A-Za-z0-9_]%' AND VISTA LIKE '[A-Za-z]%')
+);
+GO
+IF OBJECT_ID('cfg.VISTA_COLUMNA') IS NULL
+CREATE TABLE cfg.VISTA_COLUMNA (
+    ID           INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_VISTA_COLUMNA PRIMARY KEY,
+    CLIENTE      VARCHAR(10)    NOT NULL,
+    VISTA        VARCHAR(30)    NOT NULL,
+    ORDEN        INT            NOT NULL,
+    ENCABEZADO   NVARCHAR(128)  NOT NULL,           -- nombre de la columna tal como lo debe ver el usuario
+    ORIGEN       VARCHAR(10)    NOT NULL,           -- DAT | CYBER | MAESTRA | CONSTANTE
+    CAMPO        NVARCHAR(200)  NOT NULL,           -- columna del DAT, columna de RPT_DAT_486_1, encabezado de la base maestra o valor fijo
+    ACTIVO       BIT            NOT NULL CONSTRAINT DF_VISTA_COLUMNA_ACT DEFAULT 1,
+    DESCRIPCION  NVARCHAR(400)  NULL,
+    USUARIO      SYSNAME        NOT NULL CONSTRAINT DF_VISTA_COLUMNA_USR DEFAULT SUSER_SNAME(),
+    FE_MOD       DATETIME2(0)   NOT NULL CONSTRAINT DF_VISTA_COLUMNA_FE DEFAULT SYSDATETIME(),
+    CONSTRAINT UX_VISTA_COLUMNA UNIQUE (CLIENTE, VISTA, ENCABEZADO),
+    CONSTRAINT CK_VISTA_COLUMNA_ORIGEN CHECK (ORIGEN IN ('DAT','CYBER','MAESTRA','CONSTANTE'))
+);
+GO
+CREATE OR ALTER TRIGGER cfg.tr_VISTA_USUARIO_EDICION ON cfg.VISTA_USUARIO AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF TRY_CONVERT(INT, SESSION_CONTEXT(N'SEMILLA')) = 1 RETURN;
+    UPDATE v SET USUARIO = SUSER_SNAME(), FE_MOD = SYSDATETIME()
+    FROM cfg.VISTA_USUARIO v JOIN inserted i ON i.CLIENTE = v.CLIENTE AND i.VISTA = v.VISTA;
+END;
+GO
+CREATE OR ALTER TRIGGER cfg.tr_VISTA_COLUMNA_EDICION ON cfg.VISTA_COLUMNA AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF TRY_CONVERT(INT, SESSION_CONTEXT(N'SEMILLA')) = 1 RETURN;
+    IF NOT (UPDATE(ORDEN) OR UPDATE(ENCABEZADO) OR UPDATE(ORIGEN) OR UPDATE(CAMPO) OR UPDATE(ACTIVO)) RETURN;
+    UPDATE v SET USUARIO = SUSER_SNAME(), FE_MOD = SYSDATETIME()
+    FROM cfg.VISTA_COLUMNA v JOIN inserted i ON i.ID = v.ID;
+END;
+GO

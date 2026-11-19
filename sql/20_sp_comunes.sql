@@ -343,6 +343,27 @@ BEGIN
     DECLARE @leidos INT;
     EXEC sp_executesql @sql, N'@id_corrida INT, @fila INT, @n INT OUTPUT', @id_corrida = @id_corrida, @fila = @fila_enc, @n = @leidos OUTPUT;
 
+    /* 8b. Último renglón de la base maestra por cuenta (vistas de usuarios, 18/11): llave = cfg.ARCHIVO.LLAVE_DAT */
+    DECLARE @llave_dat SYSNAME = (SELECT LLAVE_DAT FROM cfg.ARCHIVO WHERE ID_ARCHIVO = @id_archivo AND GUARDAR_COMPLETO = 1);
+    IF @llave_dat IS NOT NULL AND EXISTS (SELECT 1 FROM #map WHERE CAMPO = @llave_dat AND POS IS NOT NULL)
+    BEGIN
+        SET @sql = N';WITH n AS (SELECT CAST(LTRIM(RTRIM(CAST(e.' + QUOTENAME(@llave_dat) + N' AS NVARCHAR(60)))) AS NVARCHAR(60)) AS LLAVE, b.DATOS,
+                          ROW_NUMBER() OVER (PARTITION BY LTRIM(RTRIM(CAST(e.' + QUOTENAME(@llave_dat) + N' AS NVARCHAR(60)))) ORDER BY e.FILA DESC) AS RN
+                     FROM ' + @dest_q + N' e
+                     JOIN dat.BASE_RECIBIDA b ON b.ID_CORRIDA = @id_corrida AND b.CODIGO = @codigo AND b.FILA = e.FILA
+                     WHERE NULLIF(LTRIM(RTRIM(CAST(e.' + QUOTENAME(@llave_dat) + N' AS NVARCHAR(60)))), N'''') IS NOT NULL)
+            MERGE dat.BASE_MAESTRA_CUENTA AS t
+            USING (SELECT LLAVE, DATOS FROM n WHERE RN = 1) AS s
+               ON t.CLIENTE = @cliente AND t.CODIGO = @codigo AND t.LLAVE = s.LLAVE
+            WHEN MATCHED AND t.ID_CORRIDA <> @id_corrida THEN
+                UPDATE SET ID_CORRIDA_ANT = t.ID_CORRIDA, DATOS_ANT = t.DATOS, ID_CORRIDA = @id_corrida, DATOS = s.DATOS, FE_CARGA = SYSDATETIME()
+            WHEN MATCHED THEN
+                UPDATE SET DATOS = s.DATOS, FE_CARGA = SYSDATETIME()
+            WHEN NOT MATCHED THEN
+                INSERT (CLIENTE, CODIGO, LLAVE, ID_CORRIDA, DATOS) VALUES (@cliente, @codigo, s.LLAVE, @id_corrida, s.DATOS);';
+        EXEC sp_executesql @sql, N'@id_corrida INT, @codigo VARCHAR(50), @cliente VARCHAR(10)', @id_corrida = @id_corrida, @codigo = @codigo, @cliente = @cliente;
+    END;
+
     /* 9. Rechazos -> ops.RECHAZO (con el renglón crudo en JSON) y se quitan del destino */
     SET @sql = N'INSERT INTO ops.RECHAZO (ID_CORRIDA, ORIGEN, FILA, MOTIVO, DATOS) '
              + N'SELECT d.ID_CORRIDA, @codigo, d.FILA, d.MOTIVO_RECHAZO, '

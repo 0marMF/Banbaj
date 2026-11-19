@@ -486,6 +486,14 @@ BEGIN
         SET @acc = ISNULL(cfg.fn_param(@cliente, 'ARCHIVOS_DESPUES_SALDOS'), N'GESCAR_NVA,GESCAR_REA');
         EXEC ops.sp_exportar_auto @id, @solo = @acc;
         SET @res += N'SALDOS OK · ';
+        /* Con los saldos arriba las cuentas nuevas ya existen en CYBER: se vuelven a bajar ESTATUS, ABAN_SR… para las vistas de usuarios */
+        BEGIN TRY
+            EXEC ops.sp_vistas_usuario_refrescar @id, 'VISTAS USUARIO SALDOS';
+        END TRY
+        BEGIN CATCH
+            SET @err = ERROR_MESSAGE();
+            EXEC ops.sp_log @id, 'VISTAS USUARIO SALDOS', 'ERROR', NULL, @err;
+        END CATCH;
     END;
     /* 2. Depuración de teléfonos (con los saldos arriba; si la remesa cuadra, sale el aviso para subir el SCBTEL) */
     IF @hecho_s = 1 AND @hecho_t = 0

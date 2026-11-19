@@ -139,6 +139,14 @@ BEGIN
     END
     ELSE
         EXEC ops.sp_exportar_auto @id_corrida;
+    /* Vistas de usuarios: las cuentas nuevas salen sin datos de CYBER hasta que suben los saldos (se refresca otra vez en el arribo) */
+    BEGIN TRY
+        EXEC ops.sp_vistas_usuario_refrescar @id_corrida;
+    END TRY
+    BEGIN CATCH
+        SET @msg = ERROR_MESSAGE();
+        EXEC ops.sp_log @id_corrida, 'VISTAS USUARIO', 'ERROR', NULL, @msg;
+    END CATCH;
 END;
 GO
 
@@ -210,6 +218,14 @@ BEGIN
             EXEC ops.sp_log @id_corrida, 'ACT CYBER', 'ERROR', NULL, @msg;
         END CATCH;
     END;
+    /* Vistas de usuarios (AEM, MIS): PROC_DAT_486 en CYBER, bajada y tablas de cada usuario (VISTAS_USUARIO) */
+    BEGIN TRY
+        EXEC ops.sp_vistas_usuario_refrescar @id_corrida;
+    END TRY
+    BEGIN CATCH
+        SET @msg = ERROR_MESSAGE();
+        EXEC ops.sp_log @id_corrida, 'VISTAS USUARIO', 'ERROR', NULL, @msg;
+    END CATCH;
 END;
 GO
 
