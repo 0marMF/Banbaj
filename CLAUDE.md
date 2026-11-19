@@ -16,7 +16,7 @@ Antes de cambiar un proceso, lee su diagrama en `docs/flujo/` (índice en `docs/
 | Carpeta / archivo | Qué es |
 |---|---|
 | `sql/01…90_*.sql` | Esquema y procedimientos. Se instalan en orden numérico (`for f in sql/*.sql`) |
-| `sql/90_semilla_486.sql` | **Generado** por `tools/generar_sql_486.py`: parámetros, archivos de entrada y salida, layouts, plantillas y listas de correo. No se edita a mano |
+| `sql/90_semilla_486.sql` | **Generado** por `tools/generar_sql_486.py`: parámetros, archivos de entrada y salida, layouts, plantillas, listas de correo y vistas de usuarios. No se edita a mano |
 | `sql/instalacion/01…04` | Instalación en un servidor nuevo: Database Mail y opciones, job, parámetros y credenciales, accesos |
 | `cyber/486/oracle/` | Procedimientos de CYBER (Oracle): versión actual y versión propuesta |
 | `cyber/486/EXPORTAR_MIGRACION.prg` | Exporta los DBF de FoxPro a CSV (cp1252 con CRLF: edítalo con `newline=''`) |
@@ -40,7 +40,8 @@ Antes de cambiar un proceso, lee su diagrama en `docs/flujo/` (índice en `docs/
 | `70_sp_procesos_manuales`, `72_sp_seguimiento` | Etiquetado, blanqueo, exclusiones, avisos, marcas de tiempo, cuadre |
 | `74_sp_cyber`, `76_sp_arribo_cyber` | Servidor vinculado, bajadas de CYBER, ejecución en CYBER y arribo automático |
 | `77_sp_retiro_automatico`, `78_sp_automatico` | Retiro automático, exportación, scripts ACT en CYBER, blanqueo, confirmación, cuadre, aviso de archivos |
-| `80_sp_migracion` | `ops.sp_migrar_486` y `ops.sp_mig_leer` |
+| `79_sp_vistas_usuario` | `ops.sp_vistas_usuario_refrescar`, `ops.sp_dat_cyber_bajar`, `ops.sp_vistas_usuario_armar`, `cfg.sp_vista_columna_alta`, `cfg.sp_vista_usuario_login` |
+| `80_sp_migracion` | `ops.sp_migrar_486`, `ops.sp_mig_leer` y `ops.sp_mig_diagnostico` |
 
 ## Convenciones
 
@@ -53,7 +54,7 @@ Antes de cambiar un proceso, lee su diagrama en `docs/flujo/` (índice en `docs/
 - **Todo lo configurable es un parámetro:** se lee con `cfg.fn_param('486', 'CLAVE')`. Para agregar uno, se agrega en `PARAMETROS` de `tools/generar_sql_486.py`, se corre `python3 tools/generar_sql_486.py` y se documenta en el manual.
 - **Correos:** plantilla y lista en `PLANTILLAS` de `tools/generar_sql_486.py`; se mandan con `mail.sp_enviar @plantilla, @id_corrida, @valores (JSON)`. Las llaves `HTML_*` van sin escapar (ya armadas con `mail.fn_tabla_html`).
 - **Escribir en CYBER:** siempre con `ops.sp_cyber_ejecutar @id, '<SCRIPT>'`, que toma las líneas de `ops.CYBER_SCRIPT` (las mismas que se escriben en `cyber\*.sql`) y las manda en bloques PL/SQL por el servidor vinculado. No abras otra conexión.
-- **Errores:** `THROW 50xxx`, con rango por archivo (20: 50010-50040, 22: 50041-50049, 30: 50100-50110, 35: 50300s, 50: 50200s, 70: 50600s, 72: 50700s, 74/76/77/78: 50760-50823, 52: 50850s, 80: 50900s). Antes de usar un número, búscalo con `grep -rn "5xxxx" sql/`.
+- **Errores:** `THROW 50xxx`, con rango por archivo (20: 50010-50040, 22: 50041-50049, 30: 50100-50110, 35: 50300s, 50: 50200s, 70: 50600s, 72: 50700s, 74/76/77/78: 50760-50823, 79: 50830-50839, 52: 50850s, 80: 50900s). Antes de usar un número, búscalo con `grep -rn "5xxxx" sql/`.
 - `EXEC proc` no acepta expresiones como parámetro (`CONCAT`, subconsultas): asigna primero a una variable. Un agregado no puede contener una subconsulta (`SUM(CASE WHEN EXISTS…)`): usa `LEFT JOIN`.
 
 ## Probar
@@ -76,8 +77,9 @@ Cada cambio de comportamiento lleva su prueba en `tests/pruebas.sql` (`INSERT IN
 ## Estado actual (17/11/2026)
 
 - **Proceso autónomo:** el job corre la actualización y la asignación, escribe los archivos, avisa a asignaciones (`ARCHIVOS_LISTOS_486`), aplica las devoluciones con tope de 50 % por segmento, ejecuta en CYBER los scripts de la actualización, detecta cuándo se subieron los saldos (cuentas con `DMHOSTUP` del día = SCBSDOS, la validación del equipo) y entonces escribe los gescar de nuevas y reasignadas y corre la depuración de teléfonos (la remesa debe tener los mismos renglones que nuestro archivo), escribe el SCBTEL y corre la de correos; al detectar el SCBTEL escribe el gescar sin teléfono (orden del 17/11, diagrama 05), hace el blanqueo de status, manda la confirmación y cuadra los pagos.
-- **Sigue a mano:** subir los planos de ancho fijo con el cargador de CYBER (SCBSDOS, SCBTEL, SCBPAG, gescar), copiar `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` (el servidor no tiene acceso; `RUTA_DEVOLUCION_CYBER` vacío) y atender el correo de hallazgos.
+- **Sigue a mano:** subir los planos de ancho fijo con el cargador de CYBER (SCBSDOS, SCBTEL, SCBPAG, gescar), copiar `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` (el servidor no tiene acceso; `RUTA_DEVOLUCION_CYBER` vacío) (desde el 18/11 AEM toma esas cuentas de `aem.RETIROS_HOY`) y atender el correo de hallazgos.
 - Cada parte automática se apaga con su parámetro: `ARRIBO_AUTOMATICO`, `ACT_CYBER_AUTOMATICO`, `RETIRO_AUTOMATICO`, `RETIRO_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO`, `CONFIRMACION_AUTOMATICA`, `CUADRE_AUTOMATICO`, `EXPORTAR_AUTOMATICO`, `AVISO_ARCHIVOS`.
 - Entradas: la actualización en `.txt` y la asignación en `.csv` (`cfg.ARCHIVO.PATRON_NOMBRE`, desde `ARCHIVOS` en `tools/generar_sql_486.py`).
 - **Validación de la entrada (17/11):** antes de tocar el DAT, cada archivo se revisa: layout (que estén todos los campos de `cfg.ARCHIVO_COLUMNA`) y datos (`cfg.VALIDACION_DATO`). Si algo no pasa, `VALIDACION_ENTRADA_486` al equipo de asignaciones, corrida CANCELADA (50025) y se vuelve a correr a mano. Diagrama: `docs/flujo/09_validacion_entrada.md`. Parámetros `VALIDAR_LAYOUT` y `VALIDAR_DATOS`.
+- **Usuarios externos (18/11):** AEM y MIS consultan su esquema (`aem.DAT_486`, `aem.RETIROS_HOY`, `mis.DAT_486`) con login de SQL Server. Las columnas las configura el equipo en `cfg.VISTA_COLUMNA` (DAT, CYBER, MAESTRA, CONSTANTE); se refrescan en la actualización, la asignación y al subir los saldos, siempre después de ejecutar `RCVRY.PROC_DAT_486`. Diagrama: `docs/flujo/10_vistas_usuario.md`. Parámetro `VISTAS_USUARIO`.
 - Pendientes con el equipo: `docs/FALTANTES_486.md`.

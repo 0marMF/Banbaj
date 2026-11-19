@@ -74,6 +74,45 @@ SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486'
 
 Detalle del arribo: *Flujo y diagramas*, sección 05.
 
+## Usuarios AEM y MIS (18/11)
+
+Si ya tienes instalada la versión del 17/11 en la noche, solo hay que correr esto.
+
+1. **Apaga el job y respalda la base** (paso 0). **Guarda tus parámetros** (paso 1).
+2. **Corre en este orden:**
+   - `sql/01_esquemas_tablas.sql` y `sql/02_catalogos.sql`: tablas nuevas, sin tocar las existentes;
+   - `sql/20_sp_comunes.sql`: guarda el último renglón de la base maestra por cuenta;
+   - `sql/35_sp_respaldo.sql`, `sql/60_sp_orquestadores.sql` y `sql/76_sp_arribo_cyber.sql`;
+   - `sql/79_sp_vistas_usuario.sql` (nuevo);
+   - `sql/90_semilla_486.sql`.
+3. **Repón tus parámetros** (paso 3).
+4. **Arma las tablas por primera vez y crea el login de AEM:**
+
+```sql
+USE [BNABAJ_486];
+EXEC ops.sp_vistas_usuario_refrescar @id_corrida = <última corrida OK>, @forzar = 1;     -- PROC_DAT_486, bajada y tablas
+SELECT TOP (10) * FROM aem.DAT_486;
+SELECT COUNT(*) AS RETIROS_HOY FROM aem.RETIROS_HOY;
+EXEC cfg.sp_vista_usuario_login 'AEM', 'aem_banbaj', N'<contraseña>';                       -- la contraseña no se guarda
+```
+
+   La columna MAESTRA (para MIS) empieza a llenarse con la siguiente asignación, que es cuando se guarda la base maestra por cuenta.
+
+5. **MIS:** el equipo de asignaciones agrega sus columnas y lo activa; después creas su login:
+
+```sql
+USE [BNABAJ_486];
+EXEC cfg.sp_vista_columna_alta 'MIS', N'CUENTA', 'DAT', N'CUENTA2';
+EXEC cfg.sp_vista_columna_alta 'MIS', N'<ENCABEZADO>', 'MAESTRA', N'<encabezado de la base maestra>';
+UPDATE cfg.VISTA_USUARIO SET ACTIVO = 1 WHERE CLIENTE = '486' AND VISTA = 'MIS';
+EXEC ops.sp_vistas_usuario_armar;
+EXEC cfg.sp_vista_usuario_login 'MIS', 'mis_banbaj', N'<contraseña>';
+```
+
+6. **Avisa a AEM** que ya no se deja `MX_G1MCT_DVBJIG_*` en Cyber_00: las cuentas retiradas del día están en `aem.RETIROS_HOY`.
+
+Detalle: *Flujo y diagramas*, sección 10.
+
 ## 0. Antes de empezar
 
 1. Baja la última versión de `main` del repositorio (o descarga el ZIP).

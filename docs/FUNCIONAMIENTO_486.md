@@ -229,6 +229,7 @@ El retiro por solicitud también se cierra solo al confirmarlo. Lo que ya se esc
 | Retiro detenido: supera el tope | La devolución de un segmento supera el 50 % de sus cuentas en el DAT |
 | Retiro con pasos pendientes | Falló escribir los archivos o el ZIP o el correo, el retiro en CYBER o la copia de la devolución |
 | Arribo de correos / teléfonos a CYBER con error | CYBER rechazó el arribo automático |
+| Vistas de usuarios sin actualizar / con avisos | Falló `PROC_DAT_486` o la bajada de CYBER (los usuarios se quedan con lo último que bajó), o el equipo pidió en `cfg.VISTA_COLUMNA` un campo que no existe |
 | Actualización en CYBER con error | Oracle rechazó un script `ACT_*` |
 | Pagos que no subieron a CYBER | A la hora límite (17:00) hay pagos del SCBPAG que no están en CYBER |
 | Blanqueo de status con error | Falló bajar los status o ejecutar el blanqueo |
@@ -272,6 +273,22 @@ Todas viven en `cfg.EXCLUSION`, con tipo, valor, requerimiento (OS), fecha, si e
 
 - **Etiquetado del DAT:** `ops.sp_etiquetar_campo` cambia cualquier campo de etiqueta del DAT con un CSV FOLIO,ETIQUETA (o por cuenta). Acepta el nombre de columna de Operación. Genera su propio SCBSDOS.
 - **Etiquetas por cuenta** (`cfg.ETIQUETA`): ETI, DM1, TOP y STATUS, que salen en campos del SCBSDOS (DMP2, DMP1, U1EXT2, U1USO4).
+
+## Usuarios externos: AEM y MIS (18/11)
+
+AEM y MIS ya no reciben archivos: consultan directo su esquema en SQL Server, con su login.
+
+- **Qué ven:** `aem.DAT_486` con el mapeo de AEM, más `aem.RETIROS_HOY` (las cuentas retiradas hoy en la actualización y en la asignación, que sustituye al archivo `MX_G1MCT_DVBJIG_*`), y `mis.DAT_486`.
+- **Quién decide las columnas:** el equipo de asignaciones, en `cfg.VISTA_COLUMNA`. Cada columna sale del DAT, de CYBER, de la base maestra o es un valor fijo. Los textos van recortados.
+- **Cuándo se actualiza:**
+  - al terminar OK la actualización (después de los scripts de saldos en CYBER);
+  - al terminar OK la asignación;
+  - otra vez cuando suben los saldos, para que las cuentas nuevas traigan ESTATUS y ABAN_SR de CYBER.
+
+  Antes de bajar los datos de CYBER se ejecuta siempre `RCVRY.PROC_DAT_486`.
+- **Si algo falla:** la corrida no cambia de estatus; los usuarios se quedan con lo último y llega un hallazgo.
+
+Detalle: *Flujo y diagramas*, sección 10. Se apaga con `VISTAS_USUARIO = 0`.
 
 # Archivos y scripts que se generan
 

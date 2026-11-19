@@ -176,6 +176,8 @@ SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clav
 | ARRIBO\_AUTOMATICO | 1 | Al detectar los saldos (SCBSDOS) el job escribe los gescar de nuevas y reasignadas y corre la depuración de teléfonos, el SCBTEL y la de correos; al detectar el SCBTEL, el gescar sin teléfono (0 = a mano) |
 | ARCHIVOS\_DESPUES\_SALDOS | GESCAR\_NVA,GESCAR\_REA | Archivos que no se escriben ni se avisan hasta que suben los saldos |
 | ARCHIVOS\_DESPUES\_DEPURACION\_TEL | SCBTEL | Archivos que no se escriben ni se avisan hasta que la depuración de teléfonos queda OK |
+| VISTAS\_USUARIO | 1 | Al terminar la actualización y la asignación, y cuando suben los saldos: ejecuta `RCVRY.PROC_DAT_486`, baja sus columnas y arma la tabla de cada usuario (AEM, MIS). 0 = no se actualizan |
+| DAT\_CYBER\_STORE · DAT\_CYBER\_TABLA · DAT\_CYBER\_LLAVE | RCVRY.PROC\_DAT\_486 · RCVRY.RPT\_DAT\_486\_1 · CUENTA | Store que se ejecuta, tabla de donde se bajan las columnas `CYBER` de las vistas y su columna de cuenta |
 | CYBER\_HOSTUP\_EXPR | to\_char(DMHOSTUP, 'YYYYMMDD') | Validación de saldos del equipo: fecha de `DMHOSTUP` con la que se cuentan las cuentas activas del 486. Si `DMHOSTUP` no es DATE, ajustarla; vacío = se detecta por lo pendiente |
 | ARRIBO\_SDOS\_MIN\_PCT | 100 | % de las cuentas del SCBSDOS que deben tener `DMHOSTUP` del día (100 = que el número coincida) |
 | ARRIBO\_MIN\_PCT | 95 | Porcentaje de lo pendiente al terminar la asignación que ya debe estar en CYBER para dar por subido el SCBSDOS o el SCBTEL |
@@ -580,6 +582,25 @@ Los procesos que generan archivos los escriben solos al terminar (también el et
 
 > Todos los procesos que cambian datos tienen modo de revisión (`@confirmar = 0` o `@solo_mostrar = 1`). Úsalo primero.
 
+## Usuarios externos (AEM, MIS)
+
+Desde el 18/11, AEM y MIS consultan en SQL Server lo que les toca, cada uno con su login de SQL Server y solo en su esquema:
+
+- `aem.DAT_486` y `aem.RETIROS_HOY`: las cuentas retiradas hoy, en lugar del archivo `MX_G1MCT_DVBJIG_*`.
+- `mis.DAT_486`.
+
+El equipo de asignaciones decide qué columnas ve cada uno en `cfg.VISTA_COLUMNA`: del DAT, de CYBER (`RCVRY.RPT_DAT_486_1`, después de correr `RCVRY.PROC_DAT_486`), de la base maestra o un valor fijo. Se actualizan solas en la actualización, en la asignación y cuando suben los saldos.
+
+Crear el login (la contraseña no se guarda):
+
+```sql
+USE [BNABAJ_486];
+EXEC cfg.sp_vista_usuario_login 'AEM', 'aem_banbaj', N'<contraseña>';
+EXEC cfg.sp_vista_usuario_login 'MIS', 'mis_banbaj', N'<contraseña>';   -- después de que el equipo active MIS y le ponga columnas
+```
+
+Detalle, ejemplos para agregar columnas y qué pasa si algo falla: *Flujo y diagramas*, sección 10.
+
 ## Respaldo y retroceso
 
 ### Respaldo por corrida
@@ -702,6 +723,7 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 
 | Error | Qué significa | Qué hacer |
 | --- | --- | --- |
+| 50830-50839 | Vistas de usuarios: columna, vista o login inválido, o `RPT_DAT_486_1` llegó vacía | Ver *Flujo y diagramas*, sección 10. Si CYBER falló, las tablas de los usuarios se quedan con lo último que bajó |
 | 50823 | No existe el servidor vinculado CYBER | Capturar la credencial CYBER\_ORACLE y correr `EXEC cfg.sp_cyber_conectar;` |
 | 50801 | No hay credencial para ese sistema | `INSERT INTO cfg.CAPTURA_CREDENCIAL …` |
 | 50802 | La contraseña guardada no se puede descifrar | Pasa si la base se restauró en otro servidor. Volver a capturar la credencial |
