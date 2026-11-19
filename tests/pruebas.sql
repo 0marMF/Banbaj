@@ -1455,8 +1455,8 @@ EXEC pru.sp_igual N'VISTAS: si CYBER falla se arma con lo último que bajó, con
 /* Sin el parámetro no hace nada; con el paso ya OK no repite */
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'VISTAS_USUARIO';
 EXEC ops.sp_vistas_usuario_refrescar @idv, 'VISTAS PRUEBA 3', @sin_ejecutar = 1, @sin_bajar = 1;
-EXEC pru.sp_igual N'VISTAS: VISTAS_USUARIO = 0 no actualiza', N'0',
-     (SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.BITACORA WHERE ID_CORRIDA = @idv AND PASO = 'VISTAS PRUEBA 3');
+SET @rs = (SELECT CAST(COUNT(*) AS NVARCHAR(10)) FROM ops.BITACORA WHERE ID_CORRIDA = @idv AND PASO = 'VISTAS PRUEBA 3');
+EXEC pru.sp_igual N'VISTAS: VISTAS_USUARIO = 0 no actualiza', N'0', @rs;
 GO
 
 /* Accesos: el login de AEM solo ve su esquema */
@@ -1502,10 +1502,10 @@ DECLARE @rs NVARCHAR(4000) = CONCAT(
     ISNULL(CAST(SESSION_CONTEXT(N'SEMILLA') AS NVARCHAR(10)), N'(nulo)'));
 EXEC pru.sp_igual N'SEMILLA: conserva layout, carpeta, catálogos y tolerancias del equipo; lo no editado queda de fábrica',
      N'MONTO PLAZO NUEVO:1|MONTO A CUBRIR PLAZOS PA LIQUIDACION|/datos/asig/|7.00|EQUIPO|VENC|(nulo)', @rs;
-EXEC pru.sp_igual N'SEMILLA: conserva las vistas de usuarios que cambió el equipo (MIS activa con sus columnas, AEM con 20)',
-     N'1|3|20', CONCAT((SELECT CAST(ACTIVO AS INT) FROM cfg.VISTA_USUARIO WHERE CLIENTE = '486' AND VISTA = 'MIS'), '|',
-                       (SELECT COUNT(*) FROM cfg.VISTA_COLUMNA WHERE CLIENTE = '486' AND VISTA = 'MIS'), '|',
-                       (SELECT COUNT(*) FROM cfg.VISTA_COLUMNA WHERE CLIENTE = '486' AND VISTA = 'AEM')));
+SET @rs = CONCAT((SELECT CAST(ACTIVO AS INT) FROM cfg.VISTA_USUARIO WHERE CLIENTE = '486' AND VISTA = 'MIS'), '|',
+                 (SELECT COUNT(*) FROM cfg.VISTA_COLUMNA WHERE CLIENTE = '486' AND VISTA = 'MIS'), '|',
+                 (SELECT COUNT(*) FROM cfg.VISTA_COLUMNA WHERE CLIENTE = '486' AND VISTA = 'AEM'));
+EXEC pru.sp_igual N'SEMILLA: conserva las vistas de usuarios que cambió el equipo (MIS activa con sus columnas, AEM con 20)', N'1|3|20', @rs;
 GO
 
 /* ---------------------------------------------------------------------
