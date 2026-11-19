@@ -240,7 +240,8 @@ BEGIN
     SET @msg = CONCAT(N'Teléfonos nuevos (no existían en PHONE): ', @nuevos, N' de ', (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @id_corrida),
                       N' · el SCBTEL lleva solo esos', CASE WHEN @nuevos = 0 THEN N' (no hay SCBTEL que subir)' ELSE N'' END,
                       CASE WHEN @sin > 0 THEN CONCAT(N' · ', @sin, N' nuevos de CYBER que no están en nuestro archivo') ELSE N'' END);
-    EXEC ops.sp_log @id_corrida, 'TEL NUEVOS', CASE WHEN @sin > 0 THEN 'AVISO' ELSE 'OK' END, @nuevos, @msg;
+    DECLARE @est VARCHAR(10) = CASE WHEN @sin > 0 THEN 'AVISO' ELSE 'OK' END;
+    EXEC ops.sp_log @id_corrida, 'TEL NUEVOS', @est, @nuevos, @msg;
 END;
 GO
 
