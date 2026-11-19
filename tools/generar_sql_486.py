@@ -605,7 +605,9 @@ PARAMETROS = [
     ("CYBER_LINKED_SERVER", "CYBER", "Servidor vinculado a Oracle (cfg.sp_cyber_conectar / ops.sp_bajar_cyber)"),
     ("CYBER_ORACLE_ORIGEN", "", "PENDIENTE: Oracle de CYBER como host:puerto/servicio (ej. 10.0.0.5:1521/servicio)"),
     ("CYBER_ORACLE_PROVEEDOR", "OraOLEDB.Oracle", "Proveedor OLE DB de Oracle instalado en el servidor de SQL Server"),
-    ("CYBER_PROC_TELEFONOS", "RCVRY.JSP_TELEFONOS_REMESA_486", "Procedimiento de CYBER que purga y agrega los teléfonos (ACTUALIZA_PHONE.SQL)"),
+    ("CYBER_PROC_TELEFONOS", "RCVRY.JSP_TELEFONOS_REMESA_486", "Procedimiento de CYBER que purga y agrega los teléfonos (ACTUALIZA_PHONE.SQL) con TEL_DEPURACION = ACTUAL"),
+    ("TEL_DEPURACION", "ACTUAL", "ACTUAL = store de hoy (CYBER_PROC_TELEFONOS, inserta desde PHONE_G1) y SCBTEL con todos los teléfonos; NUEVOS (18/11, cuando el DBA instale RCVRY.JSP_TELEFONOS_DEPURA_486) = la depuración marca los nuevos en la remesa, se bajan y el SCBTEL lleva solo esos"),
+    ("CYBER_PROC_TEL_DEPURA", "RCVRY.JSP_TELEFONOS_DEPURA_486", "Store de depuración de teléfonos con TEL_DEPURACION = NUEVOS (cyber/486/oracle/JSP_TELEFONOS_DEPURA_486.sql)"),
     ("CAMPOS_ACTUALIZA_EXISTENTES",
      "TEL1,TEL2,TEL3,TEL4,TEL5,TEL6,TEL7,TEL8,TEL9,TEL10,TEL11,TEL12,TEL13,CORREO1,CORREO2,"
      "DIRECC1,DIRECC2,DIRECC3,DIRECC4,DIRECC5,ESTADO,PVS,TRAMO,ETIQUETA1,SALDO1,SALDO2,SALDO3",
@@ -675,7 +677,7 @@ BAJA_RETIRO = ("dat.HISTORIA_FOLIO d WHERE d.CLIENTE = @cliente AND d.ID_CORRIDA
                "AND EXISTS (SELECT 1 FROM ops.DEVOLUCION v WHERE v.ID_CORRIDA = @id_corrida AND v.CUENTA = d.CUENTA)")
 SALIDAS_ARCHIVO = [
     ("SCBSDOS", "ASIG", 10, None, "d.CUENTA2", None, "SCBSDOS.TXT", "Cuentas del DAT para CYBER (asi486.prg)"),
-    ("SCBTEL", "ASIG", 20, "ops.TELEFONO d WHERE d.ID_CORRIDA = @id_corrida", "d.CUENTA2, d.TIPOTEL, d.AREA, d.TELEFONO", None,
+    ("SCBTEL", "ASIG", 20, "ops.TELEFONO d WHERE d.ID_CORRIDA = @id_corrida AND (d.NUEVO = 1 OR NOT EXISTS (SELECT 1 FROM ops.TELEFONO x WHERE x.ID_CORRIDA = d.ID_CORRIDA AND x.NUEVO IS NOT NULL))", "d.CUENTA2, d.TIPOTEL, d.AREA, d.TELEFONO", None,
      "SCBTEL.TXT", "Teléfonos (TELSAN) de ancho fijo"),
     ("TEL_SUBMST", "ASIG", 30, "ops.TELEFONO d WHERE d.ID_CORRIDA = @id_corrida", "d.CUENTA2, d.AREA, d.TELEFONO", "|",
      "sub_mst.TXT", "Teléfonos para cargar en RCVRY.JSP_TAB_TEL_REMESA_486 (act_phone.prg)"),

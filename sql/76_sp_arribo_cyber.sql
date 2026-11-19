@@ -195,6 +195,55 @@ BEGIN
 END;
 GO
 
+/* Depuración con TEL_DEPURACION = NUEVOS (18/11): después de JSP_TELEFONOS_DEPURA_486 se bajan de la remesa los
+   teléfonos que no existían en PHONE (NUEVO = 1). Se marcan en ops.TELEFONO, el SCBTEL se vuelve a generar solo con
+   ellos y son lo que el arribo espera ver en PHONE_G1 para dar por subido el SCBTEL.
+   @sin_bajar = 1 toma lo que ya esté en stg.CYBER_TEL_NUEVOS (pruebas). */
+CREATE OR ALTER PROCEDURE ops.sp_tel_nuevos
+    @id_corrida INT,
+    @sin_bajar  BIT = 0,
+    @nuevos     INT = NULL OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @cliente VARCHAR(10) = (SELECT CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida);
+    DECLARE @srv SYSNAME = ISNULL(cfg.fn_param(@cliente, 'CYBER_LINKED_SERVER'), 'CYBER'), @sql NVARCHAR(MAX), @msg NVARCHAR(4000), @sin INT;
+    IF @sin_bajar = 0
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM sys.servers WHERE name = @srv)
+        BEGIN
+            SET @msg = CONCAT(N'No existe el servidor vinculado ', @srv, N'.');
+            THROW 50777, @msg, 1;
+        END;
+        TRUNCATE TABLE stg.CYBER_TEL_NUEVOS;
+        SET @sql = N'INSERT INTO stg.CYBER_TEL_NUEVOS (CUENTA, AREA, TELEFONO) EXEC (N''select CUENTA, AREA, TELEFONO from RCVRY.JSP_TAB_TEL_REMESA_486 where NUEVO = 1'') AT ' + QUOTENAME(@srv) + N';';
+        EXEC (@sql);
+    END;
+
+    UPDATE t SET NUEVO = CASE WHEN EXISTS (SELECT 1 FROM stg.CYBER_TEL_NUEVOS n
+                                           WHERE LTRIM(RTRIM(n.CUENTA)) = t.CUENTA2 AND LTRIM(RTRIM(n.AREA)) = t.AREA AND LTRIM(RTRIM(n.TELEFONO)) = t.TELEFONO)
+                              THEN 1 ELSE 0 END
+    FROM ops.TELEFONO t WHERE t.ID_CORRIDA = @id_corrida;
+    SET @nuevos = (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @id_corrida AND NUEVO = 1);
+    /* Nuevos en CYBER que no están en nuestro archivo: no debería pasar (la remesa salió de él) */
+    SET @sin = (SELECT COUNT(*) FROM stg.CYBER_TEL_NUEVOS n
+                WHERE NOT EXISTS (SELECT 1 FROM ops.TELEFONO t WHERE t.ID_CORRIDA = @id_corrida AND t.CUENTA2 = LTRIM(RTRIM(n.CUENTA))
+                                    AND t.AREA = LTRIM(RTRIM(n.AREA)) AND t.TELEFONO = LTRIM(RTRIM(n.TELEFONO))));
+
+    /* Lo que el arribo espera ver en PHONE_G1 cuando suban el SCBTEL: solo los nuevos */
+    DELETE FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @id_corrida AND TIPO = 'TELEFONO';
+    INSERT INTO ops.ARRIBO_PENDIENTE (ID_CORRIDA, TIPO, CUENTA, AREA, TELEFONO)
+    SELECT @id_corrida, 'TELEFONO', CUENTA2, AREA, TELEFONO FROM ops.TELEFONO WHERE ID_CORRIDA = @id_corrida AND NUEVO = 1;
+
+    /* El SCBTEL se vuelve a generar: su ORIGEN toma solo NUEVO = 1 una vez marcados */
+    EXEC ops.sp_generar_salida @id_corrida, 'SCBTEL';
+    SET @msg = CONCAT(N'Teléfonos nuevos (no existían en PHONE): ', @nuevos, N' de ', (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @id_corrida),
+                      N' · el SCBTEL lleva solo esos', CASE WHEN @nuevos = 0 THEN N' (no hay SCBTEL que subir)' ELSE N'' END,
+                      CASE WHEN @sin > 0 THEN CONCAT(N' · ', @sin, N' nuevos de CYBER que no están en nuestro archivo') ELSE N'' END);
+    EXEC ops.sp_log @id_corrida, 'TEL NUEVOS', CASE WHEN @sin > 0 THEN 'AVISO' ELSE 'OK' END, @nuevos, @msg;
+END;
+GO
+
 /* Arribo a CYBER de correos o teléfonos de una asignación (lo llama ops.sp_arribo_automatico o se corre a mano) */
 CREATE OR ALTER PROCEDURE ops.sp_arribar_cyber
     @id_corrida   INT,
@@ -204,6 +253,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     DECLARE @proceso VARCHAR(10), @n INT, @r INT, @msg NVARCHAR(4000), @paso VARCHAR(40) = 'ARRIBO ' + UPPER(@que), @bandera BIT = 0;
+    DECLARE @cli VARCHAR(10), @modo NVARCHAR(20) = N'ACTUAL', @nuevos INT;
     SELECT @proceso = PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
     SET @que = UPPER(LTRIM(RTRIM(@que)));
     IF @proceso IS NULL OR @proceso <> 'ASIG' THROW 50763, 'Indica una corrida de asignación.', 1;
@@ -234,20 +284,35 @@ BEGIN
             /* Sin remesa, JSP_TELEFONOS_REMESA_486 inactivaría todos los teléfonos del 486 */
             IF NOT EXISTS (SELECT 1 FROM ops.TELEFONO WHERE ID_CORRIDA = @id_corrida)
                 THROW 50767, 'La corrida no tiene teléfonos para la remesa; no se ejecuta JSP_TELEFONOS_REMESA_486.', 1;
+            /* El store depende del modo (TEL_DEPURACION): ACTUAL = el de hoy; NUEVOS = JSP_TELEFONOS_DEPURA_486 */
+            SET @cli = (SELECT CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida);
+            SET @modo = UPPER(ISNULL(NULLIF(cfg.fn_param(@cli, 'TEL_DEPURACION'), N''), N'ACTUAL'));
+            UPDATE ops.CYBER_SCRIPT
+            SET SENTENCIA = CONCAT(N'EXECUTE ', CASE WHEN @modo = N'NUEVOS' THEN ISNULL(NULLIF(cfg.fn_param(@cli, 'CYBER_PROC_TEL_DEPURA'), N''), N'RCVRY.JSP_TELEFONOS_DEPURA_486')
+                                                      ELSE ISNULL(NULLIF(cfg.fn_param(@cli, 'CYBER_PROC_TELEFONOS'), N''), N'RCVRY.JSP_TELEFONOS_REMESA_486') END, N';')
+            WHERE ID_CORRIDA = @id_corrida AND SCRIPT = 'TEL_ACTUALIZA' AND NUM = 1;
             EXEC ops.sp_cyber_remesa @id_corrida, 'TEL', @n OUTPUT;
             EXEC ops.sp_cyber_ejecutar @id_corrida, 'TEL_BORRA', @solo_mostrar;
             EXEC ops.sp_cyber_ejecutar @id_corrida, 'TEL_REMESA', @solo_mostrar;
             /* La remesa en CYBER debe cuadrar con nuestro archivo antes de que el store inactive lo que no está en ella */
             IF @solo_mostrar = 0 EXEC ops.sp_tel_remesa_validar @id_corrida;
             EXEC ops.sp_cyber_ejecutar @id_corrida, 'TEL_ACTUALIZA', @solo_mostrar;
-            SET @msg = CONCAT(N'Depuración de teléfonos en CYBER: remesa de ', @n, N' (cuadra con RCVRY.JSP_TAB_TEL_REMESA_486)');
+            /* NUEVOS: se bajan los teléfonos que no existían en PHONE y el SCBTEL queda solo con ellos */
+            IF @modo = N'NUEVOS' AND @solo_mostrar = 0
+                EXEC ops.sp_tel_nuevos @id_corrida, @nuevos = @nuevos OUTPUT;
+            SET @msg = CONCAT(N'Depuración de teléfonos en CYBER: remesa de ', @n, N' (cuadra con RCVRY.JSP_TAB_TEL_REMESA_486)',
+                              CASE WHEN @modo = N'NUEVOS' THEN CONCAT(N' · nuevos para el SCBTEL: ', ISNULL(@nuevos, 0)) ELSE N'' END);
         END;
         IF @solo_mostrar = 0 EXEC ops.sp_log @id_corrida, @paso, 'OK', @n, @msg;
         /* Con la depuración de teléfonos OK, asignaciones ya puede subir el SCBTEL: se escribe y se avisa */
         IF @que = 'TELEFONOS' AND @solo_mostrar = 0
         BEGIN
             DECLARE @tel NVARCHAR(400) = ISNULL(cfg.fn_param((SELECT CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida), 'ARCHIVOS_DESPUES_DEPURACION_TEL'), N'SCBTEL');
-            EXEC ops.sp_exportar_auto @id_corrida, @solo = @tel;
+            /* Sin teléfonos nuevos no hay SCBTEL que escribir ni que subir */
+            IF @modo = N'NUEVOS' AND ISNULL(@nuevos, 0) = 0
+                SET @tel = NULLIF((SELECT STRING_AGG(LTRIM(RTRIM(value)), N',') FROM STRING_SPLIT(@tel, N',') WHERE UPPER(LTRIM(RTRIM(value))) <> N'SCBTEL'), N'');
+            IF @tel IS NOT NULL
+                EXEC ops.sp_exportar_auto @id_corrida, @solo = @tel;
         END;
     END TRY
     BEGIN CATCH

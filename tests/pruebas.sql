@@ -1383,6 +1383,63 @@ EXEC pru.sp_igual N'DATOS: volumen fuera de rango contra la última carga buena 
 GO
 
 /* ---------------------------------------------------------------------
+   Depuración de teléfonos con TEL_DEPURACION = NUEVOS (18/11): el store nuevo, los nuevos que baja de la remesa,
+   el SCBTEL solo con ellos y lo que espera el arribo. Sin nuevos no hay SCBTEL ni nada que esperar.
+   --------------------------------------------------------------------- */
+DECLARE @idt INT = (SELECT MAX(t.ID_CORRIDA) FROM ops.TELEFONO t JOIN ops.CORRIDA c ON c.ID_CORRIDA = t.ID_CORRIDA WHERE c.PROCESO = 'ASIG'),
+        @rs NVARCHAR(4000), @n INT, @total INT;
+DECLARE @pend TABLE (TIPO VARCHAR(10), CUENTA NVARCHAR(28), AREA NVARCHAR(10), TELEFONO NVARCHAR(20), VALOR NVARCHAR(200));
+INSERT INTO @pend SELECT TIPO, CUENTA, AREA, TELEFONO, VALOR FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @idt;
+SET @total = (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @idt);
+
+/* El store depende del modo */
+UPDATE cfg.PARAMETRO SET VALOR = 'NUEVOS' WHERE CLIENTE = '486' AND CLAVE = 'TEL_DEPURACION';
+DECLARE @pl TABLE (SCRIPT VARCHAR(40), BLOQUE INT, PLSQL NVARCHAR(MAX));
+INSERT INTO @pl EXEC ops.sp_arribar_cyber @idt, 'TELEFONOS', @solo_mostrar = 1;
+SET @rs = CONCAT((SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idt AND SCRIPT = 'TEL_ACTUALIZA' AND NUM = 1), '|',
+                 (SELECT COUNT(*) FROM @pl WHERE SCRIPT = 'TEL_ACTUALIZA' AND PLSQL LIKE N'%RCVRY.JSP_TELEFONOS_DEPURA_486%'), '|',
+                 (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @idt AND PASO = 'TEL NUEVOS'));
+EXEC pru.sp_igual N'TEL NUEVOS: con TEL_DEPURACION = NUEVOS se ejecuta JSP_TELEFONOS_DEPURA_486 (sin bajar nada al solo mostrar)',
+     N'EXECUTE RCVRY.JSP_TELEFONOS_DEPURA_486;|1|0', @rs;
+
+/* Dos nuevos en la remesa de CYBER (uno con espacios) */
+TRUNCATE TABLE stg.CYBER_TEL_NUEVOS;
+INSERT INTO stg.CYBER_TEL_NUEVOS (CUENTA, AREA, TELEFONO)
+SELECT TOP (2) CUENTA2 + N' ', AREA, TELEFONO FROM ops.TELEFONO WHERE ID_CORRIDA = @idt ORDER BY CUENTA2, AREA, TELEFONO;
+EXEC ops.sp_tel_nuevos @idt, @sin_bajar = 1, @nuevos = @n OUTPUT;
+SET @rs = CONCAT(@n, '|',
+    (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @idt AND NUEVO = 0), '|',
+    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @idt AND ARCHIVO = 'SCBTEL'), '|',
+    (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @idt AND TIPO = 'TELEFONO'), '|',
+    (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @idt AND TIPO <> 'TELEFONO'), '|',
+    (SELECT TOP (1) ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @idt AND PASO = 'TEL NUEVOS' ORDER BY ID DESC));
+SET @n = (SELECT COUNT(*) FROM @pend WHERE TIPO <> 'TELEFONO');
+EXEC pru.sp_igual N'TEL NUEVOS: se marcan, el SCBTEL lleva solo esos y el arribo espera solo esos (cuentas y domicilios igual)',
+     CONCAT('2|', @total - 2, '|2|2|', @n, '|OK'), @rs;
+
+/* Sin nuevos: SCBTEL vacío y nada que esperar para el gescar sin teléfono */
+TRUNCATE TABLE stg.CYBER_TEL_NUEVOS;
+EXEC ops.sp_tel_nuevos @idt, @sin_bajar = 1, @nuevos = @n OUTPUT;
+SET @rs = CONCAT(@n, '|', (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @idt AND ARCHIVO = 'SCBTEL'), '|',
+                 (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @idt AND TIPO = 'TELEFONO'), '|',
+                 CASE WHEN (SELECT TOP (1) MENSAJE FROM ops.BITACORA WHERE ID_CORRIDA = @idt AND PASO = 'TEL NUEVOS' ORDER BY ID DESC) LIKE N'%no hay SCBTEL que subir%' THEN 1 ELSE 0 END);
+EXEC pru.sp_igual N'TEL NUEVOS: sin nuevos no hay SCBTEL ni teléfonos que esperar', N'0|0|0|1', @rs;
+
+/* Se deja como estaba: modo ACTUAL, SCBTEL completo y los pendientes originales */
+UPDATE cfg.PARAMETRO SET VALOR = 'ACTUAL' WHERE CLIENTE = '486' AND CLAVE = 'TEL_DEPURACION';
+UPDATE ops.TELEFONO SET NUEVO = NULL WHERE ID_CORRIDA = @idt;
+EXEC ops.sp_generar_salida @idt, 'SCBTEL';
+DELETE FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @idt;
+INSERT INTO ops.ARRIBO_PENDIENTE (ID_CORRIDA, TIPO, CUENTA, AREA, TELEFONO, VALOR) SELECT @idt, TIPO, CUENTA, AREA, TELEFONO, VALOR FROM @pend;
+DELETE FROM @pl;
+INSERT INTO @pl EXEC ops.sp_arribar_cyber @idt, 'TELEFONOS', @solo_mostrar = 1;
+SET @rs = CONCAT((SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idt AND SCRIPT = 'TEL_ACTUALIZA' AND NUM = 1), '|',
+                 (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @idt AND ARCHIVO = 'SCBTEL'), '|', @total);
+SET @n = (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @idt AND ARCHIVO = 'SCBTEL');
+EXEC pru.sp_igual N'TEL NUEVOS: con TEL_DEPURACION = ACTUAL, el store de hoy y el SCBTEL con todos', CONCAT(N'EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;|', @total, '|', @total), @rs;
+GO
+
+/* ---------------------------------------------------------------------
    Vistas de usuarios (18/11): tabla de AEM con su mapeo, MIS con una columna de la base maestra,
    datos de CYBER simulados (stg.CYBER_DAT_486 con @sin_bajar), avisos, error de CYBER y accesos.
    --------------------------------------------------------------------- */

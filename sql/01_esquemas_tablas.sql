@@ -216,6 +216,14 @@ CREATE TABLE ops.TELEFONO (
     CONSTRAINT PK_TELEFONO PRIMARY KEY (ID_CORRIDA, CUENTA2, AREA, TELEFONO)
 );
 GO
+/* 18/11: NUEVO lo marca la depuración de teléfonos (TEL_DEPURACION = NUEVOS): 1 = no existía en PHONE, va en el SCBTEL.
+   NULL = aún no se depura (el SCBTEL lleva todos) */
+IF COL_LENGTH('ops.TELEFONO', 'NUEVO') IS NULL
+    ALTER TABLE ops.TELEFONO ADD NUEVO BIT NULL;
+GO
+IF OBJECT_ID('stg.CYBER_TEL_NUEVOS') IS NULL
+CREATE TABLE stg.CYBER_TEL_NUEVOS (CUENTA NVARCHAR(28) NULL, AREA NVARCHAR(10) NULL, TELEFONO NVARCHAR(20) NULL);
+GO
 /* Correos que se arriban a CYBER en la asignación (antes email.PRG -> sub_mail.TXT).
    CYBER (RCVRY.JSP_CORREOS_486) purga y agrega. */
 IF OBJECT_ID('ops.CORREO') IS NULL
