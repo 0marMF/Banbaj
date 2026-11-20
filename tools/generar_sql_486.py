@@ -64,6 +64,7 @@ def sql_dat(dat):
         "    ID_CORRIDA_ALTA INT          NULL",
         "    ID_CORRIDA_ULT  INT          NULL",
         "    FE_ULT_ACT      DATETIME2(0) NULL",
+        "    ETIQUETA6       VARCHAR(15)  NULL",
     ]
     vista = ", ".join("d.CUENTA2 AS CUENTA" if c == "CUENTA" else "d.CUENTA AS CUENTA3" if c == "CUENTA3" else f"d.{c}" for c, _, _ in dat)
     return f"""USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
@@ -99,6 +100,11 @@ BEGIN
     SELECT TOP (0) CAST(0 AS INT) AS ID_CORRIDA_RESPALDO, * INTO ops.RESPALDO_DAT_486 FROM dat.DAT_486;
     CREATE CLUSTERED INDEX CX_RESPALDO_DAT_486 ON ops.RESPALDO_DAT_486 (ID_CORRIDA_RESPALDO);
 END;
+GO
+/* 19/11: ETIQUETA6 (REE por la base maestra; sustituye a la lista TOP). Al final en el DAT y en el respaldo,
+   que se copian con SELECT * */
+IF COL_LENGTH('dat.DAT_486', 'ETIQUETA6') IS NULL ALTER TABLE dat.DAT_486 ADD ETIQUETA6 VARCHAR(15) NULL;
+IF COL_LENGTH('ops.RESPALDO_DAT_486', 'ETIQUETA6') IS NULL ALTER TABLE ops.RESPALDO_DAT_486 ADD ETIQUETA6 VARCHAR(15) NULL;
 GO
 """
 
@@ -169,6 +175,7 @@ COLUMNAS = {
         ("SALDO1", "MONTO A CUBRIR 1 PAGO LIQUIDACION", N, 0, False, None),
         ("SALDO2", "MONTO A CUBRIR PLAZOS PAGO LIQUIDACION", N, 0, False, "Layout del 11/11/2026: antes 'MONTO A CUBRIR PLAZOS PAGO <= 6 LIQUIDACION'"),
         ("ENFOQUE", "ENFOQUE_LIQUIDACION_1_PAGO", C(60), 0, False, "Lo usa la regla de TRAMO 90+ (CAS / VEN). ETIQUETA y REE ya no salen de la base: llegan por etiquetado y estructura (30/10)"),
+        ("ETIQUETA6", "ENFOQUE_PLAN DE PAGOS", C(60), 0, False, "19/11 (correo 'Etiquetado REE', columna CJ): APLICA PLAN DE PAGOS -> ETIQUETA6 = REE (catálogo ETIQUETA6_TDC)"),
         ("CORREO1", "EMAIL 1", C(100), 0, False, None),
         ("CORREO2", "EMAIL 2", C(100), 0, False, None),
         ("SEGMENTO", "Estatus al 00/00/0000", C(30), 0, True, None),
@@ -189,6 +196,7 @@ COLUMNAS = {
         ("ESTRA3", "TIPO DE CRÉDITO", C(15), 0, False, "Se homologa antes de recortar: ver TIPO_CREDITO"),
         ("TIPO_CREDITO", "TIPO DE CRÉDITO", C(60), 0, False, "Texto completo para homologar ESTRA3"),
         ("TIPO", "CARTERA", C(25), 0, False, None),
+        ("ETIQUETA6", "ENFOQUE_REESTRUCTURA", C(60), 0, False, "19/11 (correo 'Etiquetado REE'): APLICA RESTRUCTURA -> ETIQUETA6 = REE (catálogo ETIQUETA6_CONSUMO)"),
         ("CAPITAL", "CAPITAL AL 00/00/0000", N, 0, True, None),
         ("SDO_ACT", "ADEUDO TOTAL AL 00/00/0000", N, 1, True, None),
         ("SDO_VDO", "MONTO VENCIDO AL 00/00/0000", N, 0, True, None),
@@ -297,6 +305,7 @@ HOMOLOGACION = (
         ("ESTATUS2", "'REE'", f"t.TRAMO = '0' AND {K('ESTATUS_TDC', 'SEGMENTO')} = 'REE'", "Reestructura: BCOB, BOPE, FALL con tramo 0 (catálogo ESTATUS_TDC)", None),
         ("SALDO3", "ROUND(t.SALDO2 / 3, 2)", None, "SALDO3 = SALDO2 / 3", None),
         ("TIPO", "LEFT('TDC_' + ISNULL(t.ESTATUS2, ''), 25)", None, "TIPO = TDC_ + estatus", None),
+        ("ETIQUETA6", K("ETIQUETA6_TDC", "ETIQUETA6"), None, "REE por plan de pagos (catálogo ETIQUETA6_TDC; fuera del catálogo queda vacía)", "Correo 19/11"),
     ]]
     + [("stg.ENT_MAESTRA_CONSUMO",) + x for x in [
         ("SEGMENTO2", "'CONSUMO'", None, "Segmento", None),
@@ -309,6 +318,7 @@ HOMOLOGACION = (
     ] + MORA + [
         ("SALDO3", "ROUND(t.SALDO2 / 3, 2)", None, "SALDO3 = SALDO2 / 3", None),
         ("TIPO", "LEFT(ISNULL(t.TIPO, '') + '_' + ISNULL(t.SEGMENTO, ''), 25)", None, "TIPO = cartera + estatus", None),
+        ("ETIQUETA6", K("ETIQUETA6_CONSUMO", "ETIQUETA6"), None, "REE por reestructura (catálogo ETIQUETA6_CONSUMO; fuera del catálogo queda vacía)", "Correo 19/11"),
     ]]
     + [("stg.ENT_MAESTRA_HIPO",) + x for x in [
         ("SEGMENTO2", "'HIPOTECARIO'", None, "Segmento", None),
@@ -369,6 +379,12 @@ CATALOGOS = [
       ("REGULARIZACION", "REG", 100)]),
     ("COSECHA_MORA", "Cosecha de la base maestra -> mora (después de quitar '-')", "MAESTRA_* · COSECHAS", "ETIQUETA1",
      [("COSECHA 1", "MORA 1", 100), ("COSECHA 2", "MORA 2", 100), ("COSECHA 3", "MORA 3", 100)]),
+    ("ETIQUETA6_TDC", "Elegible a REE en TDC (correo 'Etiquetado REE', 19/11). Cualquier otro valor deja ETIQUETA6 vacía",
+     "MAESTRA_TDC · ENFOQUE_PLAN DE PAGOS", "ETIQUETA6 (U1EXT2 del SCBSDOS)",
+     [("APLICA PLAN DE PAGOS", "REE", 100)]),
+    ("ETIQUETA6_CONSUMO", "Elegible a REE en Consumo (correo 'Etiquetado REE', 19/11). Cualquier otro valor deja ETIQUETA6 vacía",
+     "MAESTRA_CONSUMO · ENFOQUE_REESTRUCTURA", "ETIQUETA6 (U1EXT2 del SCBSDOS)",
+     [("APLICA RESTRUCTURA", "REE", 100), ("APLICA REESTRUCTURA", "REE", 100)]),
 ]
 
 # ---------------------------------------------------------------- reglas
@@ -596,7 +612,7 @@ PARAMETROS = [
      "ops.sp_etiquetar_campo: columnas del DAT que Operación puede etiquetar"),
     ("ETIQUETADO_ALIAS", "SEG_CICLO=TRAMO,CLASIFICA=ESTRA3,ETIQUETA2=DES_PROD,ETIQUETA3=SEG,ETIQUETA4=RIESGO,LEYENDA=NOMBRE2,"
      "SALDO_VEN=SDO_VDO,ETIQUETA10=ETIQUETA,MORA=ETIQUETA1",
-     "ETIQUETAS486.xlsx: nombre en el DAT de Operación = columna de nuestro DAT (ETIQUETA6/TOP va con cfg.sp_etiqueta_cargar)"),
+     "ETIQUETAS486.xlsx: nombre en el DAT de Operación = columna de nuestro DAT (ETIQUETA6 sale de la base maestra: REE, catálogos ETIQUETA6_TDC y ETIQUETA6_CONSUMO)"),
     ("RUTA_SALIDA", "C:\\BANBAJ\\486\\SALIDA\\", "ops.sp_exportar_salidas: carpeta de los archivos planos (se crea <AAAAMMDD>_corrida<ID>)"),
     ("RETROCESO_AUTOMATICO", "1", "1 = si una corrida falla, el DAT, histórico, folios y base maestra regresan solos a como estaban (ops.sp_retroceso_automatico); 0 = se dejan para revisar a mano"),
     ("RUTA_MIS", RUTA_Q + "\\MIS\\SERTEC98\\CLIENTES\\486\\", "ops.sp_exportar_salidas deja aquí también DAT486_<fecha>.csv (antes prog15.prg copiaba el DAT). Q: = \\\\192.168.50.13\\q"),
@@ -606,12 +622,15 @@ PARAMETROS = [
     ("CYBER_ORACLE_ORIGEN", "", "PENDIENTE: Oracle de CYBER como host:puerto/servicio (ej. 10.0.0.5:1521/servicio)"),
     ("CYBER_ORACLE_PROVEEDOR", "OraOLEDB.Oracle", "Proveedor OLE DB de Oracle instalado en el servidor de SQL Server"),
     ("CYBER_PROC_TELEFONOS", "RCVRY.JSP_TELEFONOS_REMESA_486", "Procedimiento de CYBER que purga y agrega los teléfonos (ACTUALIZA_PHONE.SQL) con TEL_DEPURACION = ACTUAL"),
+    ("TEL_VALIDAR_LADA", "1", "1 (19/11) = solo van a CYBER (SCBTEL y remesa) los teléfonos cuya lada y longitud están en cfg.PHNVAL, la copia de la tabla de ladas que admite el cargador; 0 = no se revisa"),
+    ("CYBER_TABLA_LADAS", "RCVRY.PHNVAL", "Tabla de CYBER con las ladas válidas (VTCOMUNA, VTARECOD, VTLENGTH) que copia ops.sp_phnval_actualizar una vez al mes"),
+    ("LADAS_MIN_FILAS", "100", "Si la tabla de ladas de CYBER llega con menos renglones que esto, no se toca cfg.PHNVAL (protege contra una bajada vacía o cortada)"),
     ("TEL_DEPURACION", "ACTUAL", "ACTUAL = store de hoy (CYBER_PROC_TELEFONOS, inserta desde PHONE_G1) y SCBTEL con todos los teléfonos; NUEVOS (18/11, cuando el DBA instale RCVRY.JSP_TELEFONOS_DEPURA_486) = la depuración marca los nuevos en la remesa, se bajan y el SCBTEL lleva solo esos"),
     ("CYBER_PROC_TEL_DEPURA", "RCVRY.JSP_TELEFONOS_DEPURA_486", "Store de depuración de teléfonos con TEL_DEPURACION = NUEVOS (cyber/486/oracle/JSP_TELEFONOS_DEPURA_486.sql)"),
     ("CAMPOS_ACTUALIZA_EXISTENTES",
      "TEL1,TEL2,TEL3,TEL4,TEL5,TEL6,TEL7,TEL8,TEL9,TEL10,TEL11,TEL12,TEL13,CORREO1,CORREO2,"
-     "DIRECC1,DIRECC2,DIRECC3,DIRECC4,DIRECC5,ESTADO,PVS,TRAMO,ETIQUETA1,SALDO1,SALDO2,SALDO3",
-     "Campos que se actualizan en el DAT cuando la cuenta ya existe (paso.prg + asig_bases)"),
+     "DIRECC1,DIRECC2,DIRECC3,DIRECC4,DIRECC5,ESTADO,PVS,TRAMO,ETIQUETA1,SALDO1,SALDO2,SALDO3,ETIQUETA6",
+     "Campos que se actualizan en el DAT cuando la cuenta ya existe (paso.prg + asig_bases). ETIQUETA6 (19/11): la elegibilidad a REE cambia con cada base"),
 ]
 
 CP_ESTADO = [("01000", "19999", "CDMX"), ("20000", "20999", "AGS"), ("21000", "22999", "BC"), ("23000", "23999", "BCS"),
@@ -639,7 +658,7 @@ SCB_EXPR = {
     "DMZIP": ("TEXTO", "CASE WHEN LEN(d.DIRECC3) = 4 THEN '0' + d.DIRECC3 ELSE d.DIRECC3 END"),
     "DMPHONE": ("TEXTO", "d.ETIQUETA1"),     # eti486 ya no se usa: solo lo que llega en la base
     "DMBPHONE": ("TEXTO", "d.SEG"),
-    "U1EXT2": ("TEXTO", "cfg.fn_etiqueta('{CLIENTE}', 'TOP', d.CUENTA2)"),
+    "U1EXT2": ("TEXTO", "d.ETIQUETA6"),
     "DMCPHONE": ("TEXTO", "d.GARAN"),
     "DMSTATE": ("TEXTO", "cfg.fn_cp_estado(CASE WHEN LEN(d.DIRECC3) = 4 THEN '0' + d.DIRECC3 ELSE d.DIRECC3 END)"),
     "DMPTSCOR": ("TEXTO", "d.SUB_CTE"),
@@ -904,6 +923,26 @@ def sql_semilla(scb, dat):
     for cod, campo, tipo_v, valor, pct, desc in VALIDACIONES:
         L.append(f"IF NOT EXISTS (SELECT 1 FROM cfg.VALIDACION_DATO WHERE CLIENTE = {cli} AND CODIGO = {q(cod)} AND CAMPO = {q(campo)} AND TIPO = {q(tipo_v)}) "
                  f"INSERT INTO cfg.VALIDACION_DATO (CLIENTE, CODIGO, CAMPO, TIPO, VALOR, PCT_MAX, DESCRIPCION) VALUES ({cli}, {q(cod)}, {q(campo)}, {q(tipo_v)}, {q(valor)}, {pct}, {q(desc)});")
+    L.append("")
+
+    L.append("/* Ladas válidas (19/11): copia inicial de PHNVAL de CYBER (tools/datos/PHNVAL.csv). Solo si cfg.PHNVAL está vacía:")
+    L.append("   después la mantiene ops.sp_phnval_actualizar (job mensual) */")
+    import csv as _csv
+    with open(RAIZ / "tools" / "datos" / "PHNVAL.csv", encoding="cp1252", newline="") as f:
+        filas = sorted({(r["VTARECOD"].strip(), int(r["VTLENGTH"]), r["VTCOMUNA"].strip()) for r in _csv.DictReader(f)
+                        if r["VTARECOD"].strip().isdigit() and r["VTLENGTH"].strip().isdigit()}, key=lambda x: (x[0], x[1]))
+    vistos, unicas = set(), []
+    for a, n, c in filas:
+        if (a, n) not in vistos:
+            vistos.add((a, n)); unicas.append((a, n, c))
+    L.append("IF NOT EXISTS (SELECT 1 FROM cfg.PHNVAL)")
+    L.append("BEGIN")
+    for i in range(0, len(unicas), 200):
+        L.append("    INSERT INTO cfg.PHNVAL (VTARECOD, VTLENGTH, VTCOMUNA) VALUES")
+        L.append(",\n".join(f"        ({q(a)}, {n}, {q(c)})" for a, n, c in unicas[i:i + 200]) + ";")
+    L.append("    INSERT INTO cfg.PHNVAL_CARGA (FE_FIN, ESTATUS, FILAS, ALTAS, BAJAS, MENSAJE)")
+    L.append(f"    VALUES (SYSDATETIME(), 'OK', {len(unicas)}, {len(unicas)}, 0, N'Copia inicial de la semilla (PHNVAL del 19/11/2026)');")
+    L.append("END;")
     L.append("")
 
     L.append("/* Vistas de usuarios (18/11): solo se agrega lo que falta */")

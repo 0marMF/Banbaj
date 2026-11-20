@@ -35,7 +35,7 @@ def main(destino):
     con_h = [h.replace("{F}", FECHA_ENC) for h in enc["CONSUMO"]]
     F = FECHA_ENC
 
-    def tdc(prime, acc, nombre, sdo_act, sdo_vdo, tramo, estatus, cosecha="", tel="", enfoque="", cp="06600", email1="", email2=""):
+    def tdc(prime, acc, nombre, sdo_act, sdo_vdo, tramo, estatus, cosecha="", tel="", enfoque="", cp="06600", email1="", email2="", plan="NO APLICA"):
         return {
             "PRIME+4DIG": prime, "ACC_NUM": acc, "NAME2": nombre, "Tipo de TDC": "CLASICA", "GARANTIZADA": "0",
             f"Dias Vencidos VEN4/CCAS {F}": "120", "RFC": "XAXX010101000",
@@ -45,17 +45,19 @@ def main(destino):
             "ENFOQUE_LIQUIDACION_1_PAGO": enfoque, "TEL_CERT": tel, "CALLE": "CALLE FICTICIA 1", "COL": "Colonia Prueba",
             "CIUDAD": "Ciudad Prueba", "ESTADO": "CDMX", "CP": cp,
             f"Estatus al {F}": estatus, f"Tramo {F}": tramo, "COSECHAS": cosecha, "EMAIL 1": email1, "EMAIL 2": email2,
+            "ENFOQUE_PLAN DE PAGOS": plan,
         }
 
     escribir(destino / "asig" / "BASE MAESTRA_TARJETA 31-10-2026 - SERTEC.csv", tdc_h, [
-        tdc("10000000011111", "1000000001", "CLIENTE PRUEBA UNO", "1000.00", "1100.00", "45", "VEN4", "COSECHA 2", "5599999999"),
+        tdc("10000000011111", "1000000001", "CLIENTE PRUEBA UNO", "1000.00", "1100.00", "45", "VEN4", "COSECHA 2", "5599999999",
+            plan="APLICA PLAN DE PAGOS"),
         tdc("10000000033333", "1000000003", "CLIENTE PRUEBA TRES", "0", "750.00", "45", "VEN4", tel="477-123-4567",
             email1=" Persona.Tres@Correo.COM ", email2="notiene@hotmail.com"),
         dict(tdc("10000000044444", "1000000004", "-", "2000.00", "2000.00", "CASTIGADA", "CCAS"), NAME1="CLIENTE PRUEBA CUATRO"),
         tdc("10000000055555", "1000000005", "CLIENTE PRUEBA MALO", "abc", "10.00", "45", "VEN4"),
     ])
 
-    def con(credito, nombre, adeudo, vencido, tipo_cred, cartera, estatus, tramo, dias, tel="", cp="06600", cosecha="", correo1="", correo2=""):
+    def con(credito, nombre, adeudo, vencido, tipo_cred, cartera, estatus, tramo, dias, tel="", cp="06600", cosecha="", correo1="", correo2="", ree="-"):
         return {
             "CREDITO": credito, "CRÉDITO CYBER": f"9{credito[1:]}-CRN-{credito}", "NOMBRE": nombre, "RFC": "XAXX010101000",
             "TIPO DE CRÉDITO": tipo_cred, "CARTERA": cartera, f"CAPITAL AL {F}": "1000.00",
@@ -64,12 +66,13 @@ def main(destino):
             f"DIAS MORA AL {F}": dias, f"ESTATUS AL {F}": estatus, f"TRAMO AL {F}": tramo,
             "TEL_CERT": tel, "CALLE": "CALLE FICTICIA 2", "COL": "Colonia Prueba", "CIUDAD": "Ciudad Prueba",
             "ESTADO": "CDMX", "CP": cp, "COSECHAS": cosecha, "CORREO1": correo1, "CORREO2": correo2,
+            "ENFOQUE_REESTRUCTURA": ree,
         }
 
     c4 = con("20000004", "CLIENTE PRUEBA C4", "$1,234.50", " -   ", "Adelanto de Nómina", "Anticipo Nómina", "VIGENTE", "1-29", "10", cp="6600")
     escribir(destino / "asig" / "BASE MAESTRA_CONSUMO 31-10-2026 - SERTEC.csv", con_h, [
         con("20000001", "CLIENTE PRUEBA C1", "5000.00", "800.00", "PERSONAL", "PERSONAL", "VENCIDA", "90+", "96", tel="5577777777",
-            correo1="sin-arroba", correo2="uno@correo.com"),
+            correo1="sin-arroba", correo2="uno@correo.com", ree="aplica restructura"),
         con("20000003", "CLIENTE PRUEBA C3", "3000.00", "300.00", "PERSONAL", "PERSONAL", "VENCIDA", "90+", "96", tel="5533333333"),
         c4, c4,
         con("20000005", "CLIENTE PRUEBA C5", "0", "0", "AUTO", "AUTO", "CASTIGADA", "CASTIGADA", "400"),

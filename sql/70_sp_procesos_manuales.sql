@@ -54,7 +54,7 @@ GO
      ETIQUETA  '-' = dejar el campo en blanco; vacío = se rechaza
    @confirmar = 0: vista previa (no cambia nada). Con 1: respaldo, actualiza
    el DAT, rechazos a ops.RECHAZO y SCBSDOS_ETI para arribar.
-   ETIQUETA6 / TOP no es columna del DAT: va con cfg.sp_etiqueta_cargar 'TOP'.
+   ETIQUETA6 sale de la base maestra (19/11: REE, catálogos ETIQUETA6_TDC y ETIQUETA6_CONSUMO); la lista TOP ya no se usa.
    --------------------------------------------------------------------- */
 DROP PROCEDURE IF EXISTS ops.sp_etiquetado_dat;
 GO
@@ -83,7 +83,7 @@ BEGIN
     IF @@ROWCOUNT = 0 SET @campo = @pedido;
 
     IF @campo IN ('TOP', 'ETIQUETA6')
-        THROW 50605, 'TOP (ETIQUETA6) no es columna del DAT: cárgalo con cfg.sp_etiqueta_cargar @tipo = ''TOP''.', 1;
+        THROW 50605, 'ETIQUETA6 sale de la base maestra (REE: catálogos ETIQUETA6_TDC y ETIQUETA6_CONSUMO, cfg.sp_catalogo_alta); la lista TOP ya no se usa.', 1;
     IF COL_LENGTH('dat.DAT_486', @campo) IS NULL
        OR @campo NOT IN (SELECT UPPER(LTRIM(RTRIM(value))) FROM STRING_SPLIT(ISNULL(cfg.fn_param(@cliente, 'ETIQUETADO_CAMPOS'), ''), ','))
     BEGIN

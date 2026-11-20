@@ -497,3 +497,35 @@ BEGIN
     FROM cfg.VISTA_COLUMNA v JOIN inserted i ON i.ID = v.ID;
 END;
 GO
+
+/* =====================================================================
+   Ladas válidas (19/11): copia estática de la tabla PHNVAL de CYBER, las ladas
+   y longitudes que admite el cargador al subir los teléfonos. Un teléfono cuya
+   AREA + longitud no está aquí no va al SCBTEL ni a la remesa.
+   La actualiza ops.sp_phnval_actualizar (job "Banbaj 486 ladas", día 1 de cada mes).
+   ===================================================================== */
+IF OBJECT_ID('cfg.PHNVAL') IS NULL
+CREATE TABLE cfg.PHNVAL (
+    VTARECOD  VARCHAR(10)    NOT NULL,           -- lada como la manda el SCBTEL (AREA): 0155, 01222, 044, 045…
+    VTLENGTH  INT            NOT NULL,           -- dígitos que debe tener el TELEFONO con esa lada
+    VTCOMUNA  NVARCHAR(60)   NULL,
+    FE_CARGA  DATETIME2(0)   NOT NULL CONSTRAINT DF_PHNVAL_FE DEFAULT SYSDATETIME(),
+    CONSTRAINT PK_PHNVAL PRIMARY KEY (VTARECOD, VTLENGTH)
+);
+GO
+IF OBJECT_ID('cfg.PHNVAL_CARGA') IS NULL
+CREATE TABLE cfg.PHNVAL_CARGA (
+    ID         INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_PHNVAL_CARGA PRIMARY KEY,
+    FE_INICIO  DATETIME2(0)   NOT NULL CONSTRAINT DF_PHNVAL_CARGA_FE DEFAULT SYSDATETIME(),
+    FE_FIN     DATETIME2(0)   NULL,
+    ESTATUS    VARCHAR(10)    NOT NULL,           -- OK | ERROR
+    FILAS      INT            NULL,               -- renglones que llegaron de CYBER
+    ALTAS      INT            NULL,
+    BAJAS      INT            NULL,
+    MENSAJE    NVARCHAR(4000) NULL,
+    USUARIO    SYSNAME        NOT NULL CONSTRAINT DF_PHNVAL_CARGA_USR DEFAULT SUSER_SNAME()
+);
+GO
+IF OBJECT_ID('stg.CYBER_PHNVAL') IS NULL
+CREATE TABLE stg.CYBER_PHNVAL (VTCOMUNA NVARCHAR(60) NULL, VTARECOD NVARCHAR(20) NULL, VTLENGTH NVARCHAR(10) NULL);
+GO

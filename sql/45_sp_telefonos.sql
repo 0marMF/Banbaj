@@ -8,6 +8,8 @@ GO
      celular  AREA 044 (lada 55/56) o 045 (resto) + 10 dígitos, TIPOTEL 5
      fijo     AREA 01 + lada (2 o 3 dígitos) + 8 o 7 dígitos, TIPOTEL 1 (TEL1),
               2 (TEL2) o 4 (resto)
+   19/11: solo van los que tienen AREA + longitud en cfg.PHNVAL (las ladas que admite
+   el cargador; copia mensual de PHNVAL de CYBER, sql/47_sp_ladas.sql).
    Se mandan completos: el procedimiento de CYBER (RCVRY.JSP_TELEFONOS_REMESA_486)
    purga y agrega. Salen en SCBTEL y en sub_mst.TXT (CUENTA|AREA|TELEFONO|TIPOTEL).
 
@@ -109,11 +111,27 @@ BEGIN
     FROM #c c;
     SET @n = @@ROWCOUNT;
 
+    /* 6. Lada válida (19/11): solo lo que admite el cargador de CYBER, AREA + longitud en cfg.PHNVAL (copia mensual de PHNVAL) */
+    DECLARE @sin_lada INT = 0;
+    IF ISNULL(cfg.fn_param(@cliente, 'TEL_VALIDAR_LADA'), '1') = '1'
+    BEGIN
+        IF EXISTS (SELECT 1 FROM cfg.PHNVAL)
+        BEGIN
+            DELETE t FROM ops.TELEFONO t
+            WHERE t.ID_CORRIDA = @id_corrida
+              AND NOT EXISTS (SELECT 1 FROM cfg.PHNVAL p WHERE p.VTARECOD = t.AREA AND p.VTLENGTH = LEN(t.TELEFONO));
+            SET @sin_lada = @@ROWCOUNT;
+            SET @n -= @sin_lada;
+        END
+        ELSE
+            EXEC ops.sp_log @id_corrida, 'TELEFONOS', 'AVISO', NULL, N'cfg.PHNVAL está vacía: no se pudo validar la lada (correr EXEC ops.sp_phnval_actualizar;).';
+    END;
+
     IF NOT EXISTS (SELECT 1 FROM cfg.PLAN_NUMERACION)
         EXEC ops.sp_log @id_corrida, 'TELEFONOS', 'AVISO', NULL, N'cfg.PLAN_NUMERACION está vacío: no se puede exigir el plan y todos los teléfonos salen como fijos.';
 
     SET @msg = CONCAT(N'Capturados: ', @leidos, N' · inválidos: ', @invalidos, N' · lista negra/banco: ', @lista_negra,
-                      N' · repetidos: ', @repetidos, N' · quejas (TELBAJ): ', @quejas, N' · sin plan de numeración: ', @sin_pnm,
+                      N' · repetidos: ', @repetidos, N' · quejas (TELBAJ): ', @quejas, N' · sin plan de numeración: ', @sin_pnm, N' · lada no válida (PHNVAL): ', @sin_lada,
                       N' · a CYBER: ', @n, N' (celulares ', (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @id_corrida AND TIPOTEL = '5'), N')');
     EXEC ops.sp_log @id_corrida, 'TELEFONOS', 'OK', @n, @msg;
 

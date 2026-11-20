@@ -493,7 +493,7 @@ FROM (SELECT N'SCBSDOS: U1MINASIG con signo' AS p, CAST(N'000000000400.00' AS NV
 GO
 
 /* ---------------------------------------------------------------------
-   ETIQUETAS TOP (las alimenta Asignaciones con folio + etiqueta de Operación)
+   ETIQUETAS (cargador de listas folio + etiqueta: cfg.sp_etiqueta_cargar; la lista TOP ya no va al SCBSDOS)
    --------------------------------------------------------------------- */
 DECLARE @r TABLE (TIPO VARCHAR(20), MODO VARCHAR(10), LEIDOS INT, CARGADOS INT, SIN_DATO INT, REPETIDOS INT, NO_DAT INT);
 INSERT INTO @r EXEC cfg.sp_etiqueta_cargar '486', 'TOP', '/datos/etiquetas/TOP.csv', 'REEMPLAZAR', 'FOLIO', '';
@@ -501,13 +501,17 @@ INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o 
 FROM (SELECT N'TOP: leídos|cargados|sin dato|repetidos|fuera del DAT' AS p, N'5|3|1|1|1' AS e,
              (SELECT CONCAT(LEIDOS, '|', CARGADOS, '|', SIN_DATO, '|', REPETIDOS, '|', NO_DAT) FROM @r) AS o) x;
 
-DECLARE @id INT = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ASIG' AND ESTATUS = 'OK');
+/* ETIQUETA6 (19/11): REE sale de la base maestra y la lista TOP ya no llega al SCBSDOS */
+DECLARE @id INT = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ASIG' AND ESTATUS = 'OK'), @e6 NVARCHAR(400), @o6 NVARCHAR(400);
 EXEC ops.sp_generar_salida @id, 'SCBSDOS';
-INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'TOP: U1EXT2 en SCBSDOS por folio (con y sin 486-)' AS p, N'REE|REE|' AS e,
-             CONCAT((SELECT pru.fn_campo(LINEA, 'U1EXT2') FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS' AND LINEA LIKE N'____486-100001 %'), '|',
-                    (SELECT pru.fn_campo(LINEA, 'U1EXT2') FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS' AND LINEA LIKE N'____486-100003 %'), '|',
-                    (SELECT pru.fn_campo(LINEA, 'U1EXT2') FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS' AND LINEA LIKE N'____486-100002 %')) AS o) x;
+SET @o6 = CONCAT(
+    (SELECT STRING_AGG(CONCAT(SEGMENTO2, ':', RIESGO), ',') WITHIN GROUP (ORDER BY SEGMENTO2, RIESGO) FROM dat.DAT_486 WHERE ETIQUETA6 = 'REE'), '|',
+    (SELECT COUNT(*) FROM dat.DAT_486 WHERE ETIQUETA6 IS NOT NULL AND ETIQUETA6 <> 'REE'), '|',
+    (SELECT COUNT(*) FROM ops.SALIDA_LINEA s JOIN dat.DAT_486 d ON s.LINEA LIKE N'____' + d.CUENTA2 + N' %'
+     WHERE s.ID_CORRIDA = @id AND s.ARCHIVO = 'SCBSDOS' AND d.ETIQUETA6 = 'REE' AND pru.fn_campo(s.LINEA, 'U1EXT2') = 'REE'), '|',
+    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS' AND ISNULL(pru.fn_campo(LINEA, 'U1EXT2'), '') NOT IN ('', 'REE')));
+SET @e6 = N'CONSUMO:20000001,TDC:1000000001|0|2|0';
+EXEC pru.sp_igual N'ETIQUETA6: REE por la base maestra (APLICA PLAN DE PAGOS / APLICA RESTRUCTURA, sin acentos ni mayúsculas) y en U1EXT2; la lista TOP ya no entra', @e6, @o6;
 
 EXEC cfg.sp_etiqueta_baja '486', 'TOP', '100003';
 EXEC cfg.sp_etiqueta_alta '486', 'TOP', '486-100002', 'REE';
@@ -1380,6 +1384,69 @@ EXEC ops.sp_corrida_finalizar @v, 'CANCELADA', N'Prueba de volumen';
 UPDATE ops.CORRIDA SET ESTATUS = 'CANCELADA' WHERE ID_CORRIDA = @a;     -- ya no cuenta como carga buena
 DROP TABLE stg.RAW_PRUEBA_VOL;
 EXEC pru.sp_igual N'DATOS: volumen fuera de rango contra la última carga buena detiene', N'1|25.00|Trae 1 renglones; la última carga buena trajo 4', @rs;
+GO
+
+/* ---------------------------------------------------------------------
+   Ladas válidas (19/11): cfg.PHNVAL (copia de PHNVAL de CYBER) filtra los teléfonos, y ops.sp_phnval_actualizar la renueva
+   --------------------------------------------------------------------- */
+DECLARE @idl INT = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE CLIENTE = '486' AND PROCESO = 'ASIG' AND ESTATUS = 'OK'),
+        @rs NVARCHAR(4000), @esp NVARCHAR(400), @antes INT, @lada VARCHAR(10), @lon INT, @con_lada INT, @err NVARCHAR(4000), @n0 INT;
+SET @rs = CONCAT((SELECT COUNT(*) FROM cfg.PHNVAL), '|',
+                 (SELECT COUNT(*) FROM cfg.PHNVAL WHERE (VTARECOD = '0155' AND VTLENGTH = 8) OR (VTARECOD = '045' AND VTLENGTH = 10) OR (VTARECOD = '01222' AND VTLENGTH = 7)));
+EXEC pru.sp_igual N'LADAS: la semilla trae las ladas de PHNVAL (0155/8, 045/10, 01222/7…)', N'454|3', @rs;
+
+/* Se quita de cfg.PHNVAL la lada más usada en la corrida: sus teléfonos ya no van a CYBER */
+EXEC ops.sp_telefonos @idl;
+SET @antes = (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @idl);
+SELECT TOP (1) @lada = AREA, @lon = LEN(TELEFONO), @con_lada = COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @idl GROUP BY AREA, LEN(TELEFONO) ORDER BY COUNT(*) DESC, AREA;
+SELECT * INTO #ph FROM cfg.PHNVAL;
+DELETE FROM cfg.PHNVAL WHERE VTARECOD = @lada AND VTLENGTH = @lon;
+EXEC ops.sp_telefonos @idl;
+SET @rs = CONCAT((SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @idl), '|',
+                 (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @idl AND AREA = @lada AND LEN(TELEFONO) = @lon), '|',
+                 CASE WHEN (SELECT TOP (1) MENSAJE FROM ops.BITACORA WHERE ID_CORRIDA = @idl AND PASO = 'TELEFONOS' ORDER BY ID DESC)
+                           LIKE CONCAT(N'%lada no válida (PHNVAL): ', @con_lada, N'%') THEN 1 ELSE 0 END);
+SET @esp = CONCAT(@antes - @con_lada, '|0|1');
+EXEC pru.sp_igual N'LADAS: los teléfonos con lada y longitud fuera de cfg.PHNVAL no van al SCBTEL ni a la remesa', @esp, @rs;
+
+/* Con TEL_VALIDAR_LADA = 0 vuelven todos */
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'TEL_VALIDAR_LADA';
+EXEC ops.sp_telefonos @idl;
+SET @rs = CAST((SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @idl) AS NVARCHAR(20));
+SET @esp = CAST(@antes AS NVARCHAR(20));
+EXEC pru.sp_igual N'LADAS: TEL_VALIDAR_LADA = 0 no filtra', @esp, @rs;
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE = 'TEL_VALIDAR_LADA';
+
+/* Actualización mensual simulada: la de CYBER trae una lada nueva, ya no trae la que quitamos de la copia… */
+TRUNCATE TABLE stg.CYBER_PHNVAL;
+INSERT INTO stg.CYBER_PHNVAL (VTCOMUNA, VTARECOD, VTLENGTH)
+SELECT VTCOMUNA, VTARECOD, CAST(VTLENGTH AS NVARCHAR(10)) FROM #ph WHERE NOT (VTARECOD = '0155' AND VTLENGTH = 8)
+UNION ALL SELECT N'PRUEBA', N'01999', N'7'
+UNION ALL SELECT N'REPETIDA', N'045', N'10'
+UNION ALL SELECT N'SIN LONGITUD', N'01998', N'x';
+SET @n0 = (SELECT COUNT(*) FROM cfg.PHNVAL);
+EXEC ops.sp_phnval_actualizar @sin_bajar = 1, @solo_prueba = 1;
+SET @rs = CONCAT((SELECT COUNT(*) FROM cfg.PHNVAL), '|',
+                 (SELECT COUNT(*) FROM cfg.PHNVAL WHERE VTARECOD = '01999'), (SELECT COUNT(*) FROM cfg.PHNVAL WHERE VTARECOD = '0155' AND VTLENGTH = 8),
+                 (SELECT COUNT(*) FROM cfg.PHNVAL WHERE VTARECOD = '01998'), (SELECT COUNT(*) FROM cfg.PHNVAL WHERE VTARECOD = @lada AND VTLENGTH = @lon), '|',
+                 (SELECT TOP (1) CONCAT(ESTATUS, ':', ALTAS, ':', BAJAS) FROM cfg.PHNVAL_CARGA ORDER BY ID DESC));
+DECLARE @es0155 BIT = CASE WHEN @lada = '0155' AND @lon = 8 THEN 1 ELSE 0 END;
+SET @esp = CONCAT((SELECT COUNT(*) FROM #ph), '|100', 1 - @es0155, '|OK:', 2 - @es0155, ':', 1 - @es0155);
+EXEC pru.sp_igual N'LADAS: la actualización mensual agrega lo nuevo, quita lo que ya no está y descarta repetidos y renglones sin longitud', @esp, @rs;
+
+/* …y si CYBER llega casi vacía no se toca la copia, queda ERROR y el error sube (el job falla) */
+TRUNCATE TABLE stg.CYBER_PHNVAL;
+INSERT INTO stg.CYBER_PHNVAL (VTCOMUNA, VTARECOD, VTLENGTH) VALUES (N'DF', N'0155', N'8');
+SET @n0 = (SELECT COUNT(*) FROM cfg.PHNVAL);
+SET @err = NULL;
+BEGIN TRY EXEC ops.sp_phnval_actualizar @sin_bajar = 1, @solo_prueba = 1; END TRY BEGIN CATCH SET @err = CAST(ERROR_NUMBER() AS NVARCHAR(10)); END CATCH;
+SET @rs = CONCAT(@err, '|', CASE WHEN (SELECT COUNT(*) FROM cfg.PHNVAL) = @n0 THEN 1 ELSE 0 END, '|', (SELECT TOP (1) ESTATUS FROM cfg.PHNVAL_CARGA ORDER BY ID DESC));
+EXEC pru.sp_igual N'LADAS: con menos de LADAS_MIN_FILAS no se toca cfg.PHNVAL (50472, ERROR)', N'50472|1|ERROR', @rs;
+
+/* Se deja como estaba */
+DELETE FROM cfg.PHNVAL;
+INSERT INTO cfg.PHNVAL (VTARECOD, VTLENGTH, VTCOMUNA, FE_CARGA) SELECT VTARECOD, VTLENGTH, VTCOMUNA, FE_CARGA FROM #ph;
+EXEC ops.sp_telefonos @idl;
 GO
 
 /* ---------------------------------------------------------------------
