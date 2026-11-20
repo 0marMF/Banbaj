@@ -521,9 +521,17 @@ VALIDACIONES = (
     + v_importes("PAGOS", ["IMPORTE"], TOPE_SALDO["CONSUMO"], negativos=False)
 )
 
+# Campos de CYBER para las vistas (19/11): expresión de Oracle sobre d = DELQMST, u = UDA1, sr / cr = última gestión en ACTFIL
+CYBER_CAMPOS = [
+    ("ESTATUS", "d.DMACRC2", "Estatus de la cuenta en CYBER (DELQMST.DMACRC2, la misma tabla donde se validan los saldos)"),
+    ("ABAN_SR", "TRUNC(SYSDATE) - TRUNC(sr.FE_ULT_SR)", "Días desde la última gestión de usuario que empieza con 1 o a (ACTFIL), como PROC_DAT_486"),
+    ("ABAN_CR", "TRUNC(SYSDATE) - TRUNC(cr.FE_ULT_CR)", "Días desde la última gestión de usuario que empieza con z (ACTFIL), como PROC_DAT_486"),
+    ("SDO_CYBER", "d.DMCURBAL", "Saldo actual en CYBER (DELQMST.DMCURBAL)"),
+]
+
 # Vistas de usuarios (18/11): qué ve cada usuario externo. El equipo de asignaciones las edita en
 # cfg.VISTA_USUARIO / cfg.VISTA_COLUMNA; la semilla solo agrega lo que falta. ORIGEN: DAT, CYBER (columna de
-# RCVRY.RPT_DAT_486_1 después de PROC_DAT_486), MAESTRA (encabezado de la base maestra) o CONSTANTE.
+# cfg.CYBER_CAMPO, que se baja directo de DELQMST/ACTFIL sin store desde el 19/11), MAESTRA (encabezado de la base maestra) o CONSTANTE.
 VISTAS = [
     # vista, ver retiros, activa, descripción, [(encabezado, origen, campo)]
     ("AEM", 1, 1, "Equipo de AEM (MAPEO_USUARIOS.xlsx, 18/11). También ve las cuentas retiradas del día (antes MX_G1MCT_DVBJIG_* en Cyber_00)", [
@@ -553,10 +561,7 @@ VISTAS = [
 
 PARAMETROS = [
     ("PREFIJO_CUENTA2", "486-", "Prefijo de la cuenta en CYBER"),
-    ("VISTAS_USUARIO", "1", "1 (18/11) = al terminar la actualización y la asignación, y cuando suben los saldos, se ejecuta RCVRY.PROC_DAT_486 en CYBER, se bajan sus columnas y se arma la tabla de cada usuario (cfg.VISTA_USUARIO: AEM, MIS); 0 = no se actualizan"),
-    ("DAT_CYBER_STORE", "RCVRY.PROC_DAT_486", "Store de CYBER que llena la tabla de datos para las vistas de usuarios (se ejecuta antes de bajarla)"),
-    ("DAT_CYBER_TABLA", "RCVRY.RPT_DAT_486_1", "Tabla de CYBER de donde se bajan las columnas ORIGEN = CYBER de las vistas de usuarios"),
-    ("DAT_CYBER_LLAVE", "CUENTA", "Columna de esa tabla que es la cuenta de CYBER (DMACCT = DAT.CUENTA2)"),
+    ("VISTAS_USUARIO", "1", "1 (18/11) = al terminar la actualización y la asignación, y cuando suben los saldos, se bajan de CYBER los campos de las vistas (directo de DELQMST y ACTFIL, sin store desde el 19/11) y se arma la tabla de cada usuario (cfg.VISTA_USUARIO: AEM, MIS); 0 = no se actualizan"),
     ("VALIDAR_LAYOUT", "1", "1 (17/11) = si a un archivo le falta cualquier campo que toma el proceso (cfg.ARCHIVO_COLUMNA, obligatorio u opcional), la corrida se detiene antes de tocar el DAT y se avisa al equipo de asignaciones (VALIDACION_ENTRADA_486); 0 = como antes: solo los obligatorios detienen"),
     ("VALIDAR_DATOS", "1", "1 (17/11) = cada archivo se revisa con las reglas de cfg.VALIDACION_DATO (importes, teléfonos, correos, catálogos, cuentas repetidas, volumen); si una supera su tolerancia, la corrida se detiene antes de tocar el DAT y se avisa (VALIDACION_ENTRADA_486); 0 = no se revisan"),
     ("TOPE_DEVOLUCION_PCT", "", "Vacío = sin tope: la base maestra se trabaja como llega. Con un número (ej. 10) se detiene si la devolución de un segmento supera ese %"),
@@ -945,6 +950,10 @@ def sql_semilla(scb, dat):
     L.append("END;")
     L.append("")
 
+    L.append("/* Campos de CYBER para las vistas de usuarios (19/11): solo se agrega lo que falta */")
+    for campo, expr, desc in CYBER_CAMPOS:
+        L.append(f"IF NOT EXISTS (SELECT 1 FROM cfg.CYBER_CAMPO WHERE CAMPO = {q(campo)}) INSERT INTO cfg.CYBER_CAMPO (CAMPO, EXPRESION, DESCRIPCION) VALUES ({q(campo)}, {q(expr)}, {q(desc)});")
+    L.append("")
     L.append("/* Vistas de usuarios (18/11): solo se agrega lo que falta */")
     for vista, ret, act, desc, cols in VISTAS:
         L.append(f"IF NOT EXISTS (SELECT 1 FROM cfg.VISTA_USUARIO WHERE CLIENTE = {cli} AND VISTA = {q(vista)}) "

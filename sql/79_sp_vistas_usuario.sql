@@ -11,14 +11,15 @@ GO
 
    Origen de cada columna (cfg.VISTA_COLUMNA.ORIGEN):
      DAT        columna de dat.DAT_486
-     CYBER      columna de RCVRY.RPT_DAT_486_1, después de correr RCVRY.PROC_DAT_486
+     CYBER      campo de cfg.CYBER_CAMPO: expresión sobre las tablas de CYBER (DELQMST, UDA1, ACTFIL)
+                que se baja directo, sin ejecutar ningún store (19/11)
      MAESTRA    encabezado de la base maestra (último renglón de la cuenta, dat.BASE_MAESTRA_CUENTA)
      CONSTANTE  valor fijo
    Los textos van recortados (decisión 18/11).
 
    ops.sp_vistas_usuario_refrescar  lo llaman la actualización y la asignación al
                                     terminar OK, y el arribo cuando suben los saldos:
-     1. ops.sp_dat_cyber_bajar     ejecuta RCVRY.PROC_DAT_486 y baja las columnas de CYBER
+     1. ops.sp_dat_cyber_bajar     baja de CYBER los campos pedidos con una sola consulta
      2. ops.sp_vistas_usuario_armar arma la tabla de cada usuario (se rearma aparte y se
                                     cambia de golpe: nunca la ven vacía ni a medias)
    cfg.sp_vista_columna_alta        agrega o cambia una columna (revisa que el campo exista)
@@ -29,28 +30,31 @@ GO
 SET NOCOUNT ON;
 GO
 
-/* Ejecuta RCVRY.PROC_DAT_486 en CYBER y baja de RPT_DAT_486_1 solo las columnas que pide alguna vista activa.
-   @sin_ejecutar = 1 no corre el store; @sin_bajar = 1 toma lo que ya esté en stg.CYBER_DAT_486 (pruebas). */
+/* Baja de CYBER los campos ORIGEN = CYBER que pide alguna vista activa. 19/11: directo de las tablas (DELQMST, UDA1,
+   ACTFIL), sin ejecutar PROC_DAT_486. Cada campo es una expresión de cfg.CYBER_CAMPO.
+   @sin_bajar = 1 toma lo que ya esté en stg.CYBER_DAT_486 (pruebas). */
 CREATE OR ALTER PROCEDURE ops.sp_dat_cyber_bajar
     @id_corrida   INT,
-    @sin_ejecutar BIT = 0,
+    @sin_ejecutar BIT = 0,                     -- ya no se usa (19/11: no se ejecuta ningún store); se deja por compatibilidad
     @sin_bajar    BIT = 0,
     @solo_mostrar BIT = 0,
-    @filas        INT = NULL OUTPUT
+    @filas        INT = NULL OUTPUT,
+    @consulta     NVARCHAR(MAX) = NULL OUTPUT  -- la consulta que se manda a Oracle
 AS
 BEGIN
     SET NOCOUNT ON;
     DECLARE @cliente VARCHAR(10) = (SELECT CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida);
     DECLARE @srv SYSNAME = ISNULL(cfg.fn_param(@cliente, 'CYBER_LINKED_SERVER'), 'CYBER'),
-            @store NVARCHAR(200) = ISNULL(NULLIF(cfg.fn_param(@cliente, 'DAT_CYBER_STORE'), N''), N'RCVRY.PROC_DAT_486'),
-            @tabla NVARCHAR(200) = ISNULL(NULLIF(cfg.fn_param(@cliente, 'DAT_CYBER_TABLA'), N''), N'RCVRY.RPT_DAT_486_1'),
-            @llave SYSNAME       = ISNULL(NULLIF(cfg.fn_param(@cliente, 'DAT_CYBER_LLAVE'), N''), N'CUENTA'),
-            @cols NVARCHAR(MAX), @def NVARCHAR(MAX), @json NVARCHAR(MAX), @sql NVARCHAR(MAX), @q NVARCHAR(MAX), @msg NVARCHAR(4000);
+            @cols NVARCHAR(MAX), @def NVARCHAR(MAX), @json NVARCHAR(MAX), @expr NVARCHAR(MAX), @joins NVARCHAR(MAX) = N'',
+            @sql NVARCHAR(MAX), @q NVARCHAR(MAX), @msg NVARCHAR(4000), @activas NVARCHAR(400);
     IF @cliente IS NULL THROW 50830, 'La corrida no existe.', 1;
 
-    SELECT DISTINCT UPPER(LTRIM(RTRIM(c.CAMPO))) AS CAMPO
+    /* Campos que pide alguna vista activa y que existen en cfg.CYBER_CAMPO (los demás quedan vacíos, con aviso al armar) */
+    SELECT DISTINCT UPPER(LTRIM(RTRIM(c.CAMPO))) AS CAMPO, k.EXPRESION
     INTO #c
-    FROM cfg.VISTA_COLUMNA c JOIN cfg.VISTA_USUARIO u ON u.CLIENTE = c.CLIENTE AND u.VISTA = c.VISTA
+    FROM cfg.VISTA_COLUMNA c
+    JOIN cfg.VISTA_USUARIO u ON u.CLIENTE = c.CLIENTE AND u.VISTA = c.VISTA
+    JOIN cfg.CYBER_CAMPO k ON k.CAMPO = UPPER(LTRIM(RTRIM(c.CAMPO))) AND k.ACTIVO = 1
     WHERE c.CLIENTE = @cliente AND c.ORIGEN = 'CYBER' AND c.ACTIVO = 1 AND u.ACTIVO = 1;
     IF NOT EXISTS (SELECT 1 FROM #c)
     BEGIN
@@ -58,33 +62,32 @@ BEGIN
         SET @filas = 0;
         RETURN;
     END;
-    IF EXISTS (SELECT 1 FROM #c WHERE CAMPO LIKE N'%[^A-Z0-9_]%' OR CAMPO = UPPER(@llave))
-       OR @store LIKE N'%[^A-Za-z0-9_.]%' OR @tabla LIKE N'%[^A-Za-z0-9_.]%' OR @llave LIKE N'%[^A-Za-z0-9_]%'
-        THROW 50831, 'Columna, tabla o store de CYBER con caracteres inválidos (solo letras, números y _).', 1;
+    IF EXISTS (SELECT 1 FROM #c WHERE CAMPO LIKE N'%[^A-Z0-9_]%' OR CAMPO = N'CUENTA' OR EXPRESION LIKE N'%;%' OR EXPRESION LIKE N'%--%')
+        THROW 50831, 'cfg.CYBER_CAMPO: nombre con caracteres inválidos o expresión con ; o --.', 1;
 
     SELECT @cols = STRING_AGG(CAST(CAMPO AS NVARCHAR(MAX)), N', ') WITHIN GROUP (ORDER BY CAMPO),
            @def  = STRING_AGG(CAST(QUOTENAME(CAMPO) + N' NVARCHAR(400) NULL' AS NVARCHAR(MAX)), N', ') WITHIN GROUP (ORDER BY CAMPO),
-           @json = STRING_AGG(CAST(N's.' + QUOTENAME(CAMPO) AS NVARCHAR(MAX)), N', ') WITHIN GROUP (ORDER BY CAMPO)
+           @json = STRING_AGG(CAST(N's.' + QUOTENAME(CAMPO) AS NVARCHAR(MAX)), N', ') WITHIN GROUP (ORDER BY CAMPO),
+           @expr = STRING_AGG(CAST(EXPRESION + N' as ' + CAMPO AS NVARCHAR(MAX)), N', ') WITHIN GROUP (ORDER BY CAMPO)
     FROM #c;
 
-    /* 1. El store llena RPT_DAT_486_1 con los datos del momento (única forma de tenerlos actualizados) */
-    IF @sin_ejecutar = 0
-    BEGIN
-        DELETE FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id_corrida AND SCRIPT = 'DAT_CYBER';
-        INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
-        VALUES (@id_corrida, 'DAT_CYBER', 1, CONCAT(N'EXECUTE ', @store, N';')), (@id_corrida, 'DAT_CYBER', 2, N'COMMIT;');
-        EXEC ops.sp_cyber_ejecutar @id_corrida, 'DAT_CYBER', @solo_mostrar;
-        IF @solo_mostrar = 0
-        BEGIN
-            SET @msg = CONCAT(@store, N' ejecutado en CYBER');
-            EXEC ops.sp_log @id_corrida, 'DAT CYBER STORE', 'OK', NULL, @msg;
-        END;
-    END;
+    /* Alias que pueden usar las expresiones: d = DELQMST (cuentas activas del cliente), u = UDA1, sr / cr = última gestión
+       en ACTFIL (FE_ULT_SR: usuario que empieza con 1 o a; FE_ULT_CR: con z), igual que PROC_DAT_486 */
+    SET @activas = N'select dmacct from RCVRY.delqmst where dmacctg = ''1'' and dmcompany = ''' + @cliente + N''' and dmstatus is null';
+    IF EXISTS (SELECT 1 FROM #c WHERE EXPRESION LIKE N'%u.%')
+        SET @joins += N' left join RCVRY.uda1 u on u.u1acct = d.dmacct';
+    IF EXISTS (SELECT 1 FROM #c WHERE EXPRESION LIKE N'%sr.%')
+        SET @joins += N' left join (select acacct, max(acactdte) as FE_ULT_SR from RCVRY.actfil where acacctg = ''1'' and acseqnum = ''0'''
+                    + N' and substr(accidnam, 1, 1) in (''1'', ''a'') and acacct in (' + @activas + N') group by acacct) sr on sr.acacct = d.dmacct';
+    IF EXISTS (SELECT 1 FROM #c WHERE EXPRESION LIKE N'%cr.%')
+        SET @joins += N' left join (select acacct, max(acactdte) as FE_ULT_CR from RCVRY.actfil where acacctg = ''1'' and acseqnum = ''0'''
+                    + N' and substr(accidnam, 1, 1) in (''z'', ''Z'') and acacct in (' + @activas + N') group by acacct) cr on cr.acacct = d.dmacct';
+    SET @q = N'select d.dmacct, ' + @expr + N' from RCVRY.delqmst d' + @joins
+           + N' where d.dmacctg = ''1'' and d.dmcompany = ''' + @cliente + N''' and d.dmstatus is null';
+    SET @consulta = @q;
 
-    /* 2. Se bajan la llave y las columnas pedidas */
     IF @sin_bajar = 0
     BEGIN
-        SET @q = N'select ' + @llave + N', ' + @cols + N' from ' + @tabla + N' where ' + @llave + N' is not null';
         IF @solo_mostrar = 1
         BEGIN
             SELECT 'DAT_CYBER' AS SCRIPT, @q AS CONSULTA;
@@ -114,7 +117,7 @@ BEGIN
     EXEC sp_executesql @sql, N'@n INT OUTPUT', @n = @filas OUTPUT;
     IF @filas = 0
     BEGIN
-        SET @msg = CONCAT(@tabla, N' llegó vacía: las vistas se quedan con lo que bajó la última vez.');
+        SET @msg = N'DELQMST no regresó cuentas activas del cliente: las vistas se quedan con lo que bajó la última vez.';
         THROW 50834, @msg, 1;
     END;
     BEGIN TRANSACTION;
@@ -129,7 +132,7 @@ BEGIN
         SET @filas = @@ROWCOUNT;
     COMMIT TRANSACTION;
     DROP TABLE IF EXISTS stg.CYBER_DAT_486;
-    SET @msg = CONCAT(N'Bajadas de ', @tabla, N': ', @filas, N' cuentas · columnas ', @cols);
+    SET @msg = CONCAT(N'Bajadas de CYBER (DELQMST/ACTFIL, sin store): ', @filas, N' cuentas · columnas ', @cols);
     EXEC ops.sp_log @id_corrida, 'DAT CYBER', 'OK', @filas, @msg;
 END;
 GO
@@ -318,7 +321,7 @@ BEGIN
     IF @err IS NOT NULL OR @avisos IS NOT NULL
     BEGIN
         SET @acc = CASE WHEN @err IS NOT NULL
-                        THEN CONCAT(N'Revisar el error de CYBER (permisos de EXECUTE en RCVRY.PROC_DAT_486 y SELECT en RCVRY.RPT_DAT_486_1) y volver a correr EXEC ops.sp_vistas_usuario_refrescar ', @id_corrida, N', @forzar = 1;')
+                        THEN CONCAT(N'Revisar el error de CYBER (servidor vinculado y SELECT en RCVRY.DELQMST, RCVRY.UDA1 y RCVRY.ACTFIL) y volver a correr EXEC ops.sp_vistas_usuario_refrescar ', @id_corrida, N', @forzar = 1;')
                         ELSE N'El equipo de asignaciones revisa cfg.VISTA_COLUMNA (el campo debe existir en su origen) y corre EXEC ops.sp_vistas_usuario_armar;' END;
         EXEC mail.sp_hallazgo @id_corrida, N'Vistas de usuarios con avisos', @msg, @acc, NULL, @solo_prueba;
     END;
@@ -352,8 +355,12 @@ BEGIN
         SET @msg = CONCAT(N'El DAT no tiene la columna ', @campo, N'.');
         THROW 50837, @msg, 1;
     END;
-    IF @origen = 'CYBER' AND @campo LIKE N'%[^A-Za-z0-9_]%'
-        THROW 50838, 'La columna de CYBER solo puede tener letras, números y _.', 1;
+    IF @origen = 'CYBER' AND NOT EXISTS (SELECT 1 FROM cfg.CYBER_CAMPO WHERE CAMPO = UPPER(@campo) AND ACTIVO = 1)
+    BEGIN
+        SET @msg = CONCAT(N'El campo de CYBER ', @campo, N' no está en cfg.CYBER_CAMPO (disponibles: ',
+                          (SELECT STRING_AGG(CAMPO, N', ') FROM cfg.CYBER_CAMPO WHERE ACTIVO = 1), N'). Para uno nuevo, pídelo a sistemas.');
+        THROW 50838, @msg, 1;
+    END;
     IF @origen = 'MAESTRA' AND NOT EXISTS (SELECT 1 FROM dat.BASE_MAESTRA_CUENTA m CROSS APPLY OPENJSON(m.DATOS) j
                                            WHERE m.CLIENTE = @cliente AND j.[key] COLLATE DATABASE_DEFAULT = @campo
                                              AND m.LLAVE = (SELECT MAX(x.LLAVE) FROM dat.BASE_MAESTRA_CUENTA x WHERE x.CLIENTE = @cliente AND x.CODIGO = m.CODIGO))

@@ -35,10 +35,7 @@ UPDATE mail.PLANTILLA SET PERFIL_DBMAIL = N'asig.486.cdmx' WHERE CODIGO LIKE N'%
 
 /* Parámetros */
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'PREFIJO_CUENTA2', N'486-', N'Prefijo de la cuenta en CYBER');
-INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'VISTAS_USUARIO', N'1', N'1 (18/11) = al terminar la actualización y la asignación, y cuando suben los saldos, se ejecuta RCVRY.PROC_DAT_486 en CYBER, se bajan sus columnas y se arma la tabla de cada usuario (cfg.VISTA_USUARIO: AEM, MIS); 0 = no se actualizan');
-INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'DAT_CYBER_STORE', N'RCVRY.PROC_DAT_486', N'Store de CYBER que llena la tabla de datos para las vistas de usuarios (se ejecuta antes de bajarla)');
-INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'DAT_CYBER_TABLA', N'RCVRY.RPT_DAT_486_1', N'Tabla de CYBER de donde se bajan las columnas ORIGEN = CYBER de las vistas de usuarios');
-INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'DAT_CYBER_LLAVE', N'CUENTA', N'Columna de esa tabla que es la cuenta de CYBER (DMACCT = DAT.CUENTA2)');
+INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'VISTAS_USUARIO', N'1', N'1 (18/11) = al terminar la actualización y la asignación, y cuando suben los saldos, se bajan de CYBER los campos de las vistas (directo de DELQMST y ACTFIL, sin store desde el 19/11) y se arma la tabla de cada usuario (cfg.VISTA_USUARIO: AEM, MIS); 0 = no se actualizan');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'VALIDAR_LAYOUT', N'1', N'1 (17/11) = si a un archivo le falta cualquier campo que toma el proceso (cfg.ARCHIVO_COLUMNA, obligatorio u opcional), la corrida se detiene antes de tocar el DAT y se avisa al equipo de asignaciones (VALIDACION_ENTRADA_486); 0 = como antes: solo los obligatorios detienen');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'VALIDAR_DATOS', N'1', N'1 (17/11) = cada archivo se revisa con las reglas de cfg.VALIDACION_DATO (importes, teléfonos, correos, catálogos, cuentas repetidas, volumen); si una supera su tolerancia, la corrida se detiene antes de tocar el DAT y se avisa (VALIDACION_ENTRADA_486); 0 = no se revisan');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'TOPE_DEVOLUCION_PCT', N'', N'Vacío = sin tope: la base maestra se trabaja como llega. Con un número (ej. 10) se detiene si la devolución de un segmento supera ese %');
@@ -1003,6 +1000,12 @@ BEGIN
     INSERT INTO cfg.PHNVAL_CARGA (FE_FIN, ESTATUS, FILAS, ALTAS, BAJAS, MENSAJE)
     VALUES (SYSDATETIME(), 'OK', 459, 459, 0, N'Copia inicial de la semilla (PHNVAL del 19/11/2026)');
 END;
+
+/* Campos de CYBER para las vistas de usuarios (19/11): solo se agrega lo que falta */
+IF NOT EXISTS (SELECT 1 FROM cfg.CYBER_CAMPO WHERE CAMPO = N'ESTATUS') INSERT INTO cfg.CYBER_CAMPO (CAMPO, EXPRESION, DESCRIPCION) VALUES (N'ESTATUS', N'd.DMACRC2', N'Estatus de la cuenta en CYBER (DELQMST.DMACRC2, la misma tabla donde se validan los saldos)');
+IF NOT EXISTS (SELECT 1 FROM cfg.CYBER_CAMPO WHERE CAMPO = N'ABAN_SR') INSERT INTO cfg.CYBER_CAMPO (CAMPO, EXPRESION, DESCRIPCION) VALUES (N'ABAN_SR', N'TRUNC(SYSDATE) - TRUNC(sr.FE_ULT_SR)', N'Días desde la última gestión de usuario que empieza con 1 o a (ACTFIL), como PROC_DAT_486');
+IF NOT EXISTS (SELECT 1 FROM cfg.CYBER_CAMPO WHERE CAMPO = N'ABAN_CR') INSERT INTO cfg.CYBER_CAMPO (CAMPO, EXPRESION, DESCRIPCION) VALUES (N'ABAN_CR', N'TRUNC(SYSDATE) - TRUNC(cr.FE_ULT_CR)', N'Días desde la última gestión de usuario que empieza con z (ACTFIL), como PROC_DAT_486');
+IF NOT EXISTS (SELECT 1 FROM cfg.CYBER_CAMPO WHERE CAMPO = N'SDO_CYBER') INSERT INTO cfg.CYBER_CAMPO (CAMPO, EXPRESION, DESCRIPCION) VALUES (N'SDO_CYBER', N'd.DMCURBAL', N'Saldo actual en CYBER (DELQMST.DMCURBAL)');
 
 /* Vistas de usuarios (18/11): solo se agrega lo que falta */
 IF NOT EXISTS (SELECT 1 FROM cfg.VISTA_USUARIO WHERE CLIENTE = N'486' AND VISTA = N'AEM') INSERT INTO cfg.VISTA_USUARIO (CLIENTE, VISTA, VER_RETIROS, ACTIVO, DESCRIPCION, USUARIO) VALUES (N'486', N'AEM', 1, 1, N'Equipo de AEM (MAPEO_USUARIOS.xlsx, 18/11). También ve las cuentas retiradas del día (antes MX_G1MCT_DVBJIG_* en Cyber_00)', 'SEMILLA');

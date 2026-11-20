@@ -469,7 +469,7 @@ CREATE TABLE cfg.VISTA_COLUMNA (
     ORDEN        INT            NOT NULL,
     ENCABEZADO   NVARCHAR(128)  NOT NULL,           -- nombre de la columna tal como lo debe ver el usuario
     ORIGEN       VARCHAR(10)    NOT NULL,           -- DAT | CYBER | MAESTRA | CONSTANTE
-    CAMPO        NVARCHAR(200)  NOT NULL,           -- columna del DAT, columna de RPT_DAT_486_1, encabezado de la base maestra o valor fijo
+    CAMPO        NVARCHAR(200)  NOT NULL,           -- columna del DAT, campo de cfg.CYBER_CAMPO, encabezado de la base maestra o valor fijo
     ACTIVO       BIT            NOT NULL CONSTRAINT DF_VISTA_COLUMNA_ACT DEFAULT 1,
     DESCRIPCION  NVARCHAR(400)  NULL,
     USUARIO      SYSNAME        NOT NULL CONSTRAINT DF_VISTA_COLUMNA_USR DEFAULT SUSER_SNAME(),
@@ -528,4 +528,17 @@ CREATE TABLE cfg.PHNVAL_CARGA (
 GO
 IF OBJECT_ID('stg.CYBER_PHNVAL') IS NULL
 CREATE TABLE stg.CYBER_PHNVAL (VTCOMUNA NVARCHAR(60) NULL, VTARECOD NVARCHAR(20) NULL, VTLENGTH NVARCHAR(10) NULL);
+GO
+
+/* Campos de CYBER que pueden usar las vistas de usuarios (19/11): cada uno es una expresión de Oracle sobre
+   d = DELQMST (cuentas activas del cliente), u = UDA1, sr / cr = última gestión en ACTFIL. ops.sp_dat_cyber_bajar
+   los baja directo de las tablas, sin ejecutar ningún store. Los mantiene sistemas; la semilla solo agrega lo que falta. */
+IF OBJECT_ID('cfg.CYBER_CAMPO') IS NULL
+CREATE TABLE cfg.CYBER_CAMPO (
+    CAMPO        VARCHAR(30)    NOT NULL CONSTRAINT PK_CYBER_CAMPO PRIMARY KEY,
+    EXPRESION    NVARCHAR(400)  NOT NULL,
+    DESCRIPCION  NVARCHAR(400)  NULL,
+    ACTIVO       BIT            NOT NULL CONSTRAINT DF_CYBER_CAMPO_ACT DEFAULT 1,
+    CONSTRAINT CK_CYBER_CAMPO_NOMBRE CHECK (CAMPO NOT LIKE '%[^A-Z0-9_]%')
+);
 GO

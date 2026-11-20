@@ -218,7 +218,7 @@ BEGIN
             EXEC ops.sp_log @id_corrida, 'ACT CYBER', 'ERROR', NULL, @msg;
         END CATCH;
     END;
-    /* Vistas de usuarios (AEM, MIS): PROC_DAT_486 en CYBER, bajada y tablas de cada usuario (VISTAS_USUARIO) */
+    /* Vistas de usuarios (AEM, MIS): bajada de CYBER (DELQMST, ACTFIL) y tablas de cada usuario (VISTAS_USUARIO) */
     BEGIN TRY
         EXEC ops.sp_vistas_usuario_refrescar @id_corrida;
     END TRY
