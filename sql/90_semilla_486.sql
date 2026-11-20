@@ -35,7 +35,7 @@ UPDATE mail.PLANTILLA SET PERFIL_DBMAIL = N'asig.486.cdmx' WHERE CODIGO LIKE N'%
 
 /* Parámetros */
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'PREFIJO_CUENTA2', N'486-', N'Prefijo de la cuenta en CYBER');
-INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'VISTAS_USUARIO', N'1', N'1 (18/11) = al terminar la actualización y la asignación, y cuando suben los saldos, se bajan de CYBER los campos de las vistas (directo de DELQMST y ACTFIL, sin store desde el 19/11) y se arma la tabla de cada usuario (cfg.VISTA_USUARIO: AEM, MIS); 0 = no se actualizan');
+INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'VISTAS_USUARIO', N'1', N'1 (18/11) = al terminar la actualización y la asignación, y cuando suben los saldos, se bajan de CYBER los campos de las vistas (directo de DELQMST y RPT_DAT_486_1, sin ejecutar el store desde el 19/11) y se arma la tabla de cada usuario (cfg.VISTA_USUARIO: AEM, MIS); 0 = no se actualizan');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'VALIDAR_LAYOUT', N'1', N'1 (17/11) = si a un archivo le falta cualquier campo que toma el proceso (cfg.ARCHIVO_COLUMNA, obligatorio u opcional), la corrida se detiene antes de tocar el DAT y se avisa al equipo de asignaciones (VALIDACION_ENTRADA_486); 0 = como antes: solo los obligatorios detienen');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'VALIDAR_DATOS', N'1', N'1 (17/11) = cada archivo se revisa con las reglas de cfg.VALIDACION_DATO (importes, teléfonos, correos, catálogos, cuentas repetidas, volumen); si una supera su tolerancia, la corrida se detiene antes de tocar el DAT y se avisa (VALIDACION_ENTRADA_486); 0 = no se revisan');
 INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION) VALUES (N'486', N'TOPE_DEVOLUCION_PCT', N'', N'Vacío = sin tope: la base maestra se trabaja como llega. Con un número (ej. 10) se detiene si la devolución de un segmento supera ese %');
@@ -1003,8 +1003,8 @@ END;
 
 /* Campos de CYBER para las vistas de usuarios (19/11): solo se agrega lo que falta */
 IF NOT EXISTS (SELECT 1 FROM cfg.CYBER_CAMPO WHERE CAMPO = N'ESTATUS') INSERT INTO cfg.CYBER_CAMPO (CAMPO, EXPRESION, DESCRIPCION) VALUES (N'ESTATUS', N'd.DMACRC2', N'Estatus de la cuenta en CYBER (DELQMST.DMACRC2, la misma tabla donde se validan los saldos)');
-IF NOT EXISTS (SELECT 1 FROM cfg.CYBER_CAMPO WHERE CAMPO = N'ABAN_SR') INSERT INTO cfg.CYBER_CAMPO (CAMPO, EXPRESION, DESCRIPCION) VALUES (N'ABAN_SR', N'TRUNC(SYSDATE) - TRUNC(sr.FE_ULT_SR)', N'Días desde la última gestión de usuario que empieza con 1 o a (ACTFIL), como PROC_DAT_486');
-IF NOT EXISTS (SELECT 1 FROM cfg.CYBER_CAMPO WHERE CAMPO = N'ABAN_CR') INSERT INTO cfg.CYBER_CAMPO (CAMPO, EXPRESION, DESCRIPCION) VALUES (N'ABAN_CR', N'TRUNC(SYSDATE) - TRUNC(cr.FE_ULT_CR)', N'Días desde la última gestión de usuario que empieza con z (ACTFIL), como PROC_DAT_486');
+IF NOT EXISTS (SELECT 1 FROM cfg.CYBER_CAMPO WHERE CAMPO = N'ABAN_SR') INSERT INTO cfg.CYBER_CAMPO (CAMPO, EXPRESION, DESCRIPCION) VALUES (N'ABAN_SR', N'r.ABAN_SR', N'Días desde la última gestión de usuario que empieza con 1 o a, como lo dejó PROC_DAT_486 en RPT_DAT_486_1 la última vez que se corrió en CYBER');
+IF NOT EXISTS (SELECT 1 FROM cfg.CYBER_CAMPO WHERE CAMPO = N'ABAN_CR') INSERT INTO cfg.CYBER_CAMPO (CAMPO, EXPRESION, DESCRIPCION) VALUES (N'ABAN_CR', N'r.ABAN_CR', N'Días desde la última gestión de usuario que empieza con z (RPT_DAT_486_1)');
 IF NOT EXISTS (SELECT 1 FROM cfg.CYBER_CAMPO WHERE CAMPO = N'SDO_CYBER') INSERT INTO cfg.CYBER_CAMPO (CAMPO, EXPRESION, DESCRIPCION) VALUES (N'SDO_CYBER', N'd.DMCURBAL', N'Saldo actual en CYBER (DELQMST.DMCURBAL)');
 
 /* Vistas de usuarios (18/11): solo se agrega lo que falta */

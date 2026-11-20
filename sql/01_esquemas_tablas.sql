@@ -365,7 +365,7 @@ CREATE TABLE dat.BASE_MAESTRA_CUENTA (
     CONSTRAINT PK_BASE_MAESTRA_CUENTA PRIMARY KEY (CLIENTE, CODIGO, LLAVE)
 );
 GO
-/* Lo que bajó de CYBER para las vistas de usuarios (19/11: directo de DELQMST/ACTFIL con cfg.CYBER_CAMPO): solo las
+/* Lo que bajó de CYBER para las vistas de usuarios (19/11: directo de DELQMST y RPT_DAT_486_1 con cfg.CYBER_CAMPO): solo las
    columnas que pide alguna vista, como JSON por cuenta (CUENTA = DMACCT = DAT.CUENTA2) */
 IF OBJECT_ID('dat.CYBER_DAT') IS NULL
 CREATE TABLE dat.CYBER_DAT (

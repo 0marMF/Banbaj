@@ -1588,14 +1588,26 @@ SET @rs = CONCAT(CASE WHEN EXISTS (SELECT 1 FROM dat.BASE_MAESTRA_CUENTA WHERE C
     (SELECT COUNT(*) FROM dat.BASE_MAESTRA_CUENTA m JOIN ops.CORRIDA c ON c.ID_CORRIDA = m.ID_CORRIDA WHERE c.ESTATUS = 'REVERTIDA' OR c.REVERTIDA_AUTO = 1));
 EXEC pru.sp_igual N'VISTAS: último renglón de la base maestra por cuenta, sin corridas revertidas', N'1|0', @rs;
 
-/* Sin servidor vinculado: el store falla, la tabla se arma con lo último de CYBER y queda aviso */
+/* Sin servidor vinculado: la bajada falla, la tabla se arma con lo último de CYBER y queda aviso; no se ejecuta ningún store */
+DELETE FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idv AND SCRIPT = 'DAT_CYBER';
 EXEC ops.sp_vistas_usuario_refrescar @idv, 'VISTAS PRUEBA 2', @forzar = 1, @solo_prueba = 1;
 SET @rs = CONCAT(
     (SELECT TOP (1) ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @idv AND PASO = 'DAT CYBER' ORDER BY ID DESC), '|',
     (SELECT TOP (1) ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @idv AND PASO = 'VISTAS PRUEBA 2' ORDER BY ID DESC), '|',
-    (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idv AND SCRIPT = 'DAT_CYBER' AND NUM = 1), '|',
+    (SELECT COUNT(*) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idv AND SCRIPT = 'DAT_CYBER'), '|',
     CASE WHEN (SELECT COUNT(*) FROM aem.DAT_486 WHERE ESTATUS_CYBER = N'CD') = (SELECT COUNT(*) FROM dat.DAT_486 WHERE CUENTA2 IS NOT NULL) THEN 1 ELSE 0 END);
-EXEC pru.sp_igual N'VISTAS: si CYBER falla se arma con lo último que bajó, con aviso; el store va primero', N'ERROR|AVISO|EXECUTE RCVRY.PROC_DAT_486;|1', @rs;
+EXEC pru.sp_igual N'VISTAS: si CYBER falla se arma con lo último que bajó, con aviso; no se ejecuta PROC_DAT_486', N'ERROR|AVISO|0|1', @rs;
+
+/* La consulta a Oracle: ESTATUS de DELQMST y ABAN_SR de RPT_DAT_486_1, sin store ni ACTFIL */
+DECLARE @q NVARCHAR(MAX);
+EXEC ops.sp_dat_cyber_bajar @idv, @sin_bajar = 1, @solo_mostrar = 1, @consulta = @q OUTPUT;
+SET @rs = CONCAT(CASE WHEN @q LIKE N'select d.dmacct, r.ABAN_SR as ABAN_SR, d.DMACRC2 as ESTATUS from RCVRY.delqmst d left join RCVRY.rpt_dat_486_1 r on r.cuenta = d.dmacct where d.dmacctg = ''1'' and d.dmcompany = ''486'' and d.dmstatus is null' THEN 1 ELSE 0 END, '|',
+                 CASE WHEN @q LIKE N'%actfil%' OR @q LIKE N'%PROC_DAT%' OR @q LIKE N'%uda1%' THEN 1 ELSE 0 END);
+IF @rs NOT LIKE N'1|%' PRINT CONCAT(N'CONSULTA: ', @q);
+EXEC pru.sp_igual N'VISTAS: ESTATUS sale de DELQMST.DMACRC2 y ABAN_SR de RPT_DAT_486_1 (sin store, sin ACTFIL)', N'1|0', @rs;
+SET @err = NULL;
+BEGIN TRY EXEC cfg.sp_vista_columna_alta 'MIS', N'X_CYBER', 'CYBER', N'NO_EXISTE'; END TRY BEGIN CATCH SET @err = CAST(ERROR_NUMBER() AS NVARCHAR(10)); END CATCH;
+EXEC pru.sp_igual N'VISTAS: un campo de CYBER que no está en cfg.CYBER_CAMPO no se puede dar de alta', N'50838', @err;
 
 /* Sin el parámetro no hace nada; con el paso ya OK no repite */
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'VISTAS_USUARIO';

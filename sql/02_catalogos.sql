@@ -530,8 +530,8 @@ IF OBJECT_ID('stg.CYBER_PHNVAL') IS NULL
 CREATE TABLE stg.CYBER_PHNVAL (VTCOMUNA NVARCHAR(60) NULL, VTARECOD NVARCHAR(20) NULL, VTLENGTH NVARCHAR(10) NULL);
 GO
 
-/* Campos de CYBER que pueden usar las vistas de usuarios (19/11): cada uno es una expresión de Oracle sobre
-   d = DELQMST (cuentas activas del cliente), u = UDA1, sr / cr = última gestión en ACTFIL. ops.sp_dat_cyber_bajar
+/* Campos de CYBER que pueden usar las vistas de usuarios (19/11): cada uno es una columna (o expresión de Oracle) de
+   d = DELQMST (cuentas activas del cliente), u = UDA1 o r = RPT_DAT_486_1 tal como esté en CYBER. ops.sp_dat_cyber_bajar
    los baja directo de las tablas, sin ejecutar ningún store. Los mantiene sistemas; la semilla solo agrega lo que falta. */
 IF OBJECT_ID('cfg.CYBER_CAMPO') IS NULL
 CREATE TABLE cfg.CYBER_CAMPO (
