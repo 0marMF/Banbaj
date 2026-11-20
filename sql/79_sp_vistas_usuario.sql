@@ -352,8 +352,8 @@ BEGIN
     END;
     IF @origen = 'CYBER' AND NOT EXISTS (SELECT 1 FROM cfg.CYBER_CAMPO WHERE CAMPO = UPPER(@campo) AND ACTIVO = 1)
     BEGIN
-        SET @msg = CONCAT(N'El campo de CYBER ', @campo, N' no está en cfg.CYBER_CAMPO (disponibles: ',
-                          (SELECT STRING_AGG(CAMPO, N', ') FROM cfg.CYBER_CAMPO WHERE ACTIVO = 1), N'). Para uno nuevo, pídelo a sistemas.');
+        SELECT @msg = STRING_AGG(CAST(CAMPO AS NVARCHAR(30)), N', ') FROM cfg.CYBER_CAMPO WHERE ACTIVO = 1;
+        SET @msg = CONCAT(N'El campo de CYBER ', @campo, N' no está en cfg.CYBER_CAMPO (disponibles: ', @msg, N'). Para uno nuevo, pídelo a sistemas.');
         THROW 50838, @msg, 1;
     END;
     IF @origen = 'MAESTRA' AND NOT EXISTS (SELECT 1 FROM dat.BASE_MAESTRA_CUENTA m CROSS APPLY OPENJSON(m.DATOS) j
