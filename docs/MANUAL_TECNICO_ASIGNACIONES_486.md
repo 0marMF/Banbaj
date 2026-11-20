@@ -48,7 +48,7 @@ Este manual explica el proceso en ese orden. No hace falta saber programar: todo
 4. **Retiros:** las cuentas que cumplen un criterio de retiro (saldo cero o negativo, etc.) se retiran solas, salvo que en un segmento pasen del 50 % de sus cuentas. En ese caso llega un hallazgo y el retiro espera la revisión del equipo.
 5. **CYBER:** ejecuta solo los scripts de saldos, vencido, pago mínimo y PVS/REE. **Ya no se sube SCBSDOS en la actualización.**
 6. **SCBPAG:** se escribe en la carpeta de la corrida y llega `ARCHIVOS_LISTOS_486` para subirlo.
-7. **Usuarios AEM y MIS:** se ejecuta `PROC_DAT_486` en CYBER y se actualizan sus tablas.
+7. **Usuarios AEM y MIS:** se bajan de CYBER sus datos (ESTATUS y ABAN_SR) y se actualizan sus tablas.
 8. **Cuadre de pagos:** en cada vuelta del job revisa que los pagos del SCBPAG ya estén en CYBER. A las 17:00 avisa los que falten.
 
 ## 2. Asignación (cuando el banco manda bases maestras)
@@ -91,7 +91,7 @@ AEM y MIS ya no reciben archivos: consultan en SQL Server, con su usuario, una t
 - **AEM:** `aem.DAT_486`, con su mapeo, y `aem.RETIROS_HOY`, las cuentas retiradas hoy en la actualización y en la asignación.
 - **MIS:** `mis.DAT_486`, que puede llevar columnas de las bases maestras que no están en el DAT.
 
-Se actualizan solas en la actualización, en la asignación y cuando suben los saldos. Antes de bajar los datos de CYBER se ejecuta siempre `RCVRY.PROC_DAT_486`, porque Operación los puede cambiar. Cómo cambiar sus columnas: sección *Columnas de AEM y MIS*.
+Se actualizan solas en la actualización, en la asignación y cuando suben los saldos. Los datos de CYBER se leen directo de las tablas, sin ejecutar ningún store: ESTATUS de `DELQMST` y ABAN_SR de `RPT_DAT_486_1`. Cómo cambiar sus columnas: sección *Columnas de AEM y MIS*.
 
 # Los correos y qué hacer con cada uno
 
@@ -212,7 +212,7 @@ Cada columna es un renglón de `cfg.VISTA_COLUMNA`, con el encabezado exacto que
 | Origen | Qué es el campo | Ejemplo |
 |---|---|---|
 | `DAT` | Una columna del DAT | `CUENTA` ← `CUENTA2`, `ETIQUETA03` ← `TIPO` |
-| `CYBER` | Una columna de `RCVRY.RPT_DAT_486_1` (la llena `PROC_DAT_486`) | `ESTATUS_CYBER` ← `ESTATUS`, `ABANDONO_SR` ← `ABAN_SR` |
+| `CYBER` | Uno de los campos de CYBER disponibles (`SELECT * FROM cfg.CYBER_CAMPO;`: ESTATUS, ABAN_SR, ABAN_CR, SDO_CYBER). Uno nuevo lo agrega sistemas | `ESTATUS_CYBER` ← `ESTATUS`, `ABANDONO_SR` ← `ABAN_SR` |
 | `MAESTRA` | Un encabezado de la base maestra, tal como lo manda el banco | Cualquier columna de las bases de TDC, Consumo o Hipotecario |
 | `CONSTANTE` | Un valor fijo | `GRUPO` ← `1` |
 

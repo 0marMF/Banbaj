@@ -122,7 +122,7 @@ Si ya tienes instalada la versión del 17/11 en la noche, solo hay que correr es
 
 ```sql
 USE [BNABAJ_486];
-EXEC ops.sp_vistas_usuario_refrescar @id_corrida = <última corrida OK>, @forzar = 1;     -- PROC_DAT_486, bajada y tablas
+EXEC ops.sp_vistas_usuario_refrescar @id_corrida = <última corrida OK>, @forzar = 1;     -- bajada de CYBER y tablas
 SELECT TOP (10) * FROM aem.DAT_486;
 SELECT COUNT(*) AS RETIROS_HOY FROM aem.RETIROS_HOY;
 EXEC cfg.sp_vista_usuario_login 'AEM', 'aem_banbaj', N'<contraseña>';                       -- la contraseña no se guarda

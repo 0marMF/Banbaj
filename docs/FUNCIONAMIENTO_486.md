@@ -229,7 +229,7 @@ El retiro por solicitud también se cierra solo al confirmarlo. Lo que ya se esc
 | Retiro detenido: supera el tope | La devolución de un segmento supera el 50 % de sus cuentas en el DAT |
 | Retiro con pasos pendientes | Falló escribir los archivos o el ZIP o el correo, el retiro en CYBER o la copia de la devolución |
 | Arribo de correos / teléfonos a CYBER con error | CYBER rechazó el arribo automático |
-| Vistas de usuarios sin actualizar / con avisos | Falló `PROC_DAT_486` o la bajada de CYBER (los usuarios se quedan con lo último que bajó), o el equipo pidió en `cfg.VISTA_COLUMNA` un campo que no existe |
+| Vistas de usuarios sin actualizar / con avisos | Falló la bajada de CYBER (los usuarios se quedan con lo último que bajó), o el equipo pidió en `cfg.VISTA_COLUMNA` un campo que no existe |
 | Actualización en CYBER con error | Oracle rechazó un script `ACT_*` |
 | Pagos que no subieron a CYBER | A la hora límite (17:00) hay pagos del SCBPAG que no están en CYBER |
 | Blanqueo de status con error | Falló bajar los status o ejecutar el blanqueo |
@@ -287,7 +287,7 @@ AEM y MIS ya no reciben archivos: consultan directo su esquema en SQL Server, co
   - al terminar OK la asignación;
   - otra vez cuando suben los saldos, para que las cuentas nuevas traigan ESTATUS y ABAN_SR de CYBER.
 
-  Antes de bajar los datos de CYBER se ejecuta siempre `RCVRY.PROC_DAT_486`.
+  Los datos de CYBER se leen directo de las tablas, sin ejecutar ningún store (19/11): ESTATUS de `DELQMST` y ABAN_SR de `RPT_DAT_486_1`, tal como la dejó la última corrida de `PROC_DAT_486` en CYBER.
 - **Si algo falla:** la corrida no cambia de estatus; los usuarios se quedan con lo último y llega un hallazgo.
 
 Detalle: *Flujo y diagramas*, sección 10. Se apaga con `VISTAS_USUARIO = 0`.

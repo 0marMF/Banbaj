@@ -3,7 +3,7 @@ flowchart TD
     B(["Asignación OK<br/>(después de escribir los archivos)"]) --> R
     S(["Arribo: subieron los saldos<br/>las cuentas nuevas ya existen en CYBER"]) --> R
     R{"ops.sp_vistas_usuario_refrescar<br/>VISTAS_USUARIO = 1 y el paso no está OK"}
-    R --> C["ops.sp_dat_cyber_bajar<br/>1. EXECUTE RCVRY.PROC_DAT_486 (ops.sp_cyber_ejecutar)<br/>2. baja de RCVRY.RPT_DAT_486_1 solo las columnas<br/>ORIGEN = CYBER que pide alguna vista"]
+    R --> C["ops.sp_dat_cyber_bajar (sin store)<br/>una consulta: ESTATUS de DELQMST,<br/>ABAN_SR de RPT_DAT_486_1 (cfg.CYBER_CAMPO)<br/>solo los campos que pide alguna vista"]
     C -- "OK" --> J["dat.CYBER_DAT<br/>JSON por cuenta (CUENTA = DAT.CUENTA2)"]
     C -- "falla o llega vacía" --> JX["Se queda lo que bajó la vez anterior<br/>DAT CYBER = ERROR"]
     J --> V

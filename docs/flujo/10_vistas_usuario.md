@@ -27,11 +27,11 @@ Cada usuario tiene **su propio esquema** (el nombre de la vista en minúsculas: 
 | ORIGEN | CAMPO es | Ejemplo |
 |---|---|---|
 | `DAT` | Columna de `dat.DAT_486` | `CUENTA` ← `CUENTA2`; `ETIQUETA03` ← `TIPO` |
-| `CYBER` | Columna de `RCVRY.RPT_DAT_486_1`, que llena `RCVRY.PROC_DAT_486` | `ESTATUS_CYBER` ← `ESTATUS`; `ABANDONO_SR` ← `ABAN_SR` |
+| `CYBER` | Un campo de `cfg.CYBER_CAMPO`: columna de `DELQMST` (d), `UDA1` (u) o `RPT_DAT_486_1` (r) | `ESTATUS_CYBER` ← `ESTATUS` (`d.DMACRC2`); `ABANDONO_SR` ← `ABAN_SR` (`r.ABAN_SR`) |
 | `MAESTRA` | Encabezado de la base maestra, tal como lo manda el banco | Cualquier columna de la base de TDC, Consumo o Hipotecario |
 | `CONSTANTE` | Valor fijo (si es un número, va como número) | `GRUPO` ← `1` |
 
-- **CYBER:** antes de bajar se ejecuta `RCVRY.PROC_DAT_486`, porque es la única forma de tener los datos al momento (operación los puede cambiar). Solo se bajan las columnas que pide alguna vista activa: si mañana se pide otra columna de CYBER, basta con agregarla en la tabla.
+- **CYBER:** desde el 19/11 se lee directo de las tablas, **sin ejecutar ningún store**: ESTATUS de `DELQMST` (la misma tabla donde se validan los saldos) y ABAN_SR de `RPT_DAT_486_1`, tal como la dejó la última corrida de `PROC_DAT_486` en CYBER (decisión del 19/11). Es una sola consulta y solo trae los campos que pide alguna vista activa. Los campos disponibles están en `cfg.CYBER_CAMPO` y los mantiene sistemas.
 - **MAESTRA:** cada asignación guarda el último renglón de la base maestra de cada cuenta en `dat.BASE_MAESTRA_CUENTA`. La llave es `cfg.ARCHIVO.LLAVE_DAT`: `RIESGO` en TDC y `DES_PROD` en Consumo e Hipotecario. A cada cuenta del DAT le toca la base de su `SEGMENTO2`. Si la corrida se revierte, regresa el renglón anterior.
 
 **Agregar o cambiar una columna** (equipo de asignaciones):
@@ -74,11 +74,11 @@ EXEC cfg.sp_vista_usuario_login 'AEM', 'aem_banbaj', N'<contraseña>';   -- crea
 
 Si el login ya existe, solo cambia la contraseña. Para dar de baja a un usuario: `ACTIVO = 0` en `cfg.VISTA_USUARIO` (se borran sus objetos en la siguiente actualización) y `DROP LOGIN`.
 
-**Bitácora:** `DAT CYBER STORE`, `DAT CYBER` (cuántas cuentas bajaron), `VISTA USUARIO` (una por usuario, con sus avisos), `VISTAS USUARIO` o `VISTAS USUARIO SALDOS`.
+**Bitácora:** `DAT CYBER` (cuántas cuentas bajaron), `VISTA USUARIO` (una por usuario, con sus avisos), `VISTAS USUARIO` o `VISTAS USUARIO SALDOS`.
 
-**Parámetros:** `VISTAS_USUARIO` (1 de fábrica), `DAT_CYBER_STORE` (`RCVRY.PROC_DAT_486`), `DAT_CYBER_TABLA` (`RCVRY.RPT_DAT_486_1`), `DAT_CYBER_LLAVE` (`CUENTA`).
+**Parámetros:** `VISTAS_USUARIO` (1 de fábrica). Campos de CYBER: `cfg.CYBER_CAMPO`.
 
-**Permisos en Oracle** del usuario de `CYBER_ORACLE`: `EXECUTE` en `RCVRY.PROC_DAT_486` y `SELECT` en `RCVRY.RPT_DAT_486_1` (ya los tiene, 18/11).
+**Permisos en Oracle** del usuario de `CYBER_ORACLE`: `SELECT` en `RCVRY.DELQMST`, `RCVRY.RPT_DAT_486_1` y, si algún campo la usa, `RCVRY.UDA1`. Ya no necesita `EXECUTE` en `PROC_DAT_486`.
 
 **Errores:** 50830-50839.
 
