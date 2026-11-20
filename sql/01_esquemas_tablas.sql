@@ -216,13 +216,33 @@ CREATE TABLE ops.TELEFONO (
     CONSTRAINT PK_TELEFONO PRIMARY KEY (ID_CORRIDA, CUENTA2, AREA, TELEFONO)
 );
 GO
-/* 18/11: NUEVO lo marca la depuración de teléfonos (TEL_DEPURACION = NUEVOS): 1 = no existía en PHONE, va en el SCBTEL.
+/* NUEVO lo marca la depuración de teléfonos (TEL_DEPURACION = DIFERENCIA, 19/11): 1 = no existe en PHONE, va en el SCBTEL.
    NULL = aún no se depura (el SCBTEL lleva todos) */
 IF COL_LENGTH('ops.TELEFONO', 'NUEVO') IS NULL
     ALTER TABLE ops.TELEFONO ADD NUEVO BIT NULL;
 GO
-IF OBJECT_ID('stg.CYBER_TEL_NUEVOS') IS NULL
-CREATE TABLE stg.CYBER_TEL_NUEVOS (CUENTA NVARCHAR(28) NULL, AREA NVARCHAR(10) NULL, TELEFONO NVARCHAR(20) NULL);
+/* stg.CYBER_TEL_NUEVOS era de la depuración del 18/11 (bajaba los nuevos de la remesa); ya no se usa */
+DROP TABLE IF EXISTS stg.CYBER_TEL_NUEVOS;
+GO
+/* Depuración de teléfonos por diferencia (19/11): foto de PHONE de las cuentas activas del 486 (activos e inactivos)
+   y lo que sale de compararla con nuestros teléfonos. Solo ops.TEL_DEPURA sube a CYBER (RCVRY.JSP_TAB_TEL_DEPURA_486):
+     I = activo en CYBER que no está en nuestro archivo (se inactiva, HIAS)
+     A = inactivo en CYBER que sí está (se activa, HAAS)
+     N = nuestro y no existe en PHONE (nuevo: va en el SCBTEL)
+   Los teléfonos de gestores de queja (TEL_GESTORES_QUEJA) no se tocan. */
+IF OBJECT_ID('stg.CYBER_PHONE_FOTO') IS NULL
+CREATE TABLE stg.CYBER_PHONE_FOTO (CUENTA NVARCHAR(28) NULL, AREA NVARCHAR(10) NULL, TELEFONO NVARCHAR(20) NULL,
+                                   ESTATUS NVARCHAR(5) NULL, GESTOR NVARCHAR(20) NULL);
+GO
+IF OBJECT_ID('ops.TEL_DEPURA') IS NULL
+CREATE TABLE ops.TEL_DEPURA (
+    ID_CORRIDA  INT          NOT NULL,
+    CUENTA2     VARCHAR(28)  NOT NULL,
+    AREA        VARCHAR(10)  NOT NULL,
+    TELEFONO    VARCHAR(20)  NOT NULL,
+    ACCION      CHAR(1)      NOT NULL CONSTRAINT CK_TEL_DEPURA_ACCION CHECK (ACCION IN ('I', 'A', 'N')),
+    CONSTRAINT PK_TEL_DEPURA PRIMARY KEY (ID_CORRIDA, CUENTA2, AREA, TELEFONO)
+);
 GO
 /* Correos que se arriban a CYBER en la asignación (antes email.PRG -> sub_mail.TXT).
    CYBER (RCVRY.JSP_CORREOS_486) purga y agrega. */

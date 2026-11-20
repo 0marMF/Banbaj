@@ -12,7 +12,7 @@ GO
                              al 10, a partir de lo que baja STATUS.SQL
    cfg.sp_exclusion_cargar   blacklist_486.prg: alta masiva de exclusiones con
    cfg.sp_exclusion_alta/baja requerimiento y quién lo solicita
-   ops.sp_gescar_sin_telefono ges486.prg: gescar de nuevas sin teléfono en CYBER
+   ops.sp_gescar_sin_telefono ges486.prg: gescar de nuevas sin teléfono (de ops.TELEFONO)
    ops.sp_avisar             correo de fin de asignación (MAIL.prg), después de arribar a CYBER
    ops.sp_aviso_devolucion   correo único de devolución (Operación con ZIP, AEM en copia oculta)
    ===================================================================== */
@@ -401,13 +401,14 @@ END;
 GO
 
 /* ---------------------------------------------------------------------
-   Gescar de cuentas sin teléfono (ges486.prg, REQ 2021-051126). Después de
-   arribar los teléfonos de la asignación:
-   1. EXEC ops.sp_bajar_cyber 'telefonos', @id_corrida = <asignación> (teléfonos activos del 486
-      a stg.CYBER_TELEFONO y ejecuta este procedimiento).
-   2. Arribar SCBACTH_SINTEL.TXT ("CUENTA SIN NUMERO TELEFONICO", origen zzasg).
-   Aplica a las cuentas nuevas y reasignadas de esa asignación que no tienen
-   ningún teléfono activo en CYBER.
+   Gescar de cuentas sin teléfono (ges486.prg, REQ 2021-051126): cuentas nuevas y
+   reasignadas de la asignación sin teléfono ("CUENTA SIN NUMERO TELEFONICO",
+   origen zzasg, SCBACTH_SINTEL.TXT).
+   19/11: sale de nuestros teléfonos (ops.TELEFONO). Después de la depuración lo
+   activo en CYBER es eso (lo de gestores de queja no cuenta), así que ya no se
+   baja PHONE ni se espera al SCBTEL: se genera con la asignación y se escribe al
+   subir los saldos. Este procedimiento lo vuelve a generar (también lo llama
+   ops.sp_bajar_cyber 'TELEFONOS', que ya no hace falta para esto).
    --------------------------------------------------------------------- */
 CREATE OR ALTER PROCEDURE ops.sp_gescar_sin_telefono
     @id_corrida INT
@@ -417,20 +418,14 @@ BEGIN
     DECLARE @cliente VARCHAR(10), @proceso VARCHAR(10);
     SELECT @cliente = CLIENTE, @proceso = PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
     IF @proceso IS NULL OR @proceso <> 'ASIG' THROW 50650, 'Indica una corrida de asignación.', 1;
+    IF NOT EXISTS (SELECT 1 FROM ops.TELEFONO WHERE ID_CORRIDA = @id_corrida)
+        THROW 50651, 'La corrida no tiene teléfonos (ops.TELEFONO): todas sus cuentas saldrían sin teléfono. Revisar la asignación.', 1;
+    IF OBJECT_ID('stg.CYBER_TELEFONO') IS NOT NULL TRUNCATE TABLE stg.CYBER_TELEFONO;
 
-    IF NOT EXISTS (SELECT 1 FROM stg.CYBER_TELEFONO) THROW 50651, 'stg.CYBER_TELEFONO está vacía: baja primero los teléfonos de CYBER (ops.sp_bajar_cyber ''TELEFONOS'').', 1;
-
-    DELETE FROM ops.TELEFONO_CYBER WHERE ID_CORRIDA = @id_corrida;
-    INSERT INTO ops.TELEFONO_CYBER (ID_CORRIDA, CUENTA2, TELEFONOS)
-    SELECT @id_corrida, LEFT(LTRIM(RTRIM(CUENTA)), 28), COUNT(*)
-    FROM stg.CYBER_TELEFONO WHERE NULLIF(LTRIM(RTRIM(CUENTA)), N'') IS NOT NULL
-    GROUP BY LEFT(LTRIM(RTRIM(CUENTA)), 28);
-    TRUNCATE TABLE stg.CYBER_TELEFONO;
-
-    EXEC ops.sp_generar_salidas @id_corrida, 'SINTEL';
+    EXEC ops.sp_generar_salida @id_corrida, 'GESCAR_SINTEL';
 
     DECLARE @n INT = (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id_corrida AND ARCHIVO = 'GESCAR_SINTEL');
-    DECLARE @msg NVARCHAR(400) = CONCAT(N'Cuentas con teléfono en CYBER: ', (SELECT COUNT(*) FROM ops.TELEFONO_CYBER WHERE ID_CORRIDA = @id_corrida),
+    DECLARE @msg NVARCHAR(400) = CONCAT(N'Cuentas con teléfono en nuestro archivo: ', (SELECT COUNT(DISTINCT CUENTA2) FROM ops.TELEFONO WHERE ID_CORRIDA = @id_corrida),
                                         N' · nuevas/reasignadas sin teléfono: ', @n);
     EXEC ops.sp_log @id_corrida, 'GESCAR SIN TELEFONO', 'OK', @n, @msg;
     SELECT @n AS SIN_TELEFONO;

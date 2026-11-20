@@ -260,9 +260,9 @@ GO
 /* ---------------------------------------------------------------------
    Orden del arribo de la asignación (decisión 17/11): archivos que todavía no se escriben
    ni se avisan porque esperan su paso. Con ARRIBO_AUTOMATICO = 1:
-     ARCHIVOS_DESPUES_SALDOS        (GESCAR_NVA, GESCAR_REA) hasta que suben los saldos (paso ARRIBO SALDOS)
-     ARCHIVOS_DESPUES_DEPURACION_TEL (SCBTEL) hasta que la depuración de teléfonos queda OK: el store
-                                     inactiva lo que no está en la remesa y el SCBTEL activa lo nuestro.
+     ARCHIVOS_DESPUES_SALDOS        (GESCAR_NVA, GESCAR_REA, GESCAR_SINTEL) hasta que suben los saldos (paso ARRIBO SALDOS)
+     ARCHIVOS_DESPUES_DEPURACION_TEL (SCBTEL) hasta que la depuración de teléfonos queda OK: el SCBTEL
+                                     lleva los teléfonos nuevos y solo se sube con lo demás ya depurado.
    Devuelve la lista separada por comas (NULL = nada pendiente). Lo usan ops.sp_exportar_auto y ops.sp_retiro_cerrar.
    --------------------------------------------------------------------- */
 CREATE OR ALTER FUNCTION ops.fn_archivos_diferidos (@id_corrida INT)
@@ -273,7 +273,12 @@ BEGIN
     SELECT @cliente = CLIENTE, @proceso = PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
     IF @proceso IS NULL OR @proceso <> 'ASIG' OR ISNULL(cfg.fn_param(@cliente, 'ARRIBO_AUTOMATICO'), '0') <> '1' RETURN NULL;
     IF NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'ARRIBO SALDOS' AND ESTATUS = 'OK')
-        SET @r += N',' + ISNULL(cfg.fn_param(@cliente, 'ARCHIVOS_DESPUES_SALDOS'), N'GESCAR_NVA,GESCAR_REA');
+    BEGIN
+        SET @r += N',' + ISNULL(cfg.fn_param(@cliente, 'ARCHIVOS_DESPUES_SALDOS'), N'GESCAR_NVA,GESCAR_REA,GESCAR_SINTEL');
+        /* 19/11: el gescar sin teléfono siempre espera a los saldos, aunque el parámetro del servidor sea anterior */
+        IF NOT EXISTS (SELECT 1 FROM STRING_SPLIT(@r, N',') WHERE UPPER(LTRIM(RTRIM(value))) = N'GESCAR_SINTEL')
+            SET @r += N',GESCAR_SINTEL';
+    END;
     IF NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'ARRIBO TELEFONOS' AND ESTATUS = 'OK')
         SET @r += N',' + ISNULL(cfg.fn_param(@cliente, 'ARCHIVOS_DESPUES_DEPURACION_TEL'), N'SCBTEL');
     RETURN NULLIF(STUFF(@r, 1, 1, N''), N'');

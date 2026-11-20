@@ -10,8 +10,9 @@ GO
               2 (TEL2) o 4 (resto)
    19/11: solo van los que tienen AREA + longitud en cfg.PHNVAL (las ladas que admite
    el cargador; copia mensual de PHNVAL de CYBER, sql/47_sp_ladas.sql).
-   Se mandan completos: el procedimiento de CYBER (RCVRY.JSP_TELEFONOS_REMESA_486)
-   purga y agrega. Salen en SCBTEL y en sub_mst.TXT (CUENTA|AREA|TELEFONO|TIPOTEL).
+   Con TEL_DEPURACION = ACTUAL se mandan completos (sub_mst.TXT, CUENTA|AREA|TELEFONO|TIPOTEL) y el
+   procedimiento de CYBER (RCVRY.JSP_TELEFONOS_REMESA_486) purga y agrega. Con DIFERENCIA (19/11) se
+   comparan aquí contra una foto de PHONE y a CYBER solo sube lo que cambia (ops.sp_tel_depura_calcular).
 
    Reglas de telbnx.prg (validadas contra TELSAN real: mismas 15,353 líneas):
    1. TEL1..TEL16 de cada cuenta; se quitan  espacio - / % # $ & @ \ *
@@ -137,7 +138,7 @@ BEGIN
 
     /* Script para CYBER, después de cargar sub_mst.TXT en RCVRY.JSP_TAB_TEL_REMESA_486 (ACTUALIZA_PHONE.SQL).
        El procedimiento vive en CYBER y no se modifica desde aquí. */
-    DELETE FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id_corrida AND SCRIPT IN ('TEL_BORRA', 'TEL_ACTUALIZA');
+    DELETE FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id_corrida AND SCRIPT IN ('TEL_BORRA', 'TEL_ACTUALIZA', 'TEL_DEPURA', 'TEL_ACTIVA_BANDERA', 'TEL_INACTIVA_BANDERA');
     /* borra.sql de ACT_PHONE: se vacía la remesa para volver a insertar */
     INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
     VALUES (@id_corrida, 'TEL_BORRA', 1, N'TRUNCATE TABLE RCVRY.JSP_TAB_TEL_REMESA_486;');
@@ -154,6 +155,32 @@ BEGIN
     VALUES (@id_corrida, 'TEL_ACTUALIZA', 1, CONCAT(N'EXECUTE ', ISNULL(cfg.fn_param(@cliente, 'CYBER_PROC_TELEFONOS'), N'RCVRY.JSP_TELEFONOS_REMESA_486'), N';')),
            (@id_corrida, 'TEL_ACTUALIZA', 2, N'COMMIT;'),
            (@id_corrida, 'TEL_ACTUALIZA', 3, N'exit;');
+    /* Bandera de CYBER (19/11): TEL_ACTIVA_BANDERA / TEL_INACTIVA_BANDERA */
+    EXEC ops.sp_tel_bandera_script @id_corrida;
+END;
+GO
+
+/* Bandera de CYBER para la depuración de teléfonos (19/11): la misma que los correos (CYBER_BANDERA_TELEFONOS, 416 de
+   fábrica) en RCVRY.RPT_LOG_CYBER_REG y su bitácora RCVRY.RPT_LOG_CYBER. ops.sp_arribar_cyber la enciende antes de bajar
+   la foto de PHONE y la apaga al terminar o si algo falla. */
+CREATE OR ALTER PROCEDURE ops.sp_tel_bandera_script
+    @id_corrida INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @cliente VARCHAR(10) = (SELECT CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida);
+    DELETE FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id_corrida AND SCRIPT IN ('TEL_ACTIVA_BANDERA', 'TEL_INACTIVA_BANDERA');
+    DECLARE @bandera VARCHAR(10) = ISNULL(NULLIF(LTRIM(RTRIM(cfg.fn_param(@cliente, 'CYBER_BANDERA_TELEFONOS'))), N''), '416');
+    IF @bandera LIKE '%[^0-9]%' THROW 50462, 'CYBER_BANDERA_TELEFONOS debe ser numérico (id_proc de RCVRY.RPT_LOG_CYBER_REG).', 1;
+    INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
+    VALUES (@id_corrida, 'TEL_ACTIVA_BANDERA', 1, CONCAT(N'UPDATE RCVRY.RPT_LOG_CYBER_REG SET STATUS=1, ETAPA=''INICIA ACTUALIZACION PHONE 486'', ACTIVADO=SYSDATE  where id_proc=', @bandera, N';')),
+           (@id_corrida, 'TEL_ACTIVA_BANDERA', 2, CONCAT(N'INSERT INTO RCVRY.rpt_log_cyber VALUES(', @bandera, N',1,SYSDATE,''PRODUCCION'',''ACTUALIZANDO PHONE G1 486'');')),
+           (@id_corrida, 'TEL_ACTIVA_BANDERA', 3, N'COMMIT;'),
+           (@id_corrida, 'TEL_ACTIVA_BANDERA', 4, N'EXIT'),
+           (@id_corrida, 'TEL_INACTIVA_BANDERA', 1, CONCAT(N'INSERT INTO RCVRY.rpt_log_cyber VALUES(', @bandera, N',2,SYSDATE,''PRODUCCION'',''FINALIZA PROCESO ACTUALIZACION PHONE G1 486'');')),
+           (@id_corrida, 'TEL_INACTIVA_BANDERA', 2, CONCAT(N'UPDATE RCVRY.RPT_LOG_CYBER_REG SET STATUS=0, ETAPA=''FINALIZA ACTUALIZACION PHONE G1 486'' where id_proc=', @bandera, N';')),
+           (@id_corrida, 'TEL_INACTIVA_BANDERA', 3, N'COMMIT;'),
+           (@id_corrida, 'TEL_INACTIVA_BANDERA', 4, N'EXIT');
 END;
 GO
 

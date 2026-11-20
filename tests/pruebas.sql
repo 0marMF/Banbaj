@@ -312,17 +312,18 @@ EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado 
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- teléfonos con error: los correos esperan
 DELETE FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO TELEFONOS';
 EXEC ops.sp_log @id, 'ARRIBO TELEFONOS', 'OK', 7, N'Prueba: depuración de teléfonos corregida';
-EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- teléfonos OK: correos; el gescar sin teléfono espera al SCBTEL
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- teléfonos OK: correos; el SCBTEL aún no sube
 INSERT INTO stg.CYBER_PHONE_G1 (CUENTA, AREA, TELEFONO) SELECT CUENTA2, AREA, TELEFONO FROM ops.TELEFONO WHERE ID_CORRIDA = @id;
-EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- SCBTEL arriba: gescar sin teléfono
+EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar + N',';    -- SCBTEL arriba
 EXEC ops.sp_arribo_automatico @fecha = '2026-11-02', @sin_bajar = 1, @resultado = @ar OUTPUT; SET @ars += @ar;           -- ya no repite
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'ARRIBO AUTO (orden 17/11): saldos por DMHOSTUP, luego depuración de teléfonos, correos después de teléfonos, gescar sin teléfono con el SCBTEL arriba' AS p,
-             N'ESPERANDO SALDOS,ESPERANDO SALDOS,SALDOS OK · TELEFONOS ERROR,DEPURACION DE TELEFONOS CON ERROR,CORREOS ERROR,GESCAR SIN TELEFONO ERROR,ARRIBO AUTOMATICO TERMINADO|1|1|1|3' AS e,
+FROM (SELECT N'ARRIBO AUTO (orden 17/11 y 19/11): saldos por DMHOSTUP con los gescar (también sin teléfono), luego depuración de teléfonos, correos después de teléfonos y al final el SCBTEL' AS p,
+             N'ESPERANDO SALDOS,ESPERANDO SALDOS,SALDOS OK · TELEFONOS ERROR,DEPURACION DE TELEFONOS CON ERROR,CORREOS ERROR,SCBTEL OK,ARRIBO AUTOMATICO TERMINADO|1|1|1|1|2' AS e,
              CONCAT(@ars, '|',
                     (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO SALDOS' AND ESTATUS = 'OK'), '|',
                     (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO CORREOS' AND ESTATUS = 'ERROR'), '|',
-                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'GESCAR SIN TELEFONO' AND ESTATUS = 'ERROR'), '|',
+                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'GESCAR SIN TELEFONO' AND ESTATUS = 'OK'), '|',
+                    (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'ARRIBO SCBTEL' AND ESTATUS = 'OK'), '|',
                     (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO = 'HALLAZGO'
                      AND (MENSAJE LIKE N'Depuración de % en CYBER con error:%' OR MENSAJE LIKE N'Gescar de cuentas sin teléfono con error:%'))) AS o) x;
 
@@ -331,7 +332,7 @@ FROM (SELECT N'ARRIBO AUTO (orden 17/11): saldos por DMHOSTUP, luego depuración
    Los teléfonos se arriban de inmediato; los correos esperan a que el SCBSDOS suba el domicilio nuevo. */
 UPDATE cfg.PARAMETRO SET VALOR = N'' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_HOSTUP_EXPR';
 TRUNCATE TABLE stg.CYBER_HOSTUP;
-DELETE FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO IN ('ARRIBO SALDOS', 'ARRIBO CORREOS', 'ARRIBO TELEFONOS', 'GESCAR SIN TELEFONO', 'ARRIBO BASE', 'HALLAZGO');
+DELETE FROM ops.BITACORA WHERE ID_CORRIDA = @id AND PASO IN ('ARRIBO SALDOS', 'ARRIBO CORREOS', 'ARRIBO TELEFONOS', 'GESCAR SIN TELEFONO', 'ARRIBO SCBTEL', 'ARRIBO BASE', 'HALLAZGO');
 DECLARE @cta_dom NVARCHAR(28) = (SELECT MIN(CUENTA) FROM stg.CYBER_DELQMST_ACT WHERE ISNULL(DOMICILIO, N'') <> N'');
 UPDATE stg.CYBER_DELQMST_ACT SET DOMICILIO = N'DOMICILIO ANTERIOR' WHERE CUENTA = @cta_dom;
 SET @ars = N'';
@@ -436,7 +437,15 @@ FROM (SELECT N'MAIL: sub_mail (CUENTA2|CORREO) y scripts de CYBER' AS p,
              CONCAT((SELECT STRING_AGG(LINEA, ',') WITHIN GROUP (ORDER BY NUM) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'MAIL_SUBMAIL'), '|',
                     (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'MAIL_BORRA' AND NUM = 1), '|',
                     (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @id AND SCRIPT = 'MAIL_ACTUALIZA' AND NUM = 1)) AS o) x;
-INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'GESCAR sin teléfono: no sale en la asignación (espera lo que baja de CYBER)', CASE WHEN NOT EXISTS (SELECT 1 FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'GESCAR_SINTEL') THEN 1 ELSE 0 END, NULL;
+/* 19/11: el gescar sin teléfono sale con la asignación, de nuestros teléfonos (nuevas y reasignadas sin renglón en ops.TELEFONO) */
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
+FROM (SELECT N'GESCAR sin teléfono: sale con la asignación, de las nuevas y reasignadas sin teléfono en nuestro archivo' AS p,
+             CONCAT((SELECT STRING_AGG(CAST(d.CUENTA2 AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY d.CUENTA2) FROM dat.HISTORIA_FOLIO d
+                     WHERE d.CLIENTE = '486' AND d.ID_CORRIDA_ALTA = @id
+                       AND NOT EXISTS (SELECT 1 FROM ops.TELEFONO t WHERE t.ID_CORRIDA = @id AND t.CUENTA2 = d.CUENTA2)), '|0') AS e,
+             CONCAT((SELECT STRING_AGG(CAST(SUBSTRING(RTRIM(LEFT(LINEA, 29)), 5, 25) AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY SUBSTRING(RTRIM(LEFT(LINEA, 29)), 5, 25))
+                     FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'GESCAR_SINTEL'), '|',
+                    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'GESCAR_SINTEL' AND DATALENGTH(LINEA) / 2 <> 119)) AS o) x;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'MAIL: banderas de CYBER (id_proc 416) al inicio y al final' AS p,
              N'UPDATE RCVRY.RPT_LOG_CYBER_REG SET STATUS=1, ETAPA=''INICIA ACTUALIZACION ADDRESS 486'', ACTIVADO=SYSDATE  where id_proc=416;|UPDATE RCVRY.RPT_LOG_CYBER_REG SET STATUS=0, ETAPA=''FINALIZA ACTUALIZACION ADDRESS G1 486'' where id_proc=416;' AS e,
@@ -800,14 +809,29 @@ FROM (SELECT N'CORREOS NUEVOS: INSERT en RCVRY.ADDRESS solo de lo que CYBER no t
                     (SELECT COUNT(*) FROM stg.CYBER_CORREO)) AS o) x;
 GO
 
-/* Gescar de nuevas y reasignadas sin teléfono activo en CYBER (ges486.prg) */
+/* Gescar de nuevas y reasignadas sin teléfono (ges486.prg). 19/11: de nuestros teléfonos; una cuenta cuyo único teléfono
+   era de queja no tiene renglón en ops.TELEFONO y sale aquí. Lo que haya en stg.CYBER_TELEFONO ya no cuenta. */
 INSERT INTO stg.CYBER_TELEFONO (CUENTA, LADA, TEL)
 VALUES ('486-100001', '0155', '12345678'), ('486-100003', '045', '4771234567'), ('486-100003', '0155', '11111111'), ('486-102', '0155', '77777777');
+DECLARE @tel_sin TABLE (CUENTA2 VARCHAR(28), AREA VARCHAR(10), TELEFONO VARCHAR(20), TIPOTEL CHAR(1), CAMPO_DAT VARCHAR(10), NUEVO BIT);
+/* La primera cuenta nueva con teléfono se queda sin él (como si solo tuviera uno de queja) */
+DECLARE @cta_sin VARCHAR(28) = (SELECT MIN(d.CUENTA2) FROM dat.HISTORIA_FOLIO d WHERE d.CLIENTE = '486' AND d.ID_CORRIDA_ALTA = 2
+                                  AND EXISTS (SELECT 1 FROM ops.TELEFONO t WHERE t.ID_CORRIDA = 2 AND t.CUENTA2 = d.CUENTA2));
+INSERT INTO @tel_sin SELECT CUENTA2, AREA, TELEFONO, TIPOTEL, CAMPO_DAT, NUEVO FROM ops.TELEFONO WHERE ID_CORRIDA = 2 AND CUENTA2 = @cta_sin;
+DELETE FROM ops.TELEFONO WHERE ID_CORRIDA = 2 AND CUENTA2 = @cta_sin;
 EXEC ops.sp_gescar_sin_telefono @id_corrida = 2;
+DECLARE @esp_sin NVARCHAR(MAX) = (SELECT STRING_AGG(CAST(d.CUENTA2 AS NVARCHAR(MAX)), ',') WITHIN GROUP (ORDER BY d.CUENTA2) FROM dat.HISTORIA_FOLIO d
+                                  WHERE d.CLIENTE = '486' AND d.ID_CORRIDA_ALTA = 2
+                                    AND NOT EXISTS (SELECT 1 FROM ops.TELEFONO t WHERE t.ID_CORRIDA = 2 AND t.CUENTA2 = d.CUENTA2));
+DECLARE @n_sin INT = (SELECT COUNT(*) FROM STRING_SPLIT(@esp_sin, ',')),
+        @prim_sin NVARCHAR(28) = (SELECT TOP (1) d.CUENTA2 FROM dat.HISTORIA_FOLIO d WHERE d.CLIENTE = '486' AND d.ID_CORRIDA_ALTA = 2
+                                    AND NOT EXISTS (SELECT 1 FROM ops.TELEFONO t WHERE t.ID_CORRIDA = 2 AND t.CUENTA2 = d.CUENTA2) ORDER BY d.CUENTA2);
+INSERT INTO ops.TELEFONO (ID_CORRIDA, CUENTA2, AREA, TELEFONO, TIPOTEL, CAMPO_DAT, NUEVO) SELECT 2, CUENTA2, AREA, TELEFONO, TIPOTEL, CAMPO_DAT, NUEVO FROM @tel_sin;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
-FROM (SELECT N'GESCAR sin teléfono: cuentas sin teléfono en CYBER (119, zzasg)' AS p,
-             N'3|0|2001486-100002|zzasg|CUENTA SIN NUMERO TELEFONICO|486-100002,486-100004,486-500' AS e,
-             CONCAT((SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = 2 AND ARCHIVO = 'GESCAR_SINTEL'), '|',
+FROM (SELECT N'GESCAR sin teléfono: nuevas y reasignadas sin teléfono en nuestro archivo (119, zzasg), sin mirar CYBER' AS p,
+             CONCAT(CASE WHEN @cta_sin IS NOT NULL AND CHARINDEX(@cta_sin, @esp_sin) > 0 THEN 1 ELSE 0 END, '|', @n_sin, '|0|2001', @prim_sin,
+                    '|zzasg|CUENTA SIN NUMERO TELEFONICO|', @esp_sin) AS e,
+             CONCAT('1|', (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = 2 AND ARCHIVO = 'GESCAR_SINTEL'), '|',
                     (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = 2 AND ARCHIVO = 'GESCAR_SINTEL' AND DATALENGTH(LINEA) / 2 <> 119), '|',
                     (SELECT CONCAT(RTRIM(LEFT(LINEA, 29)), '|', RTRIM(SUBSTRING(LINEA, 56, 8)), '|', RTRIM(SUBSTRING(LINEA, 64, 56)))
                      FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = 2 AND ARCHIVO = 'GESCAR_SINTEL' AND NUM = 1), '|',
@@ -1119,20 +1143,23 @@ SET @rs = CONCAT(@rs, '|', (SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @
 /* Archivos diferidos de esta corrida en cada momento del arribo */
 DECLARE @dif NVARCHAR(1000) = CONCAT(ops.fn_archivos_diferidos(@g), '|');
 EXEC ops.sp_log @g, 'GESCAR SIN TELEFONO', 'OK', 0, N'prueba';
+EXEC ops.sp_arribo_posterior @g;                               -- falta que suba el SCBTEL: no confirma
+SET @rs = CONCAT(@rs, '|', (SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @g AND PLANTILLA = 'CONFIRMACION_ASIG_486'));
+EXEC ops.sp_log @g, 'ARRIBO SCBTEL', 'OK', 0, N'prueba';
 EXEC ops.sp_arribo_posterior @g;
 EXEC ops.sp_arribo_posterior @g;                               -- no repite
 SET @rs = CONCAT(@rs, '|', (SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @g AND PLANTILLA = 'CONFIRMACION_ASIG_486'), '|',
                  (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @g AND PASO = 'ARRIBO FIN'), '|',
                  (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @g AND PASO = 'CONFIRMACION AUTOMATICA' AND ESTATUS = 'OK'));
-EXEC pru.sp_igual N'CONFIRMACION AUTO: espera teléfonos, correos y el gescar sin teléfono, marca el fin y manda el correo una sola vez', N'0|0|1|1|1', @rs;
+EXEC pru.sp_igual N'CONFIRMACION AUTO: espera teléfonos, correos, el gescar sin teléfono y el SCBTEL arriba, marca el fin y manda el correo una sola vez', N'0|0|0|1|1|1', @rs;
 EXEC ops.sp_log @g, 'ARRIBO SALDOS', 'OK', 0, N'prueba';
 SET @dif = CONCAT(@dif0, '|', @dif, ISNULL(ops.fn_archivos_diferidos(@g), N'(nada)'));
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'ARRIBO_AUTOMATICO';
 DELETE FROM ops.BITACORA WHERE ID_CORRIDA = @g AND PASO = 'ARRIBO SALDOS';
 SET @dif = CONCAT(@dif, '|', ISNULL(ops.fn_archivos_diferidos(@g), N'(nada)'));
 UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE = 'ARRIBO_AUTOMATICO';
-EXEC pru.sp_igual N'ARRIBO: archivos diferidos (al terminar SCBTEL y gescar; con teléfonos OK solo gescar; con saldos nada; sin arribo automático nada)',
-     N'GESCAR_NVA,GESCAR_REA,SCBTEL|GESCAR_NVA,GESCAR_REA|(nada)|(nada)', @dif;
+EXEC pru.sp_igual N'ARRIBO: archivos diferidos (al terminar SCBTEL y gescar, también sin teléfono; con teléfonos OK solo gescar; con saldos nada; sin arribo automático nada)',
+     N'GESCAR_NVA,GESCAR_REA,GESCAR_SINTEL,SCBTEL|GESCAR_NVA,GESCAR_REA,GESCAR_SINTEL|(nada)|(nada)', @dif;
 UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'CONFIRMACION_AUTOMATICA';
 
 /* Blanqueo: fuera de los días 1 a 10 no hace nada; dentro, sin CYBER queda en ERROR con hallazgo */
@@ -1450,71 +1477,117 @@ EXEC ops.sp_telefonos @idl;
 GO
 
 /* ---------------------------------------------------------------------
-   Depuración de teléfonos con TEL_DEPURACION = NUEVOS (18/11): el store nuevo, los nuevos que baja de la remesa,
-   el SCBTEL solo con ellos y lo que espera el arribo. Sin nuevos no hay SCBTEL ni nada que esperar.
+   Depuración de teléfonos por diferencia (TEL_DEPURACION = DIFERENCIA, 19/11): bandera 416 alrededor, foto de PHONE
+   comparada con nuestros teléfonos, a CYBER solo lo que cambia, freno de inactivación, SCBTEL solo con los nuevos.
    --------------------------------------------------------------------- */
 DECLARE @idt INT = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE CLIENTE = '486' AND PROCESO = 'ASIG' AND ESTATUS = 'OK'),
-        @rs NVARCHAR(4000), @n INT, @total INT;
-/* Si esa asignación ya no tiene teléfonos (pruebas anteriores los movieron), se le ponen tres y su script */
-IF NOT EXISTS (SELECT 1 FROM ops.TELEFONO WHERE ID_CORRIDA = @idt)
-    INSERT INTO ops.TELEFONO (ID_CORRIDA, CUENTA2, AREA, TELEFONO, TIPOTEL, CAMPO_DAT)
-    VALUES (@idt, '486-900001', '0155', '11112222', '1', 'TEL1'), (@idt, '486-900001', '045', '5511112222', '5', 'TEL4'),
-           (@idt, '486-900002', '0155', '33334444', '1', 'TEL1');
+        @rs NVARCHAR(4000), @n INT, @nv INT, @total INT, @esp NVARCHAR(4000), @err INT;
+/* Al menos tres teléfonos en esa asignación y sus scripts */
+INSERT INTO ops.TELEFONO (ID_CORRIDA, CUENTA2, AREA, TELEFONO, TIPOTEL, CAMPO_DAT)
+SELECT @idt, v.C, v.A, v.T, v.TT, v.CD
+FROM (VALUES ('486-900001', '0155', '11112222', '1', 'TEL1'), ('486-900001', '045', '5511112222', '5', 'TEL4'),
+             ('486-900002', '0155', '33334444', '1', 'TEL1')) v(C, A, T, TT, CD)
+WHERE (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @idt) < 3
+  AND NOT EXISTS (SELECT 1 FROM ops.TELEFONO x WHERE x.ID_CORRIDA = @idt AND x.CUENTA2 = v.C AND x.AREA = v.A AND x.TELEFONO = v.T);
 IF NOT EXISTS (SELECT 1 FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idt AND SCRIPT = 'TEL_ACTUALIZA')
     INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
     VALUES (@idt, 'TEL_ACTUALIZA', 1, N'EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;'), (@idt, 'TEL_ACTUALIZA', 2, N'COMMIT;');
 IF NOT EXISTS (SELECT 1 FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idt AND SCRIPT = 'TEL_BORRA')
     INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA) VALUES (@idt, 'TEL_BORRA', 1, N'TRUNCATE TABLE RCVRY.JSP_TAB_TEL_REMESA_486;');
+DELETE FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idt AND SCRIPT IN ('TEL_ACTIVA_BANDERA', 'TEL_INACTIVA_BANDERA', 'TEL_DEPURA');
+DELETE FROM ops.TEL_DEPURA WHERE ID_CORRIDA = @idt;
 DECLARE @pend TABLE (TIPO VARCHAR(10), CUENTA NVARCHAR(28), AREA NVARCHAR(10), TELEFONO NVARCHAR(20), VALOR NVARCHAR(200));
 INSERT INTO @pend SELECT TIPO, CUENTA, AREA, TELEFONO, VALOR FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @idt;
 SET @total = (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @idt);
 
-/* El store depende del modo */
-UPDATE cfg.PARAMETRO SET VALOR = 'NUEVOS' WHERE CLIENTE = '486' AND CLAVE = 'TEL_DEPURACION';
-DECLARE @pl TABLE (SCRIPT VARCHAR(40), BLOQUE INT, PLSQL NVARCHAR(MAX));
-INSERT INTO @pl EXEC ops.sp_arribar_cyber @idt, 'TELEFONOS', @solo_mostrar = 1;
-SET @rs = CONCAT((SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idt AND SCRIPT = 'TEL_ACTUALIZA' AND NUM = 1), '|',
-                 (SELECT COUNT(*) FROM @pl WHERE SCRIPT = 'TEL_ACTUALIZA' AND PLSQL LIKE N'%RCVRY.JSP_TELEFONOS_DEPURA_486%'), '|',
-                 (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @idt AND PASO = 'TEL NUEVOS'));
-EXEC pru.sp_igual N'TEL NUEVOS: con TEL_DEPURACION = NUEVOS se ejecuta JSP_TELEFONOS_DEPURA_486 (sin bajar nada al solo mostrar)',
-     N'EXECUTE RCVRY.JSP_TELEFONOS_DEPURA_486;|1|0', @rs;
+/* Solo mostrar: la bandera se arma si la corrida no la tenía y envuelve todo */
+UPDATE cfg.PARAMETRO SET VALOR = 'DIFERENCIA' WHERE CLIENTE = '486' AND CLAVE = 'TEL_DEPURACION';
+DECLARE @pl TABLE (ID INT IDENTITY(1,1), SCRIPT VARCHAR(40), BLOQUE INT, PLSQL NVARCHAR(MAX));
+INSERT INTO @pl (SCRIPT, BLOQUE, PLSQL) EXEC ops.sp_arribar_cyber @idt, 'TELEFONOS', @solo_mostrar = 1;
+SET @rs = CONCAT((SELECT STRING_AGG(SCRIPT, ',') WITHIN GROUP (ORDER BY ID) FROM @pl), '|',
+                 (SELECT COUNT(*) FROM @pl WHERE SCRIPT = 'TEL_ACTIVA_BANDERA' AND PLSQL LIKE N'%STATUS=1%id_proc=416;%rpt_log_cyber VALUES(416,1,%'), '|',
+                 (SELECT COUNT(*) FROM @pl WHERE SCRIPT = 'TEL_INACTIVA_BANDERA' AND PLSQL LIKE N'%rpt_log_cyber VALUES(416,2,%STATUS=0%id_proc=416;%'), '|',
+                 (SELECT COUNT(*) FROM @pl WHERE SCRIPT = 'TEL_BORRA' AND PLSQL LIKE N'%TRUNCATE TABLE RCVRY.JSP_TAB_TEL_DEPURA_486%'), '|',
+                 (SELECT COUNT(*) FROM @pl WHERE SCRIPT = 'TEL_ACTUALIZA' AND PLSQL LIKE N'%RCVRY.JSP_TELEFONOS_DEPURA_486(416, 0, 0);%'), '|',
+                 (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @idt AND PASO = 'TEL DIFERENCIA'));
+EXEC pru.sp_igual N'TEL DIFERENCIA: bandera 416 (RPT_LOG_CYBER_REG y RPT_LOG_CYBER) antes y después; store nuevo sobre JSP_TAB_TEL_DEPURA_486',
+     N'TEL_ACTIVA_BANDERA,TEL_BORRA,TEL_ACTUALIZA,TEL_INACTIVA_BANDERA|1|1|1|1|0', @rs;
 
-/* Dos nuevos en la remesa de CYBER (uno con espacios) */
-TRUNCATE TABLE stg.CYBER_TEL_NUEVOS;
-INSERT INTO stg.CYBER_TEL_NUEVOS (CUENTA, AREA, TELEFONO)
-SELECT TOP (2) CUENTA2 + N' ', AREA, TELEFONO FROM ops.TELEFONO WHERE ID_CORRIDA = @idt ORDER BY CUENTA2, AREA, TELEFONO;
-EXEC ops.sp_tel_nuevos @idt, @sin_bajar = 1, @nuevos = @n OUTPUT;
-SET @rs = CONCAT(@n, '|',
-    (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @idt AND NUEVO = 0), '|',
+/* Foto de CYBER: t1 activo (igual), t2 inactivo (se activa), t3 inactivo de queja (no se toca), los demás no existen (nuevos);
+   y de la misma cuenta, uno activo que ya no viene (se inactiva) y uno activo de queja que no viene (no se toca) */
+DECLARE @t TABLE (RN INT, CUENTA2 VARCHAR(28), AREA VARCHAR(10), TELEFONO VARCHAR(20));
+INSERT INTO @t SELECT ROW_NUMBER() OVER (ORDER BY CUENTA2, AREA, TELEFONO), CUENTA2, AREA, TELEFONO FROM ops.TELEFONO WHERE ID_CORRIDA = @idt;
+TRUNCATE TABLE stg.CYBER_PHONE_FOTO;
+INSERT INTO stg.CYBER_PHONE_FOTO (CUENTA, AREA, TELEFONO, ESTATUS, GESTOR)
+SELECT CUENTA2 + N' ', AREA, TELEFONO, N'A', N'GESTOR1' FROM @t WHERE RN = 1
+UNION ALL SELECT CUENTA2, AREA, TELEFONO, N'A', N'GESTOR2' FROM @t WHERE RN = 1                 -- repetido en PHONE: cuenta una vez
+UNION ALL SELECT CUENTA2, AREA, TELEFONO, N'I', N'HIAS' FROM @t WHERE RN = 2
+UNION ALL SELECT CUENTA2, AREA, TELEFONO, N'I', N'homs' FROM @t WHERE RN = 3
+UNION ALL SELECT CUENTA2, N'0155', N'99990000', N'A', N'GESTOR1' FROM @t WHERE RN = 1
+UNION ALL SELECT CUENTA2, N'0155', N'99990001', N'A', N'HOMS' FROM @t WHERE RN = 1;
+UPDATE cfg.PARAMETRO SET VALOR = '100' WHERE CLIENTE = '486' AND CLAVE = 'TEL_DEPURA_MAX_INACTIVAR_PCT';   -- aquí se inactiva 1 de 2
+EXEC ops.sp_tel_depura_calcular @idt, @sin_bajar = 1, @cambios = @n OUTPUT, @nuevos = @nv OUTPUT;
+SET @rs = CONCAT(@n, '|', @nv, '|',
+    (SELECT STRING_AGG(CONCAT(ACCION, ':', CNT), ',') WITHIN GROUP (ORDER BY ACCION) FROM (SELECT ACCION, COUNT(*) AS CNT FROM ops.TEL_DEPURA WHERE ID_CORRIDA = @idt GROUP BY ACCION) z), '|',
+    (SELECT COUNT(*) FROM ops.TEL_DEPURA d JOIN @t x ON x.CUENTA2 = d.CUENTA2 AND x.AREA = d.AREA AND x.TELEFONO = d.TELEFONO WHERE d.ID_CORRIDA = @idt AND d.ACCION = 'A' AND x.RN = 2), '|',
+    (SELECT COUNT(*) FROM ops.TEL_DEPURA WHERE ID_CORRIDA = @idt AND ACCION = 'I' AND TELEFONO = '99990000'), '|',
+    (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @idt AND NUEVO = 1), '|',
     (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @idt AND ARCHIVO = 'SCBTEL'), '|',
     (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @idt AND TIPO = 'TELEFONO'), '|',
-    (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @idt AND TIPO <> 'TELEFONO'), '|',
-    (SELECT TOP (1) ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @idt AND PASO = 'TEL NUEVOS' ORDER BY ID DESC));
-SET @n = (SELECT COUNT(*) FROM @pend WHERE TIPO <> 'TELEFONO');
-DECLARE @esp NVARCHAR(400) = CONCAT('2|', @total - 2, '|2|2|', @n, '|OK');
-EXEC pru.sp_igual N'TEL NUEVOS: se marcan, el SCBTEL lleva solo esos y el arribo espera solo esos (cuentas y domicilios igual)', @esp, @rs;
+    (SELECT COUNT(*) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idt AND SCRIPT = 'TEL_DEPURA'), '|',
+    (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idt AND SCRIPT = 'TEL_ACTUALIZA' AND NUM = 1), '|',
+    (SELECT TOP (1) ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @idt AND PASO = 'TEL DIFERENCIA' ORDER BY ID DESC));
+SET @esp = CONCAT(@total - 1, '|', @total - 3, '|A:1,I:1', CASE WHEN @total > 3 THEN CONCAT(',N:', @total - 3) ELSE N'' END, '|1|1|',
+                  @total - 3, '|', @total - 3, '|', @total - 3, '|', @total - 1, '|EXECUTE RCVRY.JSP_TELEFONOS_DEPURA_486(416, ', @total - 1, ', 1);|OK');
+EXEC pru.sp_igual N'TEL DIFERENCIA: solo lo que cambia (I, A, N), sin tocar quejas; SCBTEL y pendientes solo con los nuevos; store con esperados y quejas', @esp, @rs;
 
-/* Sin nuevos: SCBTEL vacío y nada que esperar para el gescar sin teléfono */
-TRUNCATE TABLE stg.CYBER_TEL_NUEVOS;
-EXEC ops.sp_tel_nuevos @idt, @sin_bajar = 1, @nuevos = @n OUTPUT;
-SET @rs = CONCAT(@n, '|', (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @idt AND ARCHIVO = 'SCBTEL'), '|',
-                 (SELECT COUNT(*) FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @idt AND TIPO = 'TELEFONO'), '|',
-                 CASE WHEN (SELECT TOP (1) MENSAJE FROM ops.BITACORA WHERE ID_CORRIDA = @idt AND PASO = 'TEL NUEVOS' ORDER BY ID DESC) LIKE N'%no hay SCBTEL que subir%' THEN 1 ELSE 0 END);
-EXEC pru.sp_igual N'TEL NUEVOS: sin nuevos no hay SCBTEL ni teléfonos que esperar', N'0|0|0|1', @rs;
+/* Lo que quedó en CYBER debe cuadrar con lo que mandamos */
+EXEC ops.sp_tel_remesa_validar @idt, @conteo_cyber = @n, @depura = 1;
+SET @err = 0;
+BEGIN TRY
+    SET @nv = @n + 1;
+    EXEC ops.sp_tel_remesa_validar @idt, @conteo_cyber = @nv, @depura = 1;
+END TRY
+BEGIN CATCH
+    SET @err = ERROR_NUMBER();
+END CATCH;
+SET @rs = CONCAT((SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @idt AND PASO = 'TEL REMESA VALIDADA' AND ESTATUS = 'OK' AND MENSAJE LIKE N'RCVRY.JSP_TAB_TEL_DEPURA_486:%'), '|', @err);
+EXEC pru.sp_igual N'TEL DIFERENCIA: se valida JSP_TAB_TEL_DEPURA_486 contra los cambios antes del store', N'1|50776', @rs;
 
-/* Se deja como estaba: modo ACTUAL, SCBTEL completo y los pendientes originales */
+/* Freno: si se inactivaría más del tope, no se toca CYBER */
+UPDATE cfg.PARAMETRO SET VALOR = '10' WHERE CLIENTE = '486' AND CLAVE = 'TEL_DEPURA_MAX_INACTIVAR_PCT';
+TRUNCATE TABLE stg.CYBER_PHONE_FOTO;
+INSERT INTO stg.CYBER_PHONE_FOTO (CUENTA, AREA, TELEFONO, ESTATUS, GESTOR)
+SELECT CUENTA2, AREA, TELEFONO, N'A', N'GESTOR1' FROM @t WHERE RN = 1
+UNION ALL SELECT CUENTA2, N'0155', N'99990000', N'A', N'GESTOR1' FROM @t WHERE RN = 1;
+SET @err = 0;
+BEGIN TRY
+    EXEC ops.sp_tel_depura_calcular @idt, @sin_bajar = 1, @cambios = @n OUTPUT, @nuevos = @nv OUTPUT;
+END TRY
+BEGIN CATCH
+    SET @err = ERROR_NUMBER();
+END CATCH;
+SET @rs = CONCAT(@err, '|', (SELECT TOP (1) ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @idt AND PASO = 'TEL DIFERENCIA' ORDER BY ID DESC));
+UPDATE cfg.PARAMETRO SET VALOR = '30' WHERE CLIENTE = '486' AND CLAVE = 'TEL_DEPURA_MAX_INACTIVAR_PCT';
+EXEC pru.sp_igual N'TEL DIFERENCIA: si se inactivaría más de TEL_DEPURA_MAX_INACTIVAR_PCT, se detiene', N'50779|ERROR', @rs;
+
+/* Se deja como estaba: modo ACTUAL (bandera y remesa completa), SCBTEL completo y los pendientes originales */
 UPDATE cfg.PARAMETRO SET VALOR = 'ACTUAL' WHERE CLIENTE = '486' AND CLAVE = 'TEL_DEPURACION';
+TRUNCATE TABLE stg.CYBER_PHONE_FOTO;
+DELETE FROM ops.TEL_DEPURA WHERE ID_CORRIDA = @idt;
+DELETE FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idt AND SCRIPT = 'TEL_DEPURA';
 UPDATE ops.TELEFONO SET NUEVO = NULL WHERE ID_CORRIDA = @idt;
 EXEC ops.sp_generar_salida @idt, 'SCBTEL';
 DELETE FROM ops.ARRIBO_PENDIENTE WHERE ID_CORRIDA = @idt;
 INSERT INTO ops.ARRIBO_PENDIENTE (ID_CORRIDA, TIPO, CUENTA, AREA, TELEFONO, VALOR) SELECT @idt, TIPO, CUENTA, AREA, TELEFONO, VALOR FROM @pend;
 DELETE FROM @pl;
-INSERT INTO @pl EXEC ops.sp_arribar_cyber @idt, 'TELEFONOS', @solo_mostrar = 1;
+INSERT INTO @pl (SCRIPT, BLOQUE, PLSQL) EXEC ops.sp_arribar_cyber @idt, 'TELEFONOS', @solo_mostrar = 1;
 SET @rs = CONCAT((SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idt AND SCRIPT = 'TEL_ACTUALIZA' AND NUM = 1), '|',
-                 (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @idt AND ARCHIVO = 'SCBTEL'), '|', @total);
-SET @n = (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @idt AND ARCHIVO = 'SCBTEL');
-SET @esp = CONCAT(N'EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;|', @total, '|', @total);
-EXEC pru.sp_igual N'TEL NUEVOS: con TEL_DEPURACION = ACTUAL, el store de hoy y el SCBTEL con todos', @esp, @rs;
+                 (SELECT SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idt AND SCRIPT = 'TEL_BORRA' AND NUM = 1), '|',
+                 (SELECT TOP (1) SCRIPT FROM @pl ORDER BY ID), '|', (SELECT TOP (1) SCRIPT FROM @pl ORDER BY ID DESC), '|',
+                 (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @idt AND ARCHIVO = 'SCBTEL'));
+SET @esp = CONCAT(N'EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486;|TRUNCATE TABLE RCVRY.JSP_TAB_TEL_REMESA_486;|TEL_ACTIVA_BANDERA|TEL_INACTIVA_BANDERA|', @total);
+EXEC pru.sp_igual N'TEL ACTUAL: remesa completa y store de hoy, también con la bandera; SCBTEL con todos', @esp, @rs;
 GO
 
 /* ---------------------------------------------------------------------

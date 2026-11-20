@@ -87,7 +87,7 @@ BEGIN
             EXEC ops.sp_retiro         @id_corrida;                    -- genera también los archivos del retiro
         EXEC ops.sp_telefonos          @id_corrida;                    -- solo en asignación: CYBER purga y agrega
         EXEC ops.sp_correos            @id_corrida;                    -- email.PRG / act_mail.prg: CYBER purga y agrega
-        EXEC ops.sp_generar_salidas    @id_corrida, 'ASIG';            -- SCBSDOS, SCBTEL, sub_mst, sub_mail, gescar NVA y REA
+        EXEC ops.sp_generar_salidas    @id_corrida, 'ASIG';            -- SCBSDOS, SCBTEL, sub_mst, sub_mail, gescar NVA, REA y SINTEL
 
         SET @msg = CONCAT(N'Archivos: ', @recibidos,
                           N' · devoluciones: ', (SELECT COUNT(*) FROM ops.DEVOLUCION WHERE ID_CORRIDA = @id_corrida),

@@ -166,8 +166,8 @@ END;
 GO
 
 /* Fin del arribo de la asignación: marca la hora de fin y manda CONFIRMACION_ASIG_486 cuando las depuraciones
-   de teléfonos y correos quedaron OK en CYBER, ya se intentó el gescar de cuentas sin teléfono (el SCBTEL subió)
-   y, si está automático, el blanqueo. Una vez por corrida. */
+   de teléfonos y correos quedaron OK en CYBER, el SCBTEL ya subió (paso ARRIBO SCBTEL), ya se intentó el gescar de
+   cuentas sin teléfono y, si está automático, el blanqueo. Una vez por corrida. */
 CREATE OR ALTER PROCEDURE ops.sp_confirmar_asignacion
     @id_corrida INT
 AS
@@ -179,8 +179,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'ARRIBO CORREOS' AND ESTATUS = 'OK')
        OR NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'ARRIBO TELEFONOS' AND ESTATUS = 'OK')
         RETURN;
-    /* Al final de todo (17/11): también después del gescar de cuentas sin teléfono (con el SCBTEL ya arriba) */
+    /* Al final de todo (17/11 y 19/11): con el SCBTEL arriba y el gescar de cuentas sin teléfono ya intentado */
     IF NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'GESCAR SIN TELEFONO')
+       OR NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO IN ('ARRIBO SCBTEL', 'ARRIBO FIN'))
         RETURN;
     IF ISNULL(cfg.fn_param(@cliente, 'BLANQUEO_AUTOMATICO'), '0') = '1'
        AND NOT EXISTS (SELECT 1 FROM ops.BITACORA WHERE ID_CORRIDA = @id_corrida AND PASO = 'BLANQUEO AUTOMATICO')
@@ -359,26 +360,26 @@ BEGIN
     DECLARE @auto_arribo BIT = CASE WHEN cfg.fn_param(@cliente, 'ARRIBO_AUTOMATICO') = '1' THEN 1 ELSE 0 END,
             @auto_act    BIT = CASE WHEN cfg.fn_param(@cliente, 'ACT_CYBER_AUTOMATICO') = '1' THEN 1 ELSE 0 END,
             @auto_ret    BIT = CASE WHEN cfg.fn_param(@cliente, 'RETIRO_CYBER_AUTOMATICO') = '1' THEN 1 ELSE 0 END;
-    /* Orden del arribo de la asignación (17/11): SCBSDOS → (saldos arriba) gescar de nuevas y reasignadas y depuración de
-       teléfonos → (la remesa cuadra) SCBTEL y depuración de correos → (SCBTEL arriba) gescar sin teléfono → confirmación */
+    /* Orden del arribo de la asignación (17/11 y 19/11): SCBSDOS → (saldos arriba) gescar de nuevas, reasignadas y sin teléfono
+       y depuración de teléfonos → (cuadra) SCBTEL y depuración de correos → confirmación */
     SET @sigue = CASE
         WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'SCBSDOS')
             THEN N'Subir el SCBSDOS con el cargador de CYBER. '
                + CASE WHEN @auto_arribo = 1
-                      THEN N'En cuanto suben los saldos, el job manda los gescar de nuevas y reasignadas (llega otro aviso) y corre la depuración de teléfonos; '
-                         + N'si RCVRY.JSP_TAB_TEL_REMESA_486 queda con los mismos teléfonos que nuestro archivo, llega el aviso para subir el SCBTEL. '
-                         + N'No subir el SCBTEL antes: la depuración inactiva lo que no está en la remesa y el SCBTEL activa lo nuestro.'
-                      ELSE CONCAT(N'Con los saldos arriba: subir los gescar de nuevas y reasignadas y correr la depuración de teléfonos (EXEC ops.sp_arribar_cyber ', @id_corrida,
-                                  N', ''TELEFONOS'';). Si la remesa cuadra, subir el SCBTEL y correr la de correos (EXEC ops.sp_arribar_cyber ', @id_corrida,
-                                  N', ''CORREOS'';). Con el SCBTEL arriba: EXEC ops.sp_arribo_gescar_sintel ', @id_corrida, N'; y al final EXEC ops.sp_avisar ', @id_corrida,
-                                  N', ''CONFIRMACION_ASIG_486'';') END
+                      THEN N'En cuanto suben los saldos, el job manda los gescar de nuevas, reasignadas y sin teléfono (llega otro aviso) y corre la depuración de teléfonos; '
+                         + N'si lo que sube a CYBER cuadra con lo que mandamos, llega el aviso para subir el SCBTEL. '
+                         + N'No subir el SCBTEL antes de ese aviso: se arma con lo que encuentra la depuración.'
+                      ELSE CONCAT(N'Con los saldos arriba: subir los gescar de nuevas, reasignadas y sin teléfono (EXEC ops.sp_arribo_gescar_sintel ', @id_corrida,
+                                  N'; lo escribe) y correr la depuración de teléfonos (EXEC ops.sp_arribar_cyber ', @id_corrida,
+                                  N', ''TELEFONOS'';). Si cuadra, subir el SCBTEL y correr la de correos (EXEC ops.sp_arribar_cyber ', @id_corrida,
+                                  N', ''CORREOS'';). Al final EXEC ops.sp_avisar ', @id_corrida, N', ''CONFIRMACION_ASIG_486'';') END
         WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'SCBTEL')
-            THEN N'La depuración de teléfonos quedó bien: RCVRY.JSP_TAB_TEL_REMESA_486 tiene los mismos teléfonos que nuestro archivo. Ya pueden subir el SCBTEL con el cargador de CYBER. '
+            THEN N'La depuración de teléfonos quedó bien: lo que subió a CYBER cuadra con lo que mandamos. Ya pueden subir el SCBTEL con el cargador de CYBER. '
                + CASE WHEN @auto_arribo = 1
-                      THEN N'Mientras, el job corre la depuración de correos; en cuanto suba el SCBTEL genera SCBACTH_SINTEL.TXT (llega otro aviso) y manda la confirmación de la asignación.'
-                      ELSE CONCAT(N'Después: EXEC ops.sp_arribar_cyber ', @id_corrida, N', ''CORREOS''; y, con el SCBTEL arriba, EXEC ops.sp_arribo_gescar_sintel ', @id_corrida, N';') END
-        WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO IN ('GESCAR_NVA', 'GESCAR_REA'))
-            THEN N'Ya subieron los saldos: subir los gescar de cuentas nuevas y reasignadas con el cargador de CYBER.'
+                      THEN N'Mientras, el job corre la depuración de correos y manda la confirmación de la asignación.'
+                      ELSE CONCAT(N'Después: EXEC ops.sp_arribar_cyber ', @id_corrida, N', ''CORREOS'';') END
+        WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO IN ('GESCAR_NVA', 'GESCAR_REA', 'GESCAR_SINTEL'))
+            THEN N'Ya subieron los saldos: subir los gescar de cuentas nuevas, reasignadas y sin teléfono con el cargador de CYBER.'
         WHEN EXISTS (SELECT 1 FROM #a WHERE ARCHIVO = 'SCBPAG')
             THEN N'Subir SCBPAG con el cargador de CYBER. '
                + CASE WHEN @auto_act = 1 THEN N'Los saldos, vencido, pago mínimo y PVS/REE ya se ejecutan solos.'
