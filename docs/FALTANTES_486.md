@@ -55,7 +55,7 @@ Se cargan con `ops.sp_migrar_486` desde CSV exportados con FoxPro (`cyber/486/EX
 | eti486 | `O:\PRG\MEXGPO1\ASI486\` | — | Ya no se usa | — |
 | eti | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (ETI) | CUENTA, ETIQUETA | [ ] |
 | dm1 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (DM1) | CUENTA, ETIQUETA | [ ] |
-| top | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (TOP) | CUENTA2, ETIQUETA | [ ] |
+| top | `O:\PRG\MEXGPO1\ASI486\` | Ya no se usa (19/11): ETIQUETA6 sale de la base maestra | — | [x] |
 | STATUS | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (STATUS) | CUENTA, ESTATUS | [ ] |
 | exc486 | `O:\PRG\GPO1\486\` | `cfg.EXCLUSION` (CUENTA) | CUENTA | [ ] |
 | dirmal | `O:\ASIGNA\` | `cfg.EXCLUSION` (DIRECCION) | CUENTA, DIRECC1 | [ ] |
@@ -220,3 +220,9 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [ ] **Hipotecario:** sigue sin archivo de ejemplo. Como ahora falta cualquier encabezado detiene, el primer archivo de Hipotecario probablemente va a parar la asignación hasta que el equipo ajuste su matriz con `cfg.sp_layout_cambiar` (el correo dice qué falta y qué encabezados trae el archivo). Conviene pasar un ejemplo antes.
 - [ ] **Catálogos de TDC:** solo se conocen los estatus CCAS, VEN2, VEN3, VEN4 (y BCOB, BOPE, FALL de reestructura). Si llega otro (por ejemplo VEN1), la asignación se detiene hasta agregarlo con `cfg.sp_catalogo_alta 'ESTATUS_TDC', N'VEN1', N''`.
 - [ ] **Tolerancias:** revisarlas con el equipo después de unas semanas (`SELECT * FROM ops.VALIDACION_ENTRADA ORDER BY ID DESC;`).
+
+## 16. Etiqueta 6 de Hipotecario y tabla de ladas (19/11)
+
+- [ ] **Regla de ETIQUETA6 para Hipotecario:** el banco dio solo la de TDC y Consumo. La base de Hipotecario trae `ENFOQUE_RESTRUCTURA` (sin la segunda E). Cuando la confirmen, se agrega el catálogo `ETIQUETA6_HIPO` y la columna en el layout.
+- [ ] **Esquema de PHNVAL en CYBER:** el job copia `RCVRY.PHNVAL` (parámetro `CYBER_TABLA_LADAS`). Confirmar que es ese esquema y que el usuario de `CYBER_ORACLE` tiene `SELECT`.
+

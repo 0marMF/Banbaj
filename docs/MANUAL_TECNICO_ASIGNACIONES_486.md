@@ -33,6 +33,7 @@ Este manual explica el proceso en ese orden. No hace falta saber programar: todo
 | En cuanto CYBER tiene los saldos | El job manda los gescar de nuevas y reasignadas, depura teléfonos y correos y manda el SCBTEL | Job |
 | Al subir el SCBTEL | El job manda el gescar sin teléfono, hace el blanqueo de status (días 1 a 10) y manda la confirmación | Job |
 | Hasta las 17:00 | El job cuadra los pagos del SCBPAG contra CYBER; si falta alguno, avisa | Job |
+| Día 1 de cada mes, 06:00 | Copia de CYBER las ladas válidas (PHNVAL) para filtrar los teléfonos | Job "Banbaj 486 ladas" |
 | Si llega `HALLAZGO_486` o `VALIDACION_ENTRADA_486` | Revisar y resolver con lo que dice el correo | **Asignaciones** |
 
 # Paso a paso
@@ -56,10 +57,10 @@ Este manual explica el proceso en ese orden. No hace falta saber programar: todo
 
 1. **Aviso de inicio** a Operación (`INICIO_ASIG_486`).
 2. **Validación de las bases** (layout y datos). Si no pasan, la corrida se cancela y llega `VALIDACION_ENTRADA_486`.
-3. **Homologación:** etiqueta cada cuenta (segmento, estatus, tramo, tipo…) con los **catálogos** que mantiene el equipo.
+3. **Homologación:** etiqueta cada cuenta (segmento, estatus, tramo, tipo…) con los **catálogos** que mantiene el equipo. La **ETIQUETA6** vale `REE` cuando la base dice "APLICA PLAN DE PAGOS" (TDC) o "APLICA RESTRUCTURA" (Consumo); sale en U1EXT2 del SCBSDOS y sustituye a la lista TOP, que ya no se carga.
 4. **Cuentas nuevas y reasignadas:** asigna folio (`486-<folio>`) y guarda el histórico. Con más de 100 nuevas avisa a AEM (`ALERTA_NUEVAS_486`).
 5. **Devoluciones:** las cuentas que ya no vienen se retiran solas, con el mismo tope de 50 % por segmento. Al cerrar el retiro sale el ZIP con el correo de devolución (Operación con el ZIP y AEM en copia oculta).
-6. **Teléfonos y correos:** arma los teléfonos (quita los de queja y los inválidos) y los correos que se van a mandar a CYBER.
+6. **Teléfonos y correos:** arma los teléfonos y los correos que se van a mandar a CYBER. Quita los de queja, los inválidos y, desde el 19/11, los que tienen una lada o longitud que el cargador no admite (`cfg.PHNVAL`, la copia de PHNVAL de CYBER que se renueva sola el día 1 de cada mes).
 7. **Archivos:** escribe el SCBSDOS y avisa. El resto de los planos esperan su turno (ver el paso 3).
 8. **Usuarios AEM y MIS:** actualiza sus tablas. Las cuentas nuevas traen los datos de CYBER hasta que suben los saldos.
 
@@ -98,7 +99,7 @@ Se actualizan solas en la actualización, en la asignación y cuando suben los s
 |---|---|---|
 | `ARCHIVOS_LISTOS_486` | Qué archivo subir, dónde está y qué sigue | Subirlo a CYBER. No subir nada que no se haya avisado |
 | `VALIDACION_ENTRADA_486` | Un archivo del banco no pasó la revisión: falta un encabezado o hay datos raros. La corrida se canceló y **no cambió nada** | Ver *Cuando llega VALIDACION_ENTRADA_486* |
-| `HALLAZGO_486` | Algo que el proceso no pudo resolver solo: retiro sobre el tope, pagos que no subieron, un paso en CYBER con error, vistas de usuarios con avisos… | El correo trae **qué pasó y el comando exacto para resolverlo** |
+| `HALLAZGO_486` | Algo que el proceso no pudo resolver solo: retiro sobre el tope, pagos que no subieron, un paso en CYBER con error, vistas de usuarios con avisos, las ladas del mes sin actualizar… | El correo trae **qué pasó y el comando exacto para resolverlo** |
 | `PAGOS_NEGATIVOS_486` | Llegaron pagos negativos; se excluyeron | Revisar con el banco si corresponde |
 | `MAESTRA_NUMEROS_EXCEL_486` | La base maestra trae números cortados por Excel (notación científica). La corrida se detuvo | Pedir al banco la base sin abrirla en Excel y volver a correr |
 | `INICIO_ASIG_486`, `CONFIRMACION_ASIG_486` | Inicio y fin de la asignación (para Operación) | Nada |
@@ -157,6 +158,8 @@ Las etiquetas (segmento, estatus, tramo, tipo, enfoque…) salen de `cfg.CATALOG
 | `TIPO_CREDITO_CONSUMO` | Tipo de crédito | `ESTRA3` |
 | `TIPO_HIPO` | Estatus de Hipotecario | `TIPO` |
 | `ENFOQUE_HIPO` | Enfoque de liquidación de Hipotecario | `ETIQUETA5` |
+| `ETIQUETA6_TDC` | ENFOQUE\_PLAN DE PAGOS: APLICA PLAN DE PAGOS = REE | `ETIQUETA6` (U1EXT2) |
+| `ETIQUETA6_CONSUMO` | ENFOQUE\_REESTRUCTURA: APLICA RESTRUCTURA = REE | `ETIQUETA6` (U1EXT2) |
 | `COSECHA_MORA` | COSECHA 1-3 | `ETIQUETA1` |
 
 ```sql
@@ -242,6 +245,7 @@ Se ven y se cambian en `cfg.PARAMETRO`. Cambia solo los de esta tabla; los demá
 | `ARRIBO_SDOS_MIN_PCT` | 100 | % de cuentas del SCBSDOS con `DMHOSTUP` del día para dar por subidos los saldos |
 | `ARRIBO_MIN_PCT` | 95 | % de lo pendiente que debe estar en CYBER (por ejemplo, teléfonos nuevos) para dar por subido el SCBTEL |
 | `VALIDAR_LAYOUT` / `VALIDAR_DATOS` | 1 | 0 apaga la revisión de encabezados o de datos (solo en una emergencia) |
+| `TEL_VALIDAR_LADA` | 1 | 0 deja pasar teléfonos con ladas que el cargador no admite (solo en una emergencia) |
 | `RETIRO_AUTOMATICO`, `ARRIBO_AUTOMATICO`, `ACT_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO`, `CONFIRMACION_AUTOMATICA`, `CUADRE_AUTOMATICO`, `EXPORTAR_AUTOMATICO`, `AVISO_ARCHIVOS`, `VISTAS_USUARIO` | 1 | 0 apaga esa parte automática y queda a mano |
 
 ```sql
@@ -305,6 +309,7 @@ El correo de hallazgo trae el comando. Los más comunes:
 
 | Paso en ERROR | Comando |
 |---|---|
+| Ladas del mes sin actualizar (hallazgo "Ladas válidas (PHNVAL) sin actualizar") | `EXEC ops.sp_phnval_actualizar;` e historial con `SELECT TOP (5) * FROM cfg.PHNVAL_CARGA ORDER BY ID DESC;` |
 | `ARRIBO TELEFONOS` (la remesa no cuadró o falló el store) | `EXEC ops.sp_arribar_cyber <id>, 'TELEFONOS';` (con `@solo_mostrar = 1` solo muestra) |
 | `ARRIBO CORREOS` | `EXEC ops.sp_arribar_cyber <id>, 'CORREOS';` |
 | `GESCAR SIN TELEFONO` | `EXEC ops.sp_arribo_gescar_sintel <id>;` |

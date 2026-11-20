@@ -252,6 +252,7 @@ Reglas de `telbnx.prg` con los ajustes del 01/11, que siguen el procedimiento `G
    - **Celular:** área 044 si la lada es 55 o 56, 045 en las demás; 10 dígitos; tipo 5.
    - **Fijo:** área 01 + lada; 8 o 7 dígitos; tipo 1 (TEL1), 2 (TEL2) o 4 (resto).
    - **No está en el plan:** se descarta (`TEL_EXIGIR_PNM = 1`).
+7. **Lada válida (19/11):** el área y la longitud del número deben estar en `cfg.PHNVAL`, la copia estática de la tabla `PHNVAL` de CYBER con las ladas que admite el cargador. Lo que no está ahí no va al SCBTEL ni a la remesa, y queda contado en la bitácora (`TELEFONOS`: "lada no válida (PHNVAL)"). La copia la renueva el job **Banbaj 486 ladas** el día 1 de cada mes (`ops.sp_phnval_actualizar`). Si la tabla de CYBER llega vacía o cortada (menos de `LADAS_MIN_FILAS` renglones), la copia no se toca y llega un hallazgo. Parámetro `TEL_VALIDAR_LADA`.
 
 Salen en SCBTEL (ancho fijo) y en sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL). En CYBER, `RCVRY.JSP_TELEFONOS_REMESA_486` inserta los teléfonos nuevos (los que dejó el arribo del SCBTEL en `PHONE_G1`), inactiva los activos que no vienen en la remesa y activa los de la remesa que estaban inactivos. Respeta los gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`): esos no se tocan. Desde el 17/11 el orden es el del equipo: primero la depuración (la remesa debe tener los mismos renglones que nuestro archivo de teléfonos) y después se sube el SCBTEL, que deja activos nuestros teléfonos, también los nuevos (confirmado por el equipo el 17/11). Ver el diagrama 05. El script `TEL_BORRA` también inserta el renglón del día en `RCVRY.JSP_VALIDADOR_TELEFONOS` con el total enviado, y el procedimiento lo completa (diferencia contra lo cargado, activados, inactivados y nuevos).
 
@@ -272,7 +273,8 @@ Todas viven en `cfg.EXCLUSION`, con tipo, valor, requerimiento (OS), fecha, si e
 # Etiquetas
 
 - **Etiquetado del DAT:** `ops.sp_etiquetar_campo` cambia cualquier campo de etiqueta del DAT con un CSV FOLIO,ETIQUETA (o por cuenta). Acepta el nombre de columna de Operación. Genera su propio SCBSDOS.
-- **Etiquetas por cuenta** (`cfg.ETIQUETA`): ETI, DM1, TOP y STATUS, que salen en campos del SCBSDOS (DMP2, DMP1, U1EXT2, U1USO4).
+- **Etiquetas por cuenta** (`cfg.ETIQUETA`): ETI, DM1 y STATUS, que salen en campos del SCBSDOS (DMP2, DMP1, U1USO4).
+- **ETIQUETA6 (19/11):** sale de la base maestra y va en U1EXT2 del SCBSDOS. Vale `REE` si en TDC `ENFOQUE_PLAN DE PAGOS` dice "APLICA PLAN DE PAGOS" (catálogo `ETIQUETA6_TDC`) o si en Consumo `ENFOQUE_REESTRUCTURA` dice "APLICA RESTRUCTURA" (catálogo `ETIQUETA6_CONSUMO`); si no, queda vacía. Se recalcula en cada asignación, también en las cuentas que ya estaban. Sustituye a la lista TOP, que ya no se usa. Hipotecario no tiene regla todavía.
 
 ## Usuarios externos: AEM y MIS (18/11)
 
@@ -412,6 +414,7 @@ Se mandan con `mail.sp_enviar` usando plantillas de `mail.PLANTILLA` y listas de
 | `cfg.PARAMETRO` | Parámetros del cliente |
 | `cfg.EXCLUSION`, `cfg.ETIQUETA` | Exclusiones y etiquetas |
 | `cfg.PLAN_NUMERACION`, `cfg.TEL_QUEJA_CYBER` | Plan de numeración y quejas leídas de CYBER |
+| `cfg.PHNVAL`, `cfg.PHNVAL_CARGA` | Ladas válidas (copia mensual de PHNVAL de CYBER) y el historial de sus actualizaciones |
 | `cfg.CREDENCIAL` | Usuario y contraseña de Oracle y del ZIP, cifrados |
 | `ops.CORRIDA`, `ops.BITACORA` | Corridas y su bitácora paso a paso |
 | `ops.DEVOLUCION`, `ops.RECHAZO` | Cuentas a retirar y registros rechazados |
@@ -460,6 +463,7 @@ Todos los que cambian datos tienen modo de revisión (`@confirmar = 0` o `@solo_
 | RETROCESO\_AUTOMATICO | 1 | Revertir sola una corrida que falla |
 | RESPALDOS\_A\_CONSERVAR | 15 | Respaldos del DAT |
 | TEL\_EXIGIR\_PNM | 1 | Descartar teléfonos fuera del plan de numeración |
+| TEL\_VALIDAR\_LADA | 1 | Descartar teléfonos cuya lada y longitud no están en `cfg.PHNVAL` |
 | TELBAJ\_GRUPO | 1 | Grupo del 486 en telbaj |
 | PERFIL\_DBMAIL | asig.486.cdmx | Perfil de correo |
 | ARRIBO\_MIN\_PCT | 95 | Porcentaje de lo pendiente que ya debe estar en CYBER para dar por subido un archivo |

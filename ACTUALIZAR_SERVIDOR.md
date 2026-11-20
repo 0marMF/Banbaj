@@ -74,6 +74,38 @@ SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486'
 
 Detalle del arribo: *Flujo y diagramas*, sección 05.
 
+## Ladas válidas y ETIQUETA6 (19/11)
+
+Si ya tienes la versión del 18/11, corre solo esto.
+
+1. **Apaga el job, respalda la base** (paso 0) y **guarda tus parámetros** (paso 1).
+2. **Corre en este orden:**
+   - `sql/02_catalogos.sql`: tablas `cfg.PHNVAL` y su historial;
+   - `sql/05_tabla_dat_486.sql`: columna `ETIQUETA6` en el DAT y en su respaldo;
+   - `sql/45_sp_telefonos.sql`: filtro de ladas;
+   - `sql/47_sp_ladas.sql` (nuevo);
+   - `sql/70_sp_procesos_manuales.sql`;
+   - `sql/90_semilla_486.sql`: llena `cfg.PHNVAL` la primera vez, catálogos `ETIQUETA6_TDC` / `ETIQUETA6_CONSUMO`, layout de las bases y SCBSDOS.
+3. **Repón tus parámetros** (paso 3) y revisa que `CAMPOS_ACTUALIZA_EXISTENTES` termine en `ETIQUETA6`. Si repones la lista anterior, la etiqueta solo se pone en las cuentas nuevas.
+4. **Crea el job mensual:** corre `sql/instalacion/02_crear_job_486.sql`. Vuelve a crear también el job diario, sin cambios.
+5. **Comprueba:**
+
+```sql
+USE [BNABAJ_486];
+SELECT COUNT(*) AS LADAS FROM cfg.PHNVAL;                                             -- 459 la primera vez
+EXEC ops.sp_phnval_actualizar;                                                        -- prueba la copia desde CYBER (RCVRY.PHNVAL)
+SELECT TOP (3) * FROM cfg.PHNVAL_CARGA ORDER BY ID DESC;
+SELECT VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'CAMPOS_ACTUALIZA_EXISTENTES';
+SELECT * FROM cfg.v_CATALOGO WHERE CATALOGO LIKE 'ETIQUETA6%';
+```
+
+   Si `ops.sp_phnval_actualizar` falla porque no encuentra la tabla, cambia `CYBER_TABLA_LADAS` al esquema correcto. Si falla por permiso, pide `SELECT` para el usuario de `CYBER_ORACLE`.
+
+6. **Avisa al equipo de asignaciones:**
+   - La lista TOP ya no se carga: U1EXT2 sale de la base maestra (`REE`).
+   - Los teléfonos con ladas que el cargador no admite ya no van en el SCBTEL.
+   - Las bases maestras deben traer `ENFOQUE_PLAN DE PAGOS` (TDC) y `ENFOQUE_REESTRUCTURA` (Consumo). Si no vienen, la asignación se detiene con `VALIDACION_ENTRADA_486`.
+
 ## Usuarios AEM y MIS (18/11)
 
 Si ya tienes instalada la versión del 17/11 en la noche, solo hay que correr esto.

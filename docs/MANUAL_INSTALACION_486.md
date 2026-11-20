@@ -176,6 +176,8 @@ SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clav
 | ARRIBO\_AUTOMATICO | 1 | Al detectar los saldos (SCBSDOS) el job escribe los gescar de nuevas y reasignadas y corre la depuración de teléfonos, el SCBTEL y la de correos; al detectar el SCBTEL, el gescar sin teléfono (0 = a mano) |
 | ARCHIVOS\_DESPUES\_SALDOS | GESCAR\_NVA,GESCAR\_REA | Archivos que no se escriben ni se avisan hasta que suben los saldos |
 | ARCHIVOS\_DESPUES\_DEPURACION\_TEL | SCBTEL | Archivos que no se escriben ni se avisan hasta que la depuración de teléfonos queda OK |
+| TEL\_VALIDAR\_LADA | 1 | Solo van a CYBER los teléfonos con lada y longitud en `cfg.PHNVAL` |
+| CYBER\_TABLA\_LADAS · LADAS\_MIN\_FILAS | RCVRY.PHNVAL · 100 | Tabla de ladas de CYBER que se copia cada mes y mínimo de renglones para aceptarla |
 | TEL\_DEPURACION | ACTUAL | ACTUAL = store de hoy y SCBTEL con todos los teléfonos. NUEVOS (cuando el DBA instale `RCVRY.JSP_TELEFONOS_DEPURA_486`) = la depuración marca los nuevos y el SCBTEL lleva solo esos; sin nuevos no hay SCBTEL |
 | CYBER\_PROC\_TEL\_DEPURA | RCVRY.JSP\_TELEFONOS\_DEPURA\_486 | Store de depuración con `TEL_DEPURACION = NUEVOS` |
 | VISTAS\_USUARIO | 1 | Al terminar la actualización y la asignación, y cuando suben los saldos: ejecuta `RCVRY.PROC_DAT_486`, baja sus columnas y arma la tabla de cada usuario (AEM, MIS). 0 = no se actualizan |
@@ -209,6 +211,19 @@ En cada asignación, antes de armar los teléfonos, `ops.sp_telefonos_refrescar_
 - **Plan de numeración:** reemplaza `cfg.PLAN_NUMERACION` con `CYBER.dbo.CAT_PNM` de la misma instancia.
 
 Si el servidor vinculado o la tabla no están disponibles, deja un aviso en la bitácora (paso `TELEFONOS CYBER`) y sigue con la última lectura.
+
+### Teléfonos: ladas válidas (PHNVAL)
+
+Desde el 19/11 solo van a CYBER los teléfonos cuya lada (`AREA`) y longitud están en `cfg.PHNVAL`, la copia estática de la tabla `PHNVAL` de CYBER (las ladas que admite el cargador). La semilla la llena la primera vez. Después la renueva el job **Banbaj 486 ladas** (`sql/instalacion/02_crear_job_486.sql`), el día 1 de cada mes a las 06:00, con dos reintentos.
+
+```sql
+USE [BNABAJ_486];
+EXEC ops.sp_phnval_actualizar;                                   -- a mano
+SELECT TOP (5) * FROM cfg.PHNVAL_CARGA ORDER BY ID DESC;         -- historial: OK / ERROR, altas y bajas
+SELECT * FROM cfg.PHNVAL WHERE VTARECOD = '0155';                -- una lada
+```
+
+El usuario de `CYBER_ORACLE` necesita `SELECT` en la tabla del parámetro `CYBER_TABLA_LADAS` (de fábrica `RCVRY.PHNVAL`; si la tabla está en otro esquema, cámbialo). Si CYBER falla o la tabla llega con menos de `LADAS_MIN_FILAS` renglones, la copia no se toca, el paso del job falla y llega `HALLAZGO_486`.
 
 Reglas desde el 01/11:
 
@@ -327,7 +342,7 @@ Se hace **una sola vez**, justo antes de la primera corrida en SQL Server. El de
 | TAB7 | FOLIO | consecutivo de folios |
 | PAGTOT | CUENTA, MONT, FE\_PAG, FE\_REG | `dat.PAGO_ARRIBADO` (origen PAGTOT) |
 | ETI, DM1 | CUENTA, ETIQUETA | etiquetas (DMP2, DMP1 del SCBSDOS) |
-| TOP | CUENTA2, ETIQUETA | etiqueta U1EXT2 |
+| TOP | CUENTA2, ETIQUETA | **Ya no se usa** (19/11): U1EXT2 sale de ETIQUETA6 de la base maestra |
 | STATUS | CUENTA, ESTATUS | etiqueta U1USO4 |
 | EXC486 | CUENTA | exclusión de cuentas |
 | DIRMAL | CUENTA, DIRECC1 | direcciones malas |
@@ -725,6 +740,7 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 
 | Error | Qué significa | Qué hacer |
 | --- | --- | --- |
+| 50470-50472 | Ladas: tabla inválida, sin servidor vinculado o PHNVAL llegó con muy pocos renglones | La copia `cfg.PHNVAL` se queda como estaba. Ver *Teléfonos: ladas válidas* |
 | 50830-50839 | Vistas de usuarios: columna, vista o login inválido, o `RPT_DAT_486_1` llegó vacía | Ver *Flujo y diagramas*, sección 10. Si CYBER falló, las tablas de los usuarios se quedan con lo último que bajó |
 | 50823 | No existe el servidor vinculado CYBER | Capturar la credencial CYBER\_ORACLE y correr `EXEC cfg.sp_cyber_conectar;` |
 | 50801 | No hay credencial para ese sistema | `INSERT INTO cfg.CAPTURA_CREDENCIAL …` |

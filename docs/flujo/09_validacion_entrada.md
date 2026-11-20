@@ -68,6 +68,8 @@ Lo que antes estaba escrito en la homologación ahora es la tabla `cfg.CATALOGO`
 | `TIPO_CREDITO_CONSUMO` | Tipo de crédito | `ESTRA3` |
 | `TIPO_HIPO` | Estatus de Hipotecario | `TIPO` |
 | `ENFOQUE_HIPO` | Enfoque de liquidación de Hipotecario | `ETIQUETA5` |
+| `ETIQUETA6_TDC` | ENFOQUE\_PLAN DE PAGOS: APLICA PLAN DE PAGOS = REE | `ETIQUETA6` (U1EXT2) |
+| `ETIQUETA6_CONSUMO` | ENFOQUE\_REESTRUCTURA: APLICA RESTRUCTURA = REE | `ETIQUETA6` (U1EXT2) |
 | `COSECHA_MORA` | COSECHA 1-3 | `ETIQUETA1` (MORA 1-3) |
 
 ```sql
