@@ -1482,12 +1482,13 @@ GO
    --------------------------------------------------------------------- */
 DECLARE @idt INT = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE CLIENTE = '486' AND PROCESO = 'ASIG' AND ESTATUS = 'OK'),
         @rs NVARCHAR(4000), @n INT, @nv INT, @total INT, @esp NVARCHAR(4000), @err INT;
-/* Al menos tres teléfonos en esa asignación y sus scripts */
+/* Al menos cinco teléfonos en esa asignación (para que haya nuevos) y sus scripts */
 INSERT INTO ops.TELEFONO (ID_CORRIDA, CUENTA2, AREA, TELEFONO, TIPOTEL, CAMPO_DAT)
 SELECT @idt, v.C, v.A, v.T, v.TT, v.CD
 FROM (VALUES ('486-900001', '0155', '11112222', '1', 'TEL1'), ('486-900001', '045', '5511112222', '5', 'TEL4'),
-             ('486-900002', '0155', '33334444', '1', 'TEL1')) v(C, A, T, TT, CD)
-WHERE (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @idt) < 3
+             ('486-900002', '0155', '33334444', '1', 'TEL1'), ('486-900002', '045', '5533334444', '5', 'TEL2'),
+             ('486-900003', '0155', '55556666', '1', 'TEL1')) v(C, A, T, TT, CD)
+WHERE (SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = @idt) < 5
   AND NOT EXISTS (SELECT 1 FROM ops.TELEFONO x WHERE x.ID_CORRIDA = @idt AND x.CUENTA2 = v.C AND x.AREA = v.A AND x.TELEFONO = v.T);
 IF NOT EXISTS (SELECT 1 FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @idt AND SCRIPT = 'TEL_ACTUALIZA')
     INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)

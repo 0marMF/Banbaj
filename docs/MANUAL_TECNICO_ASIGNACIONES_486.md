@@ -30,8 +30,8 @@ Este manual explica el proceso en ese orden. No hace falta saber programar: todo
 | Al llegar los `.txt` de saldos y pagos | **Actualización**: valida los archivos, actualiza saldos y pagos, aplica retiros, ejecuta en CYBER los scripts de saldos y PVS, escribe el SCBPAG y actualiza las tablas de AEM y MIS | Job |
 | Al llegar las bases maestras (`.csv`) y con la actualización del día OK | **Asignación**: valida, homologa, asigna folios, aplica devoluciones, escribe el SCBSDOS y avisa | Job |
 | Al llegar `ARCHIVOS_LISTOS_486` | Subir a CYBER el plano que dice el correo | **Asignaciones** |
-| En cuanto CYBER tiene los saldos | El job manda los gescar de nuevas y reasignadas, depura teléfonos y correos y manda el SCBTEL | Job |
-| Al subir el SCBTEL | El job manda el gescar sin teléfono, hace el blanqueo de status (días 1 a 10) y manda la confirmación | Job |
+| En cuanto CYBER tiene los saldos | El job manda los gescar de nuevas, reasignadas y sin teléfono, depura teléfonos (con la bandera 416) y correos y manda el SCBTEL | Job |
+| Al subir el SCBTEL | El job hace el blanqueo de status (días 1 a 10) y manda la confirmación | Job |
 | Hasta las 17:00 | El job cuadra los pagos del SCBPAG contra CYBER; si falta alguno, avisa | Job |
 | Día 1 de cada mes, 06:00 | Copia de CYBER las ladas válidas (PHNVAL) para filtrar los teléfonos | Job "Banbaj 486 ladas" |
 | Si llega `HALLAZGO_486` o `VALIDACION_ENTRADA_486` | Revisar y resolver con lo que dice el correo | **Asignaciones** |
@@ -73,14 +73,15 @@ Cada plano llega en su propio correo `ARCHIVOS_LISTOS_486`, con la carpeta, el a
 | # | Llega el aviso de… | Qué subir | Qué hace el job después |
 |---|---|---|---|
 | 1 | **SCBSDOS** (y SCBPAG) | `SCBSDOS.TXT` con el cargador | Espera a ver los saldos en CYBER: cuentas con `DMHOSTUP` del día = cuentas del SCBSDOS |
-| 2 | **Gescar de nuevas y reasignadas** | `SCBACTH_486NU.TXT` y `SCBACTH_486REA.TXT` | Ya con los saldos arriba, corre la depuración de teléfonos |
-| 3 | **SCBTEL** | `SCBTEL.TXT` | Antes de este aviso el job ya depuró los teléfonos: cargó la remesa, la cuadró contra nuestro archivo e inactivó lo que no tenemos. Después depura los correos |
-| 4 | **Gescar sin teléfono** | `SCBACTH_SINTEL.TXT` | Llega cuando el job detecta que el SCBTEL ya subió. Luego hace el blanqueo y manda la confirmación |
-| 5 | **Confirmación** (`CONFIRMACION_ASIG_486`) | Nada | Fin del día de asignación |
+| 2 | **Gescar de nuevas, reasignadas y sin teléfono** | `SCBACTH_486NU.TXT`, `SCBACTH_486REA.TXT` y `SCBACTH_SINTEL.TXT` | Ya con los saldos arriba, corre la depuración de teléfonos |
+| 3 | **SCBTEL** | `SCBTEL.TXT` | Antes de este aviso el job ya depuró los teléfonos: comparó lo que tiene CYBER con nuestro archivo, inactivó lo que ya no viene y activó lo que sí. Después depura los correos |
+| 4 | **Confirmación** (`CONFIRMACION_ASIG_486`) | Nada | Llega cuando el job ve que el SCBTEL ya subió (y hace el blanqueo). Fin del día de asignación |
 
-**Por qué el SCBTEL va después de la depuración:** el store de CYBER inactiva todos los teléfonos que no vienen en la remesa, y el SCBTEL deja activos los nuestros. Si se sube antes, la depuración inactivaría lo recién subido.
+**Por qué el SCBTEL va después de la depuración:** la depuración decide qué queda activo y el SCBTEL da de alta lo nuevo. Si se sube antes, la depuración no lo vería y lo contaría como algo que hay que inactivar o dar de alta otra vez.
 
-**SCBTEL solo con teléfonos nuevos** (cuando sistemas active `TEL_DEPURACION = NUEVOS`): el archivo trae solo los teléfonos que CYBER no tenía. Si un día no hay nuevos, **no llega aviso de SCBTEL** y el gescar sin teléfono sale enseguida.
+**Depuración por diferencia** (cuando sistemas active `TEL_DEPURACION = DIFERENCIA`): el job baja de CYBER los teléfonos de las cuentas activas, los compara en SQL Server con nuestro archivo y solo le pasa a CYBER lo que cambia. El SCBTEL trae solo los teléfonos que CYBER no tenía. Si un día no hay nuevos, **no llega aviso de SCBTEL**.
+
+**Gescar sin teléfono:** sale de nuestro archivo de teléfonos: las cuentas nuevas y reasignadas que no tienen ninguno, incluidas las que solo tenían uno de queja. Por eso llega junto con los otros gescar, sin esperar al SCBTEL.
 
 **Lo que sigue a mano:** copiar `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` si Operación lo sigue pidiendo (AEM ya toma esas cuentas de `aem.RETIROS_HOY`).
 
@@ -246,6 +247,8 @@ Se ven y se cambian en `cfg.PARAMETRO`. Cambia solo los de esta tabla; los demá
 | `ARRIBO_MIN_PCT` | 95 | % de lo pendiente que debe estar en CYBER (por ejemplo, teléfonos nuevos) para dar por subido el SCBTEL |
 | `VALIDAR_LAYOUT` / `VALIDAR_DATOS` | 1 | 0 apaga la revisión de encabezados o de datos (solo en una emergencia) |
 | `TEL_VALIDAR_LADA` | 1 | 0 deja pasar teléfonos con ladas que el cargador no admite (solo en una emergencia) |
+| `TEL_DEPURA_MAX_INACTIVAR_PCT` | 30 | Con la depuración por diferencia, si se inactivaría más de este % de los teléfonos activos, no se toca CYBER y llega un hallazgo |
+| `TEL_GESTORES_QUEJA` | HOMS,HPHPI,BLACK,ZZZTE | Gestores de queja: la depuración por diferencia no toca sus teléfonos |
 | `RETIRO_AUTOMATICO`, `ARRIBO_AUTOMATICO`, `ACT_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO`, `CONFIRMACION_AUTOMATICA`, `CUADRE_AUTOMATICO`, `EXPORTAR_AUTOMATICO`, `AVISO_ARCHIVOS`, `VISTAS_USUARIO` | 1 | 0 apaga esa parte automática y queda a mano |
 
 ```sql
@@ -310,9 +313,10 @@ El correo de hallazgo trae el comando. Los más comunes:
 | Paso en ERROR | Comando |
 |---|---|
 | Ladas del mes sin actualizar (hallazgo "Ladas válidas (PHNVAL) sin actualizar") | `EXEC ops.sp_phnval_actualizar;` e historial con `SELECT TOP (5) * FROM cfg.PHNVAL_CARGA ORDER BY ID DESC;` |
-| `ARRIBO TELEFONOS` (la remesa no cuadró o falló el store) | `EXEC ops.sp_arribar_cyber <id>, 'TELEFONOS';` (con `@solo_mostrar = 1` solo muestra) |
+| `ARRIBO TELEFONOS` (no cuadró lo que subió, falló el store o se apagó la bandera por error) | `EXEC ops.sp_arribar_cyber <id>, 'TELEFONOS';` (con `@solo_mostrar = 1` solo muestra). Si la bandera 416 quedara encendida: `SELECT * FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = <id> AND SCRIPT = 'TEL_INACTIVA_BANDERA';` y ejecutarlo en CYBER |
+| `TEL DIFERENCIA` (se iba a inactivar más del tope) | Revisar nuestro archivo de teléfonos de la corrida (`SELECT COUNT(*) FROM ops.TELEFONO WHERE ID_CORRIDA = <id>;`) y el mensaje del hallazgo. Si es correcto, subir `TEL_DEPURA_MAX_INACTIVAR_PCT` solo para esa vez y correr `EXEC ops.sp_arribar_cyber <id>, 'TELEFONOS';` |
 | `ARRIBO CORREOS` | `EXEC ops.sp_arribar_cyber <id>, 'CORREOS';` |
-| `GESCAR SIN TELEFONO` | `EXEC ops.sp_arribo_gescar_sintel <id>;` |
+| `GESCAR SIN TELEFONO` | `EXEC ops.sp_arribo_gescar_sintel <id>;` (lo vuelve a generar de nuestros teléfonos, lo escribe y avisa) |
 | `ACT CYBER` | `EXEC ops.sp_act_cyber <id>;` (solo repite lo pendiente) |
 | `RETIRO …` | `EXEC ops.sp_retiro_cerrar <id>, @solo_mostrar = 1;` y luego sin `@solo_mostrar` |
 | Retiro detenido por el tope | Revisar con `SELECT * FROM ops.DEVOLUCION WHERE ID_CORRIDA = <id> AND PROCESADA = 0;` y, si es correcto, `EXEC ops.sp_retiro <id>;` seguido de `EXEC ops.sp_retiro_cerrar <id>;` |
@@ -351,7 +355,8 @@ Revertir regresa el DAT, el histórico, los folios y la base maestra a como esta
 | **SCBTEL** | Plano de teléfonos |
 | **Gescar** | Planos de gestión (`SCBACTH_*`): nuevas, reasignadas, sin teléfono y retiro |
 | **SCBPAG** | Plano de pagos |
-| **Remesa** | La lista completa de teléfonos o correos que se manda a una tabla de CYBER para depurar |
+| **Remesa** | La lista completa de teléfonos o correos que se manda a una tabla de CYBER para depurar (con la depuración por diferencia, en teléfonos solo van los cambios) |
+| **Bandera 416** | Registro en `RPT_LOG_CYBER_REG` que dice que el 486 se está actualizando en CYBER; se enciende durante la depuración de teléfonos y la de correos |
 | **Depuración** | Store de CYBER que inactiva lo que no está en la remesa y activa lo que sí |
 | **DMHOSTUP** | Fecha de la última subida de saldos de una cuenta en CYBER; así detecta el job que el SCBSDOS ya subió |
 | **Hallazgo** | Correo `HALLAZGO_486`: algo que el proceso no resolvió solo, con qué hacer |

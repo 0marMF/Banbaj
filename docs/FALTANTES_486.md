@@ -164,7 +164,7 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 `sql/76_sp_arribo_cyber.sql`: el job arriba solo correos (al detectar el SCBSDOS en `DELQMST`) y teléfonos (al detectar el SCBTEL en `PHONE_G1`) por el servidor vinculado. El operador solo sube SCBSDOS, SCBTEL y los gescar.
 
 - [x] Correos y teléfonos de la asignación sin sqlldr ni scripts a mano (`ops.sp_arribo_automatico`, `ops.sp_arribar_cyber`).
-- [x] `SCBACTH_SINTEL.TXT` se genera y se escribe solo al terminar los teléfonos.
+- [x] `SCBACTH_SINTEL.TXT` sale de nuestro archivo de teléfonos con la asignación y se escribe solo al subir los saldos (19/11).
 - [x] (Confirmado 02/11) El usuario de Oracle tiene los permisos: `TRUNCATE`/`INSERT` en las dos remesas, `INSERT` en `ADDRESS` y `JSP_VALIDADOR_TELEFONOS`, `UPDATE` en `RPT_LOG_CYBER_REG`, `EXECUTE` de `JSP_TELEFONOS_REMESA_486` y `JSP_CORREOS_486`, `SELECT` en `DELQMST`, `PHONE_G1` y `PHONE`.
 - [ ] Confirmar las columnas de las remesas contra `LOAD_TEL_REMESA.CTL` y `LOAD_MAIL_REMESA.CTL` (parámetros `CYBER_REMESA_TEL_COLUMNAS` y `CYBER_REMESA_MAIL_COLUMNAS`).
 - [ ] Probar en CYBER con `@solo_mostrar = 1` y luego una corrida real con el arribo automático encendido.
@@ -226,3 +226,10 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [ ] **Regla de ETIQUETA6 para Hipotecario:** el banco dio solo la de TDC y Consumo. La base de Hipotecario trae `ENFOQUE_RESTRUCTURA` (sin la segunda E). Cuando la confirmen, se agrega el catálogo `ETIQUETA6_HIPO` y la columna en el layout.
 - [ ] **Esquema de PHNVAL en CYBER:** el job copia `RCVRY.PHNVAL` (parámetro `CYBER_TABLA_LADAS`). Confirmar que es ese esquema y que el usuario de `CYBER_ORACLE` tiene `SELECT`.
 
+
+## 17. Teléfonos por diferencia y vistas sin stores (19/11)
+
+- [ ] **DBA de CYBER:** instalar `cyber/486/oracle/JSP_TELEFONOS_DEPURA_486.sql` (tabla `RCVRY.JSP_TAB_TEL_DEPURA_486` y store nuevo) y dar `SELECT` en `RCVRY.PHONE` al usuario de `CYBER_ORACLE`. Hasta entonces `TEL_DEPURACION = ACTUAL`.
+- [ ] **Primera corrida con `DIFERENCIA`:** revisar el renglón `TEL DIFERENCIA` antes de dejar seguir al job. Si el freno de 30 % (`TEL_DEPURA_MAX_INACTIVAR_PCT`) para la primera vez por acumulado de días anteriores, revisar y ajustarlo solo esa vez.
+- [ ] **Ventana:** un teléfono que un gestor agregue entre la foto y el store (minutos) se queda activo hasta la siguiente asignación. Se aceptó así (19/11).
+- [ ] **ABAN_SR** se lee de `RPT_DAT_486_1` como la dejó la última corrida de `PROC_DAT_486` en CYBER; si nadie la corre, el dato se queda viejo (decisión 19/11).

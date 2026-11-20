@@ -3,23 +3,27 @@ flowchart TD
     A1 --> U1(["Asignaciones sube el SCBSDOS"])
     U1 --> S{"Saldos arriba (val.txt):<br/>cuentas con DMHOSTUP de hoy<br/>= cuentas del SCBSDOS"}
     S -- no --> SW["ESPERANDO SALDOS<br/>(siguiente vuelta del job)"]
-    S -- sí --> S1["ARRIBO SALDOS<br/>se escriben y avisan los gescar<br/>de nuevas y reasignadas"]
-    S1 --> T1["Depuración de teléfonos<br/>vacía y carga RCVRY.JSP_TAB_TEL_REMESA_486"]
-    T1 --> T2{"¿La remesa en CYBER tiene los mismos<br/>teléfonos que nuestro archivo?<br/>ops.sp_tel_remesa_validar"}
-    T2 -- no --> TX["No se ejecuta el store<br/>TEL REMESA VALIDADA ERROR + HALLAZGO_486<br/>no subir el SCBTEL"]
-    T2 -- sí --> T3["JSP_TELEFONOS_DEPURA_486 (TEL_DEPURACION = NUEVOS)<br/>inactiva lo activo que no está en la remesa (también lo recién agregado)<br/>activa lo de la remesa · marca NUEVO lo que no existe en PHONE"]
-    T3 --> TN["ops.sp_tel_nuevos: baja los NUEVO = 1<br/>el SCBTEL se genera solo con esos"]
-    TN --> TQ{"¿Hay teléfonos nuevos?"}
+    S -- sí --> S1["ARRIBO SALDOS<br/>se escriben y avisan los gescar de nuevas,<br/>reasignadas y sin teléfono (de ops.TELEFONO)"]
+    S1 --> B1["Bandera 416 encendida<br/>RPT_LOG_CYBER_REG + RPT_LOG_CYBER"]
+    B1 --> F1["Foto de PHONE de las cuentas activas<br/>(activos e inactivos) → stg.CYBER_PHONE_FOTO"]
+    F1 --> F2["ops.sp_tel_depura_calcular: contra ops.TELEFONO<br/>I = activo que ya no viene · A = inactivo que sí viene<br/>N = no existe en PHONE · quejas no se tocan"]
+    F2 --> F3{"¿Inactivaría más de<br/>TEL_DEPURA_MAX_INACTIVAR_PCT?"}
+    F3 -- sí --> TX["No se toca CYBER<br/>TEL DIFERENCIA ERROR + HALLAZGO_486<br/>se apaga la bandera"]
+    F3 -- no --> T1["Solo los cambios a RCVRY.JSP_TAB_TEL_DEPURA_486"]
+    T1 --> T2{"¿Quedaron en CYBER los mismos renglones?<br/>ops.sp_tel_remesa_validar"}
+    T2 -- no --> TX
+    T2 -- sí --> T3["JSP_TELEFONOS_DEPURA_486(416, esperados, quejas)<br/>inactiva los I, activa los A, llena el validador"]
+    T3 --> B2["Bandera apagada"]
+    B2 --> TQ{"¿Hay teléfonos nuevos?"}
     TQ -- sí --> T4["Se escribe el SCBTEL (solo nuevos)<br/>ARCHIVOS_LISTOS_486: ya pueden subir el SCBTEL"]
-    TQ -- no --> G1
-    TN --> C1["Depuración de correos<br/>correos nuevos → bandera 416 → remesa → JSP_CORREOS_486"]
+    TQ -- no --> SB
+    B2 --> C1["Depuración de correos<br/>correos nuevos → bandera 416 → remesa → JSP_CORREOS_486"]
     T4 --> U2(["Asignaciones sube el SCBTEL<br/>(da de alta activos los nuevos)"])
     U2 --> G{"¿Ya están en PHONE_G1 los teléfonos<br/>nuevos? (≥ 95 %)"}
     G -- no --> GW["ESPERANDO SCBTEL"]
-    G -- sí --> G1["GESCAR SIN TELEFONO<br/>baja teléfonos → SCBACTH_SINTEL.TXT + aviso"]
+    G -- sí --> SB["ARRIBO SCBTEL"]
     C1 --> P["ops.sp_arribo_posterior"]
-    G1 --> P
+    SB --> P
     P --> P1["Blanqueo de status (días 1 a 10)<br/>después de correos OK"]
-    P --> P2["Confirmación: teléfonos y correos OK<br/>y gescar sin teléfono hecho → ARRIBO FIN + CONFIRMACION_ASIG_486"]
+    P --> P2["Confirmación: teléfonos, correos y SCBTEL<br/>→ ARRIBO FIN + CONFIRMACION_ASIG_486"]
     C1 -. error .-> H["Bitácora ERROR + HALLAZGO_486<br/>no se reintenta solo"]
-    G1 -. error .-> H

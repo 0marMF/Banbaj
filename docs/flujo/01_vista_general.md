@@ -13,7 +13,7 @@ Fuente: [`mmd/01_vista_general.mmd`](mmd/01_vista_general.mmd)
 **CYBER.** Asignaciones sube los planos de ancho fijo con el cargador de CYBER (lo único que sigue a mano, junto con la copia de la devolución a `Cyber_00`). Lo demás lo hace SQL Server por el servidor vinculado `[CYBER]` (OraOLEDB):
 
 - Lee `DELQMST` y `PHONE_G1` para saber si ya se subieron los planos.
-- Carga las remesas y ejecuta los stores de depuración `JSP_CORREOS_486` y `JSP_TELEFONOS_REMESA_486`.
+- Con la bandera 416 encendida, sube lo que hay que depurar (en teléfonos, solo lo que cambia contra una foto de `PHONE`) y ejecuta los stores `JSP_CORREOS_486` y `JSP_TELEFONOS_DEPURA_486` (o `JSP_TELEFONOS_REMESA_486` con `TEL_DEPURACION = ACTUAL`).
 - Ejecuta los scripts `ACT_*`, `RETIRO` y `BLANQUEO_STATUS`.
 - Lee `PMTFIL` para el cuadre de pagos.
 

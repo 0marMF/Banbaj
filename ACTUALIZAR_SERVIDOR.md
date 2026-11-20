@@ -1,4 +1,4 @@
-# Qué volver a ejecutar en el servidor (actualización del 17/11/2026)
+# Qué volver a ejecutar en el servidor (actualización del 19/11/2026)
 
 Esta guía lleva tu base (`BNABAJ_486` en `STCSVASIGNAC044\MULTISQLSERVER`) a la versión actual de `main`. Vale para una base instalada en cualquier fecha a partir del 03/11. Todos los scripts de `sql/` se pueden volver a correr sobre una base con datos: crean solo lo que falta y reemplazan los procedimientos.
 
@@ -74,6 +74,61 @@ SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486'
 
 Detalle del arribo: *Flujo y diagramas*, sección 05.
 
+## Teléfonos por diferencia, bandera y vistas sin stores (19/11 en la noche)
+
+Si ya tienes la versión de ladas y ETIQUETA6 (19/11), corre solo esto. Cambia:
+
+- **Vistas de AEM y MIS:** ya no se ejecuta `PROC_DAT_486`. ESTATUS se lee de `DELQMST` y ABAN_SR de `RPT_DAT_486_1`, tal como la dejó CYBER. Los campos posibles quedan en `cfg.CYBER_CAMPO`.
+- **Bandera de teléfonos:** la depuración de teléfonos corre con la bandera 416 encendida en `RPT_LOG_CYBER_REG` / `RPT_LOG_CYBER`, igual que la de correos.
+- **Depuración por diferencia** (`TEL_DEPURACION = DIFERENCIA`, apagada hasta que el DBA instale lo de CYBER): se baja una foto de `PHONE`, se compara aquí y a CYBER solo sube lo que cambia.
+- **Gescar sin teléfono:** sale de nuestro archivo de teléfonos y se escribe junto con los de nuevas y reasignadas al subir los saldos. La confirmación ahora espera a que suba el SCBTEL (`ARRIBO SCBTEL`).
+
+1. **Apaga el job, respalda la base** (paso 0) y **guarda tus parámetros** (paso 1).
+2. **Corre en este orden:**
+   - `sql/01_esquemas_tablas.sql`: tablas `stg.CYBER_PHONE_FOTO` y `ops.TEL_DEPURA`; quita `stg.CYBER_TEL_NUEVOS`;
+   - `sql/02_catalogos.sql`: tabla `cfg.CYBER_CAMPO`;
+   - `sql/10_funciones.sql`: el gescar sin teléfono espera a los saldos;
+   - `sql/45_sp_telefonos.sql`: scripts de la bandera (`ops.sp_tel_bandera_script`);
+   - `sql/60_sp_orquestadores.sql`, `sql/70_sp_procesos_manuales.sql`;
+   - `sql/76_sp_arribo_cyber.sql`: `ops.sp_tel_depura_calcular`, bandera y paso `ARRIBO SCBTEL`;
+   - `sql/78_sp_automatico.sql`: avisos y confirmación;
+   - `sql/79_sp_vistas_usuario.sql`: bajada de CYBER sin store;
+   - `sql/90_semilla_486.sql`: `GESCAR_SINTEL` en la asignación, `cfg.CYBER_CAMPO` y parámetros nuevos (`CYBER_BANDERA_TELEFONOS`, `TEL_GESTORES_QUEJA`, `TEL_DEPURA_MAX_INACTIVAR_PCT`).
+3. **Repón tus parámetros** (paso 3). Los parámetros que ya existen no cambian solos; si quieres ver el gescar sin teléfono en la lista:
+
+```sql
+USE [BNABAJ_486];
+UPDATE cfg.PARAMETRO SET VALOR = 'GESCAR_NVA,GESCAR_REA,GESCAR_SINTEL' WHERE CLIENTE = '486' AND CLAVE = 'ARCHIVOS_DESPUES_SALDOS';
+```
+
+   No es obligatorio: el gescar sin teléfono espera a los saldos aunque no esté en la lista.
+
+4. **Permisos en Oracle** del usuario de `CYBER_ORACLE`: `SELECT` en `RCVRY.DELQMST`, `RCVRY.RPT_DAT_486_1` y `RCVRY.UDA1` (vistas); `UPDATE` en `RPT_LOG_CYBER_REG` e `INSERT` en `RPT_LOG_CYBER` (ya los tiene por correos). Ya no necesita `EXECUTE` en `PROC_DAT_486`.
+5. **Comprueba:**
+
+```sql
+USE [BNABAJ_486];
+SELECT * FROM cfg.CYBER_CAMPO;                                                      -- ESTATUS, ABAN_SR, ABAN_CR, SDO_CYBER
+EXEC ops.sp_vistas_usuario_refrescar @id_corrida = <última corrida OK>, @forzar = 1;
+SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486'
+ AND CLAVE IN ('TEL_DEPURACION', 'CYBER_BANDERA_TELEFONOS', 'TEL_GESTORES_QUEJA', 'TEL_DEPURA_MAX_INACTIVAR_PCT');
+```
+
+6. **Prende el job.**
+7. **Cuando el DBA de CYBER instale lo de teléfonos:** pásale `cyber/486/oracle/JSP_TELEFONOS_DEPURA_486.sql` (versión del 19/11; reemplaza la del 18/11). Crea la tabla `RCVRY.JSP_TAB_TEL_DEPURA_486` y el store, y en el encabezado vienen los `GRANT`. El usuario de `CYBER_ORACLE` además necesita `SELECT` en `RCVRY.PHONE` para la foto. Después prende el modo:
+
+```sql
+USE [BNABAJ_486];
+UPDATE cfg.PARAMETRO SET VALOR = 'DIFERENCIA' WHERE CLIENTE = '486' AND CLAVE = 'TEL_DEPURACION';
+```
+
+   La primera vez conviene verlo sin tocar CYBER: después de la asignación, con los saldos arriba, corre `EXEC ops.sp_tel_depura_calcular <corrida>;` y revisa el renglón `TEL DIFERENCIA` de la bitácora (cuántos se inactivan, activan y son nuevos). Si los números se ven bien, deja que el job siga. Para regresar a la remesa completa: `VALOR = 'ACTUAL'`.
+
+8. **Avisa al equipo de asignaciones:**
+   - El gescar sin teléfono llega junto con los de nuevas y reasignadas, en cuanto suben los saldos.
+   - La confirmación llega cuando el job ve el SCBTEL arriba.
+   - Con `DIFERENCIA`, el SCBTEL trae solo los teléfonos nuevos; si no hay, no llega aviso de SCBTEL.
+
 ## Ladas válidas y ETIQUETA6 (19/11)
 
 Si ya tienes la versión del 18/11, corre solo esto.
@@ -145,23 +200,7 @@ EXEC cfg.sp_vista_usuario_login 'MIS', 'mis_banbaj', N'<contraseña>';
 
 ### SCBTEL solo con los teléfonos nuevos (18/11)
 
-Esta parte ya viene en los scripts de arriba (`01`, `76` y la semilla). Queda apagada (`TEL_DEPURACION = ACTUAL`) hasta que el DBA de CYBER instale el store:
-
-1. Pásale al DBA `cyber/486/oracle/JSP_TELEFONOS_DEPURA_486.sql`. En el encabezado viene qué hace, cómo instalarlo y el `GRANT EXECUTE` para el usuario de `CYBER_ORACLE`.
-2. Cuando esté instalado, prende el modo:
-
-```sql
-USE [BNABAJ_486];
-UPDATE cfg.PARAMETRO SET VALOR = 'NUEVOS' WHERE CLIENTE = '486' AND CLAVE = 'TEL_DEPURACION';
-```
-
-3. **Avisa al equipo de asignaciones:**
-   - El aviso del SCBTEL llega igual que ahora, pero el archivo trae **solo los teléfonos nuevos**.
-   - Si un día no hay nuevos, no llega aviso de SCBTEL y el gescar sin teléfono sale solo.
-
-Para regresar al store de antes: `VALOR = 'ACTUAL'`.
-
-Detalle: *Flujo y diagramas*, sección 10.
+Reemplazado por la depuración por diferencia: ver *Teléfonos por diferencia, bandera y vistas sin stores (19/11 en la noche)*. No prendas `NUEVOS`; si ya estaba, se toma como `DIFERENCIA`.
 
 ## 0. Antes de empezar
 

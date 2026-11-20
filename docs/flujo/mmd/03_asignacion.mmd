@@ -18,7 +18,7 @@ flowchart LR
     end
     subgraph F3["3 · Salidas"]
         direction TB
-        A11["ops.sp_telefonos<br/>ops.sp_correos"] --> A12["ops.sp_generar_salidas 'ASIG'<br/>SCBSDOS, SCBTEL, gescar,<br/>remesas y scripts"]
+        A11["ops.sp_telefonos<br/>ops.sp_correos"] --> A12["ops.sp_generar_salidas 'ASIG'<br/>SCBSDOS, SCBTEL, gescar<br/>(también sin teléfono),<br/>remesas y scripts"]
         A12 --> A13["ops.sp_corrida_finalizar OK"]
     end
     subgraph F4["4 · Al terminar OK (fuera de la corrida)"]

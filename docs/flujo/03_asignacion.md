@@ -19,7 +19,7 @@ Fuente: [`mmd/03_asignacion.mmd`](mmd/03_asignacion.mmd) · Código: `ops.sp_asi
 | Alta | `ops.sp_validar 'PRE_ALTA'`, `ops.sp_asig_alta` (30) | NVA y REA con folio nuevo (`dat.FOLIO_CONSECUTIVO`) |
 | Retiro | `ops.sp_retiro` (30) | Solo si se decidió aplicarlo |
 | Teléfonos y correos | `ops.sp_telefonos` (45), `ops.sp_correos` (46) | Arman lo que se manda a CYBER (`ops.TELEFONO`, `ops.CORREO`) |
-| Salidas | `ops.sp_generar_salidas 'ASIG'` (50) | SCBSDOS, SCBTEL, sub_mst, sub_mail, gescar NVA y REA, scripts de remesas |
+| Salidas | `ops.sp_generar_salidas 'ASIG'` (50) | SCBSDOS, SCBTEL, sub_mst, sub_mail, gescar NVA, REA y SINTEL (de `ops.TELEFONO`), scripts de remesas y bandera |
 
 **Al terminar OK** (fuera de la corrida; si falla queda en la bitácora y llega un hallazgo):
 

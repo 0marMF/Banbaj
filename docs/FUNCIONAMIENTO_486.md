@@ -93,17 +93,16 @@ Cada proceso es una **corrida** (`ops.CORRIDA`) con número, tipo (ACT, ASIG, RE
 | Archivos de retiro, ZIP, correo de devolución y RETIRO en CYBER | **Job** | `ops.sp_retiro_cerrar` (`RETIRO_CYBER_AUTOMATICO`) |
 | Scripts de la actualización en CYBER (`ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN`, `ACT_PVS_REE`) | **Job** | `ops.sp_act_cyber` (`ACT_CYBER_AUTOMATICO`) |
 | Subir a CYBER los planos de ancho fijo (SCBSDOS, SCBTEL, SCBPAG, gescar), cada uno cuando llega su aviso | Asignaciones | Cargador de CYBER |
-| Gescar de nuevas y reasignadas en cuanto subieron los saldos (SCBSDOS) | **Job** | `ops.sp_arribo_automatico` (`ARRIBO_AUTOMATICO`) |
-| Depuración de teléfonos (`JSP_TELEFONOS_REMESA_486`, o `JSP_TELEFONOS_DEPURA_486` con `TEL_DEPURACION = NUEVOS`, si la remesa tiene los mismos renglones que nuestro archivo) y SCBTEL en cuanto subieron los saldos. Con `NUEVOS` el SCBTEL lleva solo los teléfonos nuevos y, si no hay, no sale | **Job** | `ops.sp_arribo_automatico` |
+| Gescar de nuevas, reasignadas y sin teléfono en cuanto subieron los saldos (SCBSDOS) | **Job** | `ops.sp_arribo_automatico` (`ARRIBO_AUTOMATICO`) |
+| Depuración de teléfonos con la bandera 416 encendida y SCBTEL en cuanto subieron los saldos. Con `TEL_DEPURACION = DIFERENCIA` (19/11) se compara una foto de `PHONE` con nuestro archivo y a CYBER solo sube lo que cambia (`JSP_TELEFONOS_DEPURA_486`); el SCBTEL lleva solo los nuevos y, si no hay, no sale. Con `ACTUAL`, remesa completa y `JSP_TELEFONOS_REMESA_486` | **Job** | `ops.sp_arribo_automatico` |
 | Depuración de correos (`JSP_CORREOS_486`) después de la de teléfonos | **Job** | `ops.sp_arribo_automatico` |
-| `SCBACTH_SINTEL.TXT` (gescar sin teléfono) en cuanto subió el SCBTEL | **Job** | `ops.sp_arribo_gescar_sintel` |
 | Blanqueo de status (días 1 a 10) | **Job** | `ops.sp_blanqueo_automatico` (`BLANQUEO_AUTOMATICO`) |
 | Fin del arribo y correo CONFIRMACION\_ASIG\_486 | **Job** | `ops.sp_confirmar_asignacion` (`CONFIRMACION_AUTOMATICA`) |
 | Cuadre de pagos contra CYBER (avisa si a las 17:00 falta alguno) | **Job** | `ops.sp_cuadre_automatico` (`CUADRE_AUTOMATICO`) |
 | Copiar `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` | Asignaciones | A mano: el servidor no tiene acceso a esa carpeta (`RUTA_DEVOLUCION_CYBER` vacío). El correo de archivos listos lo recuerda |
 | Atender el correo de hallazgos | Asignaciones | Trae qué pasó y el comando para resolverlo |
 
-En un día normal (orden del 17/11): llega ARCHIVOS\_LISTOS\_486 con el SCBSDOS → asignaciones lo sube → el job detecta los saldos y escribe los gescar de nuevas y reasignadas (aviso), corre la depuración de teléfonos y, si la remesa cuadra, escribe el SCBTEL (aviso) y corre la de correos → asignaciones sube los gescar y el SCBTEL → el job detecta el SCBTEL, escribe `SCBACTH_SINTEL.TXT` (aviso) y manda la confirmación → asignaciones sube el `SCBACTH_SINTEL.TXT`. El SCBTEL va después de la depuración porque `JSP_TELEFONOS_REMESA_486` inactiva lo que no está en la remesa y el SCBTEL activa nuestros teléfonos.
+En un día normal (orden del 17/11 y 19/11): llega ARCHIVOS\_LISTOS\_486 con el SCBSDOS → asignaciones lo sube → el job detecta los saldos y escribe los gescar de nuevas, reasignadas y sin teléfono (aviso), corre la depuración de teléfonos y, si cuadra, escribe el SCBTEL (aviso) y corre la de correos → asignaciones sube los gescar y el SCBTEL → el job detecta el SCBTEL y manda la confirmación. El SCBTEL va después de la depuración porque la depuración decide qué queda activo y el SCBTEL da de alta lo nuevo. El gescar sin teléfono sale de nuestro archivo de teléfonos: después de la depuración, lo activo en CYBER es eso.
 
 Todo paso automático corre una vez por corrida, deja su paso en la bitácora y, si falla, avisa con el correo de hallazgos; no se reintenta solo. Cada uno se puede correr a mano con el número de corrida (`ops.sp_arribar_cyber`, `ops.sp_act_cyber`, `ops.sp_retiro_cerrar`, `ops.sp_blanqueo_automatico`) y cada uno se apaga con su parámetro. Para volver a dejar solo la generación de archivos:
 
@@ -121,10 +120,10 @@ En cada vuelta con el día completo, `ops.sp_arribo_automatico` revisa:
 
 | Detecta | Cómo | Hace |
 |---|---|---|
-| El SCBSDOS ya subió | **Validación de saldos del equipo:** las cuentas activas del 486 con `DMHOSTUP` del día son tantas como las del SCBSDOS (`ARRIBO_SDOS_MIN_PCT` = 100: que coincidan) | 1. Escribe y avisa los gescar de nuevas y reasignadas (`ARCHIVOS_DESPUES_SALDOS`). 2. **Teléfonos:** remesa `JSP_TAB_TEL_REMESA_486`, compara sus renglones contra `ops.TELEFONO` (error 50776 si no cuadra), renglón del validador y `JSP_TELEFONOS_REMESA_486`; escribe y avisa el SCBTEL (`ARCHIVOS_DESPUES_DEPURACION_TEL`). 3. **Correos** (con teléfonos OK): correos nuevos en `ADDRESS`, bandera 416, remesa `JSP_TAB_MAIL_REMESA_486`, `JSP_CORREOS_486` y apaga la bandera |
-| El SCBTEL ya subió | Ya llegó al menos el 95 % de los teléfonos que le faltaban a `PHONE_G1` (solo cuenta después de la depuración de teléfonos) | **Gescar sin teléfono:** baja los teléfonos activos y escribe `SCBACTH_SINTEL.TXT` con su aviso |
+| El SCBSDOS ya subió | **Validación de saldos del equipo:** las cuentas activas del 486 con `DMHOSTUP` del día son tantas como las del SCBSDOS (`ARRIBO_SDOS_MIN_PCT` = 100: que coincidan) | 1. Escribe y avisa los gescar de nuevas, reasignadas y sin teléfono (`ARCHIVOS_DESPUES_SALDOS`). 2. **Teléfonos** (bandera 416 encendida): con `DIFERENCIA`, foto de `PHONE`, diferencia contra `ops.TELEFONO` (freno `TEL_DEPURA_MAX_INACTIVAR_PCT`), solo los cambios a `JSP_TAB_TEL_DEPURA_486` (error 50776 si no cuadran) y `JSP_TELEFONOS_DEPURA_486`; con `ACTUAL`, remesa completa y `JSP_TELEFONOS_REMESA_486`. Apaga la bandera, escribe y avisa el SCBTEL (`ARCHIVOS_DESPUES_DEPURACION_TEL`). 3. **Correos** (con teléfonos OK): correos nuevos en `ADDRESS`, bandera 416, remesa `JSP_TAB_MAIL_REMESA_486`, `JSP_CORREOS_486` y apaga la bandera |
+| El SCBTEL ya subió | Ya llegó al menos el 95 % de los teléfonos que le faltaban a `PHONE_G1` (con `DIFERENCIA`, los nuevos; solo cuenta después de la depuración de teléfonos) | Paso `ARRIBO SCBTEL`; con eso ya puede ir la confirmación |
 
-Lo pendiente sale de una foto que se toma al terminar la asignación, antes de que existan los TXT (`ops.sp_arribo_base`, tabla `ops.ARRIBO_PENDIENTE`); por eso funciona aunque no haya cuentas nuevas. Si la remesa saliera vacía no se ejecuta el procedimiento de CYBER, para no inactivar todo el 486. Detalle en el diagrama 05.
+Lo pendiente sale de una foto que se toma al terminar la asignación, antes de que existan los TXT (`ops.sp_arribo_base`, tabla `ops.ARRIBO_PENDIENTE`); por eso funciona aunque no haya cuentas nuevas. Si nuestro archivo de teléfonos saliera vacío no se ejecuta el procedimiento de CYBER, para no inactivar todo el 486. Detalle en el diagrama 05.
 
 Si una corrida falla, se revierte sola (ver *Respaldo y retroceso*) y el job no la vuelve a intentar ese día. Para reintentar se corre a mano.
 
@@ -314,7 +313,7 @@ Los archivos planos de ancho fijo (TXT) quedan todos en la carpeta de su corrida
 | `SCBTEL.TXT` | Teléfonos | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBTEL.TXT` |
 | `SCBACTH_486NU.TXT` | Gescar de cuentas nuevas | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486NU.TXT` |
 | `SCBACTH_486REA.TXT` | Gescar de cuentas reasignadas | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486REA.TXT` |
-| `SCBACTH_SINTEL.TXT` | Gescar de cuentas sin teléfono en CYBER | El arribo automático de teléfonos (o `ops.sp_bajar_cyber 'TELEFONOS'` a mano); se escribe solo | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_SINTEL.TXT` |
+| `SCBACTH_SINTEL.TXT` | Gescar de cuentas nuevas y reasignadas sin teléfono en nuestro archivo | La asignación; se escribe solo al subir los saldos (o `ops.sp_arribo_gescar_sintel` a mano) | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_SINTEL.TXT` |
 | `SCBACTH_486.TXT` | Gescar de retiro | Retiro (`ops.sp_retiro`) | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486.TXT` |
 | `SCBPAG.TXT` | Arribo de pagos | Actualización | `C:\BANBAJ\486\SALIDA\20261103_corrida124\SCBPAG.TXT` |
 | `sub_mst.TXT`, `sub_mail.TXT` | Remesas de teléfonos y correos (separadas por `\|`) | Asignación | misma carpeta |

@@ -173,13 +173,16 @@ SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clav
 | CYBER\_ORACLE\_ORIGEN | (vacío) | Lo llena el script 03 |
 | RETROCESO\_AUTOMATICO | 1 | 0 para apagarlo |
 | NEGATIVO\_MODO | CERO | Saldos negativos suben como cero |
-| ARRIBO\_AUTOMATICO | 1 | Al detectar los saldos (SCBSDOS) el job escribe los gescar de nuevas y reasignadas y corre la depuración de teléfonos, el SCBTEL y la de correos; al detectar el SCBTEL, el gescar sin teléfono (0 = a mano) |
-| ARCHIVOS\_DESPUES\_SALDOS | GESCAR\_NVA,GESCAR\_REA | Archivos que no se escriben ni se avisan hasta que suben los saldos |
+| ARRIBO\_AUTOMATICO | 1 | Al detectar los saldos (SCBSDOS) el job escribe los gescar de nuevas, reasignadas y sin teléfono y corre la depuración de teléfonos, el SCBTEL y la de correos; al detectar el SCBTEL, la confirmación (0 = a mano) |
+| ARCHIVOS\_DESPUES\_SALDOS | GESCAR\_NVA,GESCAR\_REA,GESCAR\_SINTEL | Archivos que no se escriben ni se avisan hasta que suben los saldos (GESCAR\_SINTEL siempre espera, aunque no esté en la lista) |
 | ARCHIVOS\_DESPUES\_DEPURACION\_TEL | SCBTEL | Archivos que no se escriben ni se avisan hasta que la depuración de teléfonos queda OK |
 | TEL\_VALIDAR\_LADA | 1 | Solo van a CYBER los teléfonos con lada y longitud en `cfg.PHNVAL` |
 | CYBER\_TABLA\_LADAS · LADAS\_MIN\_FILAS | RCVRY.PHNVAL · 100 | Tabla de ladas de CYBER que se copia cada mes y mínimo de renglones para aceptarla |
-| TEL\_DEPURACION | ACTUAL | ACTUAL = store de hoy y SCBTEL con todos los teléfonos. NUEVOS (cuando el DBA instale `RCVRY.JSP_TELEFONOS_DEPURA_486`) = la depuración marca los nuevos y el SCBTEL lleva solo esos; sin nuevos no hay SCBTEL |
-| CYBER\_PROC\_TEL\_DEPURA | RCVRY.JSP\_TELEFONOS\_DEPURA\_486 | Store de depuración con `TEL_DEPURACION = NUEVOS` |
+| TEL\_DEPURACION | ACTUAL | ACTUAL = remesa completa, store de hoy y SCBTEL con todos los teléfonos. DIFERENCIA (cuando el DBA instale `RCVRY.JSP_TAB_TEL_DEPURA_486` y `JSP_TELEFONOS_DEPURA_486`) = foto de `PHONE`, la comparación se hace aquí y a CYBER solo sube lo que cambia; el SCBTEL lleva solo los nuevos y sin nuevos no hay SCBTEL |
+| CYBER\_PROC\_TEL\_DEPURA | RCVRY.JSP\_TELEFONOS\_DEPURA\_486 | Store de depuración con `TEL_DEPURACION = DIFERENCIA` |
+| CYBER\_BANDERA\_TELEFONOS | 416 | Bandera de `RPT_LOG_CYBER_REG` (bitácora en `RPT_LOG_CYBER`) encendida durante la depuración de teléfonos; la misma de correos |
+| TEL\_GESTORES\_QUEJA | HOMS,HPHPI,BLACK,ZZZTE | Con `DIFERENCIA`, sus teléfonos no se inactivan ni se activan |
+| TEL\_DEPURA\_MAX\_INACTIVAR\_PCT | 30 | Con `DIFERENCIA`, si se inactivaría más de este % de los activos, no se toca CYBER y llega un hallazgo |
 | VISTAS\_USUARIO | 1 | Al terminar la actualización y la asignación, y cuando suben los saldos: baja de CYBER los campos de las vistas (ESTATUS de `DELQMST`, ABAN_SR de `RPT_DAT_486_1`; sin ejecutar ningún store) y arma la tabla de cada usuario (AEM, MIS). 0 = no se actualizan |
 | — | — | Desde el 19/11 los campos de CYBER de las vistas están en `cfg.CYBER_CAMPO` (columna de `DELQMST`, `UDA1` o `RPT_DAT_486_1`); `DAT_CYBER_STORE`, `DAT_CYBER_TABLA` y `DAT_CYBER_LLAVE` ya no se usan |
 | CYBER\_HOSTUP\_EXPR | to\_char(DMHOSTUP, 'YYYYMMDD') | Validación de saldos del equipo: fecha de `DMHOSTUP` con la que se cuentan las cuentas activas del 486. Si `DMHOSTUP` no es DATE, ajustarla; vacío = se detecta por lo pendiente |
@@ -247,11 +250,12 @@ El usuario de Oracle de la credencial `CYBER_ORACLE` necesita, en el esquema `RC
 
 | Objeto | Permiso |
 | --- | --- |
-| `JSP_TAB_TEL_REMESA_486`, `JSP_TAB_MAIL_REMESA_486` | `TRUNCATE` (dueño o `DROP ANY TABLE`) e `INSERT` |
+| `JSP_TAB_TEL_REMESA_486`, `JSP_TAB_TEL_DEPURA_486`, `JSP_TAB_MAIL_REMESA_486` | `TRUNCATE` (dueño o `DROP ANY TABLE`), `INSERT` y `SELECT` (conteo) |
+| `PHONE` | `SELECT` (foto para la depuración por diferencia) |
 | `ADDRESS` | `INSERT` (correos nuevos) |
 | `JSP_VALIDADOR_TELEFONOS` | `INSERT` |
-| `RPT_LOG_CYBER_REG` | `UPDATE` (bandera 416) |
-| `JSP_TELEFONOS_REMESA_486`, `JSP_CORREOS_486` | `EXECUTE` |
+| `RPT_LOG_CYBER_REG`, `RPT_LOG_CYBER` | `UPDATE` / `INSERT` (bandera 416 de correos y teléfonos) |
+| `JSP_TELEFONOS_REMESA_486`, `JSP_TELEFONOS_DEPURA_486`, `JSP_CORREOS_486` | `EXECUTE` |
 | `DELQMST` | `SELECT` (detectar el arribo, status) y `UPDATE` (retiro, saldos, vencido, blanqueo) |
 | `UDA1` | `UPDATE` (pago mínimo, PVS y REE) |
 | `PMTFIL` | `SELECT` (cuadre de pagos) |
@@ -417,10 +421,10 @@ Cada 30 minutos el job llama `ops.sp_diario_486`. Esto es lo que hace:
    - Si hay validaciones, manda sus avisos: saldo ≤0 en Consumo, pagos negativos (al equipo de asignaciones) o números cortados por Excel en la base maestra.
    - Con más de 100 cuentas nuevas avisa con ALERTA\_NUEVAS\_486.
 4. Si la ACT y la ASIG del día ya están hechas, contesta "DIA COMPLETO" y no repite nada. En ese momento revisa el **arribo automático a CYBER** (`ops.sp_arribo_automatico`, `ARRIBO_AUTOMATICO = 1`):
-   - **Saldos:** en cuanto detecta que el operador ya subió el SCBSDOS (cuentas con `DMHOSTUP` del día = cuentas del SCBSDOS), escribe y avisa los gescar de nuevas y reasignadas.
-   - **Teléfonos:** enseguida carga la remesa y, si tiene los mismos renglones que nuestro archivo de teléfonos, crea el renglón del validador y ejecuta `JSP_TELEFONOS_REMESA_486`. Luego escribe y avisa el SCBTEL. Si no cuadra (50776), no se ejecuta nada en CYBER, no sale el SCBTEL y llega un hallazgo.
+   - **Saldos:** en cuanto detecta que el operador ya subió el SCBSDOS (cuentas con `DMHOSTUP` del día = cuentas del SCBSDOS), escribe y avisa los gescar de nuevas, reasignadas y sin teléfono (este último sale de nuestro archivo de teléfonos).
+   - **Teléfonos:** enseguida enciende la bandera 416. Con `TEL_DEPURACION = DIFERENCIA` baja la foto de `PHONE`, la compara con nuestro archivo y sube solo los cambios; si quedaron completos en CYBER, ejecuta `JSP_TELEFONOS_DEPURA_486` (con `ACTUAL`: remesa completa y `JSP_TELEFONOS_REMESA_486`). Apaga la bandera, escribe y avisa el SCBTEL. Si no cuadra (50776) o se inactivaría demasiado (50779), no se toca CYBER, no sale el SCBTEL, se apaga la bandera y llega un hallazgo.
    - **Correos:** con los teléfonos OK, inserta los correos nuevos en `ADDRESS`, enciende la bandera 416, carga la remesa, ejecuta `JSP_CORREOS_486` y apaga la bandera.
-   - **Gescar sin teléfono:** en cuanto detecta que ya subió el SCBTEL (los teléfonos que le faltaban a `PHONE_G1` ya llegaron), escribe y avisa `SCBACTH_SINTEL.TXT`.
+   - **SCBTEL arriba:** en cuanto detecta que los teléfonos nuevos ya están en `PHONE_G1`, marca `ARRIBO SCBTEL` y manda la confirmación.
    - Cada uno corre una sola vez por corrida. Si falla queda `ERROR` en la bitácora y no se reintenta solo.
 
 Las devoluciones que detectan la asignación y la actualización **se aplican solas** salvo que en algún segmento superen el 50 % de sus cuentas en el DAT. Después se escriben los archivos y sale el ZIP con el correo de devolución. El retiro en CYBER también es automático (`RETIRO_CYBER_AUTOMATICO`); solo el archivo `MX_G1MCT_DVBJIG_*` se copia a mano a `\\192.168.50.1\Cyber_00\dev\`, porque el servidor no tiene acceso a esa carpeta. Si superan el tope, o algún paso automático falla, llega el **correo de hallazgos** (`HALLAZGO_486`) solo al equipo de asignaciones con el detalle y qué hacer.
@@ -485,7 +489,7 @@ Los archivos planos de ancho fijo (TXT) quedan todos en la carpeta de su corrida
 | `SCBTEL.TXT` | Teléfonos | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBTEL.TXT` |
 | `SCBACTH_486NU.TXT` | Gescar de cuentas nuevas | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486NU.TXT` |
 | `SCBACTH_486REA.TXT` | Gescar de cuentas reasignadas | Asignación | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486REA.TXT` |
-| `SCBACTH_SINTEL.TXT` | Gescar de cuentas sin teléfono en CYBER | El arribo automático de teléfonos (o `ops.sp_bajar_cyber 'TELEFONOS'` a mano); se escribe solo | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_SINTEL.TXT` |
+| `SCBACTH_SINTEL.TXT` | Gescar de cuentas nuevas y reasignadas sin teléfono en nuestro archivo | La asignación; se escribe solo al subir los saldos (o `ops.sp_arribo_gescar_sintel` a mano) | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_SINTEL.TXT` |
 | `SCBACTH_486.TXT` | Gescar de retiro | Retiro (`ops.sp_retiro`) | `C:\BANBAJ\486\SALIDA\20261103_corrida125\SCBACTH_486.TXT` |
 | `SCBPAG.TXT` | Arribo de pagos | Actualización | `C:\BANBAJ\486\SALIDA\20261103_corrida124\SCBPAG.TXT` |
 | `sub_mst.TXT`, `sub_mail.TXT` | Remesas de teléfonos y correos (separadas por `\|`) | Asignación | misma carpeta |
@@ -528,9 +532,8 @@ El operador **solo sube los planos de ancho fijo** con el cargador de CYBER; el 
 **Asignación:**
 
 1. Subir `SCBSDOS.TXT` (el primer aviso solo trae el SCBSDOS y el SCBPAG).
-2. En la siguiente vuelta del job (máximo 30 minutos) aparecen los gescar de nuevas y reasignadas y, si la depuración de teléfonos quedó bien, el `SCBTEL.TXT` (llega un aviso por cada uno). Subirlos. **No subir el SCBTEL antes de su aviso.**
-3. Con el SCBTEL arriba, el job escribe `SCBACTH_SINTEL.TXT` (otro aviso), hace el blanqueo (días 1 a 10) y manda la confirmación.
-4. Subir `SCBACTH_SINTEL.TXT`.
+2. En la siguiente vuelta del job (máximo 30 minutos) aparecen los gescar de nuevas, reasignadas y sin teléfono y, si la depuración de teléfonos quedó bien, el `SCBTEL.TXT` (llega un aviso por cada grupo). Subirlos. **No subir el SCBTEL antes de su aviso.**
+3. Con el SCBTEL arriba, el job hace el blanqueo (días 1 a 10) y manda la confirmación.
 
 **Actualización:** subir `SCBPAG.TXT`. Los scripts `ACT_*` ya se ejecutaron solos en CYBER y el cuadre de pagos avisa si algo no subió.
 

@@ -23,7 +23,7 @@ flowchart TB
     subgraph CYB["CYBER (Oracle)"]
         CARG["Cargador de archivos"]
         TAB[("DELQMST, PHONE_G1,<br/>PHONE, ADDRESS, UDA1, PMTFIL")]
-        JSP["Stores de depuración<br/>JSP_CORREOS_486<br/>JSP_TELEFONOS_REMESA_486"]
+        JSP["Stores de depuración (con bandera 416)<br/>JSP_CORREOS_486<br/>JSP_TELEFONOS_DEPURA_486"]
     end
     ASIGN(["Equipo de asignaciones"])
 
@@ -40,7 +40,7 @@ flowchart TB
     TXT -. "correo ARCHIVOS_LISTOS_486" .-> ASIGN
     ASIGN -- "sube los planos" --> CARG --> TAB
     JOB --> ARR
-    ARR -- "servidor vinculado [CYBER]<br/>remesas + EXEC" --> JSP
+    ARR -- "servidor vinculado [CYBER]<br/>foto, cambios + EXEC" --> JSP
     JSP --> TAB
     ARR -- "lee DELQMST / PHONE_G1" --> TAB
     JOB --> CUA
