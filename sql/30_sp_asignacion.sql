@@ -77,12 +77,12 @@ BEGIN
 
     /* 20/11: la llave (riesgo) repetida en la asignación detiene la corrida y avisa al equipo, igual que la validación
        de la entrada. Dentro de una base ya la detiene la regla LLAVE_UNICA; aquí queda el mismo riesgo en dos segmentos. */
-    IF EXISTS (SELECT 1 FROM stg.LAYOUT_486 GROUP BY CUENTA HAVING COUNT(*) > 1)
+    IF EXISTS (SELECT 1 FROM stg.LAYOUT_486 GROUP BY CUENTA HAVING COUNT(DISTINCT ORIGEN) > 1)
     BEGIN
         DECLARE @rep INT, @ej NVARCHAR(1000), @msg NVARCHAR(2048);
-        SELECT @rep = COUNT(*) FROM (SELECT CUENTA FROM stg.LAYOUT_486 GROUP BY CUENTA HAVING COUNT(*) > 1) x;
+        SELECT @rep = COUNT(*) FROM (SELECT CUENTA FROM stg.LAYOUT_486 GROUP BY CUENTA HAVING COUNT(DISTINCT ORIGEN) > 1) x;
         SELECT @ej = STRING_AGG(CAST(CONCAT(cfg.fn_enmascarar(CUENTA), N' (', O, N')') AS NVARCHAR(MAX)), N'; ')
-        FROM (SELECT TOP (5) CUENTA, STRING_AGG(CAST(ORIGEN AS NVARCHAR(100)), N' y ') AS O FROM stg.LAYOUT_486 GROUP BY CUENTA HAVING COUNT(*) > 1 ORDER BY CUENTA) e;
+        FROM (SELECT TOP (5) CUENTA, STRING_AGG(CAST(ORIGEN AS NVARCHAR(100)), N' y ') AS O FROM stg.LAYOUT_486 GROUP BY CUENTA HAVING COUNT(DISTINCT ORIGEN) > 1 ORDER BY CUENTA) e;
         INSERT INTO ops.VALIDACION_ENTRADA (ID_CORRIDA, CODIGO, TIPO, CAMPO, ESPERADO, REVISADOS, ANOMALOS, PCT, PCT_MAX, EJEMPLOS, DETIENE)
         VALUES (@id_corrida, 'LAYOUT_486', 'LLAVE_UNICA', N'RIESGO', N'Cada riesgo en un solo segmento', @total, @rep,
                 CAST(@rep * 100.0 / NULLIF(@total, 0) AS DECIMAL(7,2)), 0, LEFT(@ej, 1000), 1);
@@ -90,6 +90,16 @@ BEGIN
         EXEC ops.sp_validacion_entrada_avisar @id_corrida, @msg OUTPUT;
         THROW 50025, @msg, 1;
     END;
+
+    /* Repetido dentro de la misma base: lo detiene la regla LLAVE_UNICA de la validación de la entrada. Si el equipo le
+       subió la tolerancia, se conserva el primero y los demás van a rechazos */
+    ;WITH d AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY CUENTA ORDER BY ORIGEN) AS RN FROM stg.LAYOUT_486)
+    INSERT INTO ops.RECHAZO (ID_CORRIDA, ORIGEN, MOTIVO, DATOS)
+    SELECT @id_corrida, 'LAYOUT_486', N'CUENTA duplicada en el layout (riesgo repetido en la base)',
+           (SELECT d.ORIGEN, d.DES_PROD FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+    FROM d WHERE RN > 1;
+    ;WITH d AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY CUENTA ORDER BY ORIGEN) AS RN FROM stg.LAYOUT_486)
+    DELETE FROM d WHERE RN > 1;
 
     EXEC ops.sp_log @id_corrida, 'ASIG UNIR LAYOUT', 'OK', @total;
     EXEC ops.sp_asig_avisos_llave @id_corrida;
