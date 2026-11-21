@@ -60,20 +60,18 @@ BEGIN
         SET @sql = N'INSERT INTO stg.LAYOUT_486 (ID_CORRIDA, ORIGEN, ' + @cols + N') '
                  + N'SELECT ID_CORRIDA, @codigo, ' + @sel + N' FROM '
                  + QUOTENAME(PARSENAME(@src, 2)) + N'.' + QUOTENAME(PARSENAME(@src, 1))
-                 + N' WHERE ID_CORRIDA = @id_corrida; SET @n = @@ROWCOUNT;';
+                 + N' WHERE ID_CORRIDA = @id_corrida AND NULLIF(LTRIM(RTRIM(CUENTA)), '''') IS NOT NULL; SET @n = @@ROWCOUNT; '
+                 /* Sin llave (riesgo vacío): a rechazos (la carga ya rechaza el riesgo vacío; esto es por si acaso) */
+                 + N'INSERT INTO ops.RECHAZO (ID_CORRIDA, ORIGEN, MOTIVO, DATOS) SELECT @id_corrida, ''LAYOUT_486'', N''Sin riesgo (llave única) en el layout'', '
+                 + N'(SELECT @codigo AS ORIGEN, s.FILA FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) FROM '
+                 + QUOTENAME(PARSENAME(@src, 2)) + N'.' + QUOTENAME(PARSENAME(@src, 1))
+                 + N' s WHERE s.ID_CORRIDA = @id_corrida AND NULLIF(LTRIM(RTRIM(s.CUENTA)), '''') IS NULL;';
         EXEC sp_executesql @sql, N'@id_corrida INT, @codigo VARCHAR(50), @n INT OUTPUT',
              @id_corrida = @id_corrida, @codigo = @codigo, @n = @n OUTPUT;
         SET @total += @n;
         FETCH NEXT FROM cur INTO @src, @codigo;
     END;
     CLOSE cur; DEALLOCATE cur;
-
-    /* Sin llave (riesgo vacío): a rechazos */
-    INSERT INTO ops.RECHAZO (ID_CORRIDA, ORIGEN, MOTIVO, DATOS)
-    SELECT @id_corrida, 'LAYOUT_486', N'Sin riesgo (llave única) en el layout',
-           (SELECT d.ORIGEN, d.DES_PROD FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
-    FROM stg.LAYOUT_486 d WHERE d.CUENTA IS NULL;
-    DELETE FROM stg.LAYOUT_486 WHERE CUENTA IS NULL;
 
     /* 20/11: la llave (riesgo) repetida en la asignación detiene la corrida y avisa al equipo, igual que la validación
        de la entrada. Dentro de una base ya la detiene la regla LLAVE_UNICA; aquí queda el mismo riesgo en dos segmentos. */

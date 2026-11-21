@@ -1752,6 +1752,9 @@ GO
    LLAVE POR RIESGO, VALIDACIONES NUEVAS, ASIGNACIÓN POR SEGMENTO Y PRUEBAS DE ENTORNO (20/11)
    --------------------------------------------------------------------- */
 DECLARE @rs NVARCHAR(4000), @err INT, @msg NVARCHAR(4000), @c INT, @f DATE, @n INT, @dat INT, @bra INT;
+/* Carpetas de prueba (la prueba de la semilla deja la configuración de fábrica en lo no editado) */
+UPDATE cfg.ARCHIVO SET RUTA = '/datos/asig/', PATRON_NOMBRE = REPLACE(PATRON_NOMBRE, '.csv', '%'), CODEPAGE = '' WHERE CLIENTE = '486' AND PROCESO = 'ASIG';
+UPDATE cfg.ARCHIVO SET RUTA = '/datos/act_ok/', CODEPAGE = '' WHERE CLIENTE = '486' AND PROCESO = 'ACT';
 
 /* La cuenta TDC nueva queda con llave = riesgo y la armada en CTA_BANCO (que es lo que va a CYBER) */
 SET @rs = CONCAT((SELECT TOP (1) CONCAT(CUENTA, ':', CTA_BANCO, ':', RIESGO) FROM dat.HISTORIA_FOLIO WHERE CUENTA2 = '486-100003' ORDER BY ID DESC), '|',
@@ -1825,8 +1828,9 @@ EXEC ops.sp_corrida_finalizar @dup, 'CANCELADA', N'Prueba de riesgo repetido ent
 EXEC pru.sp_igual N'LLAVE: el mismo riesgo en TDC y Consumo detiene la asignación y avisa al equipo', N'50025|LLAVE_UNICA:RIESGO:1:1|1', @rs;
 
 /* Avisos: mismo riesgo con otro RFC y cambio de segmento (no detienen) */
-DECLARE @av INT, @t1 VARCHAR(20) = (SELECT MIN(CUENTA) FROM dat.DAT_486 WHERE SEGMENTO2 = 'TDC' AND NULLIF(RFC, '') IS NOT NULL),
-        @c1 VARCHAR(20) = (SELECT MIN(CUENTA) FROM dat.DAT_486 WHERE SEGMENTO2 = 'CONSUMO');
+DECLARE @av INT, @t1 VARCHAR(20) = '7100000001', @c1 VARCHAR(20) = '7100000002';
+INSERT INTO dat.DAT_486 (FOLIO, CLIENTE, CUENTA, CUENTA2, RIESGO, SEGMENTO2, RFC, CTA_BANCO)
+VALUES ('910001', '486', @t1, '486-910001', @t1, 'TDC', 'XAXX010101000', 'T1'), ('910002', '486', @c1, '486-910002', @c1, 'CONSUMO', 'XAXX010101000', @c1);
 EXEC ops.sp_corrida_iniciar '486', 'ASIG', '2031-01-09', NULL, @av OUTPUT;
 INSERT INTO ops.ARCHIVO_CARGADO (ID_CORRIDA, ID_ARCHIVO, CODIGO, RUTA, ESTATUS) VALUES (@av, @tdc_id, 'MAESTRA_TDC', N'prueba', 'CARGADO');
 INSERT INTO stg.ENT_MAESTRA_TDC (ID_CORRIDA, FILA, CUENTA, RIESGO, RFC, SEGMENTO2)
@@ -1837,6 +1841,7 @@ SET @rs = CONCAT((SELECT CONCAT(ESTATUS, ':', REGISTROS) FROM ops.BITACORA WHERE
                   FROM ops.BITACORA WHERE ID_CORRIDA = @av AND PASO = 'ASIG AVISOS LLAVE'), '|',
                  (SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @av AND PLANTILLA = 'HALLAZGO_486'));
 EXEC ops.sp_corrida_finalizar @av, 'CANCELADA', N'Prueba de avisos de la llave';
+DELETE FROM dat.DAT_486 WHERE CUENTA IN (@t1, @c1);
 EXEC pru.sp_igual N'LLAVE: avisa (enmascarado) el riesgo con otro RFC y el cambio de segmento, sin detener', N'AVISO:2|SI|1', @rs;
 
 /* Una asignación por segmento: lo ya asignado ese día no se vuelve a tomar; en otro día las dos bases cuentan */
