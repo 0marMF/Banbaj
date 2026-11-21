@@ -127,7 +127,7 @@ BEGIN
     CROSS APPLY (SELECT ISNULL(dd.SEG, hh.SEG) AS SEG) x
     WHERE l.ID_CORRIDA = @id_corrida AND x.SEG IS NOT NULL AND x.SEG <> l.SEGMENTO2;
 
-    SELECT @rfc = COUNT(*), @ej_rfc = STRING_AGG(CAST(cfg.fn_enmascarar(CUENTA) AS NVARCHAR(MAX)), N', ') FROM (SELECT TOP (5) CUENTA FROM #rfc ORDER BY CUENTA) e;
+    SELECT @ej_rfc = STRING_AGG(CAST(cfg.fn_enmascarar(CUENTA) AS NVARCHAR(MAX)), N', ') FROM (SELECT TOP (5) CUENTA FROM #rfc ORDER BY CUENTA) e;
     SET @rfc = (SELECT COUNT(*) FROM #rfc);
     SELECT @ej_seg = STRING_AGG(CAST(CONCAT(cfg.fn_enmascarar(CUENTA), N' (', CAMBIO, N')') AS NVARCHAR(MAX)), N', ') FROM (SELECT TOP (5) CUENTA, CAMBIO FROM #seg ORDER BY CUENTA) e;
     SET @seg = (SELECT COUNT(*) FROM #seg);
@@ -144,7 +144,8 @@ BEGIN
         SELECT @rfc AS OTRO_RFC, @seg AS CAMBIO_SEGMENTO, @msg AS MENSAJE;
         RETURN;
     END;
-    EXEC ops.sp_log @id_corrida, 'ASIG AVISOS LLAVE', 'AVISO', @rfc + @seg, @msg;
+    DECLARE @total INT = @rfc + @seg;
+    EXEC ops.sp_log @id_corrida, 'ASIG AVISOS LLAVE', 'AVISO', @total, @msg;
     SET @json = (SELECT N'Avisos de la llave por riesgo' AS TIPO, @msg AS DETALLE,
                         N'No detiene la asignación. Revisar con el banco si el riesgo es el mismo crédito; las cuentas que cambian de segmento quedan en el segmento nuevo.' AS ACCION,
                         N'ASIG' AS PROCESO, N'' AS HTML_TABLA
