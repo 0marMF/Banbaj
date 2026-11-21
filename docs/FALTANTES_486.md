@@ -233,3 +233,11 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [ ] **Primera corrida con `DIFERENCIA`:** revisar el renglón `TEL DIFERENCIA` antes de dejar seguir al job. Si el freno de 30 % (`TEL_DEPURA_MAX_INACTIVAR_PCT`) para la primera vez por acumulado de días anteriores, revisar y ajustarlo solo esa vez.
 - [ ] **Ventana:** un teléfono que un gestor agregue entre la foto y el store (minutos) se queda activo hasta la siguiente asignación. Se aceptó así (19/11).
 - [ ] **ABAN_SR** se lee de `RPT_DAT_486_1` como la dejó la última corrida de `PROC_DAT_486` en CYBER; si nadie la corre, el dato se queda viejo (decisión 19/11).
+
+## 18. Llave por riesgo, validaciones y asignación por segmento (20/11)
+
+- [ ] **Largo del ACC_NUM:** la llave mide 20. Si algún ACC_NUM real pasa de 20 dígitos o trae letras, la regla `DIGITOS` detiene la asignación; confirmar con una base real (prueba de lectura, `pruebas_entorno/05`).
+- [ ] **Cuentas TDC sin RIESGO en FoxPro:** al migrar se quedan con la llave de antes y no se reconocen en la siguiente base (salen como devolución y entran como nuevas). Revisar el resumen de `ops.sp_llave_riesgo_migrar`.
+- [ ] **CRUCE_DAT de saldos (30 %):** calibrar con unas semanas de archivos reales; si el banco manda saldos de cuentas que no son nuestras, subir la tolerancia.
+- [ ] **Segundo segmento el mismo día:** su SCBSDOS, teléfonos y correos llevan todo el DAT; el operador sube los dos SCBSDOS. Confirmar con el equipo que no estorba.
+- [ ] **Pruebas de entorno** en el servidor antes de producción (`pruebas_entorno/`).

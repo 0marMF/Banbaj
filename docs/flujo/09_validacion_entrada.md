@@ -44,7 +44,10 @@ Reglas en `cfg.VALIDACION_DATO` (una por archivo, campo y tipo), revisadas sobre
 | `TELEFONO` | Teléfono con letras o con menos de 10 o más de 12 dígitos (`0` y `-` cuentan como vacío) | 2 % |
 | `CORREO` | Correo sin forma de correo: sin @, con espacios o sin dominio ("solo texto") | 2 % |
 | `CATALOGO` | Segmento, estatus, tramo, cartera o tipo de crédito que **no está en el catálogo** | 0 % |
-| `LLAVE_UNICA` | Cuenta repetida en el archivo | 0 % |
+| `LLAVE_UNICA` | Cuenta repetida en el archivo. 20/11: también en los saldos (ACC_NUM en TDC, crédito CYBER en Consumo) | 0 % |
+| `DIGITOS` | La llave única (ACC_NUM en TDC, crédito en Consumo) con letras o de más de 20 dígitos (20/11) | 0 % |
+| `ARCHIVO_IGUAL` | El archivo es idéntico al último archivo bueno de otro día: el banco reenvió el anterior (20/11; bases maestras y saldos) | 0 % |
+| `CRUCE_DAT` | Renglones de los saldos cuya llave no está en el DAT (`VALOR` = columna del DAT): archivo de otro segmento o de otro cliente (20/11) | 30 % |
 | `NO_VACIO` | La columna viene vacía: se corrió o cambió | 1 a 5 % |
 | `VOLUMEN` | El archivo trae menos del 30 % o más del 300 % de los renglones de la última carga buena (archivo cortado o duplicado) | rango en `VALOR` |
 
@@ -52,6 +55,9 @@ Reglas en `cfg.VALIDACION_DATO` (una por archivo, campo y tipo), revisadas sobre
 - `PCT_MAX` es el % de anomalías tolerado sobre los valores revisados. Si una regla lo supera, detiene; si tiene anomalías dentro de la tolerancia, solo aparece como aviso en la bitácora y en el correo.
 - En la actualización un saldo negativo o cero no se valida aquí: es criterio de retiro (`cfg.REGLA RETIRO_*`). Los pagos negativos se siguen excluyendo y avisando (`PAGOS_NEGATIVOS_486`).
 - El equipo ajusta `VALOR`, `PCT_MAX` y `ACTIVO`; la semilla solo agrega las reglas que falten.
+- **Riesgo repetido entre segmentos (20/11):** si el mismo riesgo llega en la base de TDC y en la de Consumo de la misma asignación, `ops.sp_asig_unir_layout` detiene la corrida y avisa igual (`VALIDACION_ENTRADA_486`, archivo `LAYOUT_486`). Repetido dentro de una base lo decide `LLAVE_UNICA`.
+- **Avisos que no detienen (20/11):** mismo riesgo con otro RFC que el del DAT y cuentas que cambian de segmento (`ops.sp_asig_avisos_llave`); pagos repetidos en el archivo (mismo crédito, importe y fecha). Llegan en el correo de hallazgos con los valores enmascarados.
+- `PRIME4DIG` ya no es llave (20/11): su regla de repetidos queda apagada.
 
 ## Catálogos estáticos de etiquetado
 

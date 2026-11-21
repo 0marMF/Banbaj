@@ -384,6 +384,7 @@ EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;
 - Si un destino ya tiene datos (por ejemplo, una prueba anterior), se detiene con un error 50910–50914. Para sobrescribir, agregar `@reemplazar = 1`.
 - Para cargar solo una parte: `@solo = N'DAT,HISTORIA'` (destinos: DAT, HISTORIA, CONSECUTIVO, PAGOS, ETIQUETAS, EXCLUSIONES, LADA, PNC).
 - Las tablas temporales `stg.MIG_*` se borran al terminar, salga bien o mal.
+- Al final pasa lo cargado a la **llave por riesgo** (20/11; `ops.sp_llave_riesgo_migrar`): en TDC la llave deja de ser la cuenta armada (últimos 4 dígitos de PRIME+4DIG + RFC) y pasa a ser el ACC_NUM; la armada queda en `CTA_BANCO`, que es lo que sigue yendo a CYBER. Muestra cuántas cuentas cambiaron y cuántas se quedaron con la llave de antes (TDC sin RIESGO, con RIESGO de más de 20 caracteres o repetido). Esas no se van a reconocer en la siguiente base: revísalas.
 
 ### Paso 4. Verificar
 
@@ -396,6 +397,11 @@ SELECT TIPO, ACTIVO, COUNT(*) FROM cfg.EXCLUSION WHERE CLIENTE = '486' AND ORIGE
 ```
 
 Revisar a ojo unas cuantas cuentas conocidas: saldo, folio, etiqueta y teléfono deben coincidir con FoxPro.
+
+```sql
+USE [BNABAJ_486];
+EXEC ops.sp_llave_riesgo_migrar;        -- después de migrar: todo en "SIN CAMBIO" o ya aplicado; lo que diga "se queda" hay que revisarlo
+```
 
 ### Paso 5. Limpiar
 
@@ -420,7 +426,7 @@ Cada 30 minutos el job llama `ops.sp_diario_486`. Esto es lo que hace:
    - Genera SCBSDOS, SCBTEL, sub\_mst, sub\_mail, gescar y la copia del DAT para MIS.
    - Si hay validaciones, manda sus avisos: saldo ≤0 en Consumo, pagos negativos (al equipo de asignaciones) o números cortados por Excel en la base maestra.
    - Con más de 100 cuentas nuevas avisa con ALERTA\_NUEVAS\_486.
-4. Si la ACT y la ASIG del día ya están hechas, contesta "DIA COMPLETO" y no repite nada. En ese momento revisa el **arribo automático a CYBER** (`ops.sp_arribo_automatico`, `ARRIBO_AUTOMATICO = 1`):
+4. Si llega la base de un segmento que ese día no se asignó (por ejemplo Consumo después de TDC), corre otra asignación solo con ese segmento (20/11). Si la ACT y las ASIG del día ya están hechas, contesta "DIA COMPLETO" y no repite nada. En ese momento revisa el **arribo automático a CYBER** (`ops.sp_arribo_automatico`, `ARRIBO_AUTOMATICO = 1`):
    - **Saldos:** en cuanto detecta que el operador ya subió el SCBSDOS (cuentas con `DMHOSTUP` del día = cuentas del SCBSDOS), escribe y avisa los gescar de nuevas, reasignadas y sin teléfono (este último sale de nuestro archivo de teléfonos).
    - **Teléfonos:** enseguida enciende la bandera 416. Con `TEL_DEPURACION = DIFERENCIA` baja la foto de `PHONE`, la compara con nuestro archivo y sube solo los cambios; si quedaron completos en CYBER, ejecuta `JSP_TELEFONOS_DEPURA_486` (con `ACTUAL`: remesa completa y `JSP_TELEFONOS_REMESA_486`). Apaga la bandera, escribe y avisa el SCBTEL. Si no cuadra (50776) o se inactivaría demasiado (50779), no se toca CYBER, no sale el SCBTEL, se apaga la bandera y llega un hallazgo.
    - **Correos:** con los teléfonos OK, inserta los correos nuevos en `ADDRESS`, enciende la bandera 416, carga la remesa, ejecuta `JSP_CORREOS_486` y apaga la bandera.
@@ -697,6 +703,19 @@ Reglas:
 
 ## Salida a producción
 
+### Pruebas de entorno
+
+Antes del paralelo, corre en SSMS, en orden, los scripts de `pruebas_entorno/` (ver su `LEEME.md`). Prueban con los archivos reales del día, sin escribir en CYBER y con los correos redirigidos a tu dirección:
+
+1. `01_modo_prueba_encender.sql`: correos solo a ti, CYBER solo lectura, archivos a una carpeta de prueba y jobs apagados.
+2. `02_bajada_cyber.sql`: servidor vinculado y cada tabla de CYBER que usa Banbaj (solo conteos).
+3. `03_correos.sql`: perfil de Database Mail, plantillas y un correo real.
+4. `04_deteccion_archivos.sql`: qué archivo encuentra cada patrón en la carpeta del día y qué haría el job.
+5. `05_lectura_archivos.sql`: lectura y validación de cada archivo, sin tocar el DAT.
+6. `06_asignacion_prueba.sql`: actualización y asignación completas, con resumen.
+7. `07_revertir_prueba.sql`: deja el DAT como estaba.
+8. `08_modo_prueba_apagar.sql`: repone parámetros y jobs. **No lo olvides:** con el modo de prueba encendido no sale ningún correo real ni se escribe nada en CYBER.
+
 ### Corrida en paralelo con FoxPro
 
 Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre los mismos archivos. Solo FoxPro arriba a CYBER; Banbaj solo genera.
@@ -719,6 +738,8 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 ### Lista de verificación
 
 - [ ] Base creada y scripts `sql/` corridos sin error
+- [ ] Pruebas de entorno (`pruebas_entorno/`) en OK y modo de prueba apagado (`CORREO_PRUEBA_PARA` vacío, `CYBER_SOLO_LECTURA = 0`)
+- [ ] Llave por riesgo aplicada (`EXEC ops.sp_llave_riesgo_migrar;` sin pendientes)
 - [ ] `01_configurar_servidor.sql`: OLE, xp\_cmdshell, Database Mail y correo de prueba recibido
 - [ ] 7-Zip instalado en el servidor y `RUTA_7ZIP` correcta
 - [ ] Cliente de Oracle y proveedor OraOLEDB instalados, con *Allow inprocess*

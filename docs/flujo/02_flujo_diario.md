@@ -11,7 +11,7 @@ En cada vuelta (cada 30 minutos), el job revisa en orden y contesta con un `RESU
 | ¿Fin de semana? (`cfg.fn_es_fin_de_semana`) | sigue | `FIN DE SEMANA` (se puede forzar con `@forzar = 1`) |
 | ¿Ya hay actualización del día? | si llegaron sus archivos (`ops.sp_archivos_presentes 'ACT'`) corre `ops.sp_actualizacion_486`; si no, `ESPERANDO ACTUALIZACION` | sigue |
 | ¿La actualización del día quedó OK? | `ACTUALIZACION DEL DIA SIN TERMINAR OK` (se revirtió sola; ver la bitácora) | corre `ops.sp_cuadre_automatico` y sigue |
-| ¿Ya hay asignación del día? | si llegaron las bases maestras corre `ops.sp_asignacion_486`; si no, `ACTUALIZACION OK · SIN ASIGNACION (POR AHORA)` | `DIA COMPLETO` y corre `ops.sp_arribo_automatico` |
+| ¿Ya hay asignación del día? | si llegaron las bases maestras corre `ops.sp_asignacion_486`; si no, `ACTUALIZACION OK · SIN ASIGNACION (POR AHORA)` | si llegó la base de un segmento que ninguna asignación de hoy intentó (`ops.sp_archivos_presentes … @solo_pendientes = 1`), corre otra asignación solo con ese segmento (`ASIGNACION DE OTRO SEGMENTO OK`); si no, `DIA COMPLETO`. Después corre `ops.sp_arribo_automatico` para cada asignación OK del día |
 
 Una corrida que falla no se repite sola en la misma fecha: queda `ERROR` en `ops.CORRIDA`, el DAT se restaura (`ops.sp_retroceso_automatico`) y se vuelve a correr a mano con `EXEC ops.sp_diario_486 @fecha = '…'` una vez corregida la causa (o revirtiendo la corrida con `ops.sp_revertir_corrida`).
 

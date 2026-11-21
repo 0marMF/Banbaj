@@ -1,4 +1,4 @@
-# Qué volver a ejecutar en el servidor (actualización del 19/11/2026)
+# Qué volver a ejecutar en el servidor (actualización del 20/11/2026)
 
 Esta guía lleva tu base (`BNABAJ_486` en `STCSVASIGNAC044\MULTISQLSERVER`) a la versión actual de `main`. Vale para una base instalada en cualquier fecha a partir del 03/11. Todos los scripts de `sql/` se pueden volver a correr sobre una base con datos: crean solo lo que falta y reemplazan los procedimientos.
 
@@ -73,6 +73,38 @@ SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486'
 8. Sigue con la **migración** (paso 6) y enciende el job cuando corresponda (paso 7).
 
 Detalle del arribo: *Flujo y diagramas*, sección 05.
+
+## Llave por riesgo, validaciones y asignación por segmento (20/11)
+
+Si ya tienes la versión del 19/11 (o la de la noche del 19/11), esto es lo que cambia:
+
+- **Llave única por riesgo:** la llave del DAT y del histórico es el riesgo en todos los segmentos (en TDC el ACC_NUM). La cuenta armada de TDC queda en `CTA_BANCO` y sigue yendo a CYBER (DMSSNUM, SCBPAG, etiquetas). Consumo e Hipotecario devuelven por riesgo.
+- **Validaciones nuevas que paran:** riesgo repetido en los saldos o entre segmentos, riesgo con letras o de más de 20 dígitos, archivo idéntico al de un día anterior y saldos que no cruzan con el DAT. **Avisos sin parar:** riesgo con otro RFC, cambio de segmento y pagos repetidos.
+- **Una asignación por segmento:** si el otro segmento llega más tarde, el job corre otra asignación solo con él; el arribo sigue cada asignación del día.
+- **Pruebas de entorno:** `sql/85_sp_pruebas_entorno.sql` y la carpeta `pruebas_entorno/`.
+
+Como cambian muchos scripts, corre **todos** los de `sql/`:
+
+1. **Apaga el job, respalda la base** (paso 0) y **guarda tus parámetros** (paso 1).
+2. **Corre todos los scripts de `sql/` en orden** (paso 2). Incluye el nuevo `85_sp_pruebas_entorno.sql`.
+3. **Repón tus parámetros** (paso 3). Los parámetros nuevos (`CORREO_PRUEBA_PARA` vacío y `CYBER_SOLO_LECTURA = 0`) deben quedar así en producción.
+4. **Pasa a la llave por riesgo** lo que ya está cargado. Primero revisa, después aplica:
+
+```sql
+USE [BNABAJ_486];
+EXEC ops.sp_llave_riesgo_migrar;                    -- cuántas cuentas TDC cambian de llave y cuántas se quedan
+EXEC ops.sp_llave_riesgo_migrar @confirmar = 1;     -- aplica
+```
+
+   - Si todavía no has migrado desde FoxPro, sáltate este paso: `ops.sp_migrar_486` lo hace solo al final.
+   - Las cuentas TDC que "se quedan" (sin RIESGO, de más de 20 o repetido) no se van a reconocer en la siguiente base: revísalas con el equipo.
+   - Las corridas de antes de este paso ya no se pueden revertir (su respaldo trae la llave vieja).
+
+5. **Corre las pruebas de entorno** (`pruebas_entorno/`, en orden; ver su `LEEME.md`) y termina con `08_modo_prueba_apagar.sql`.
+6. **Prende el job.**
+7. **Avisa al equipo de asignaciones:**
+   - Se pueden recibir dos asignaciones el mismo día (una por segmento), cada una con su aviso de archivos y su confirmación.
+   - Una base con riesgos repetidos, idéntica a la del día anterior o con riesgos con letras se detiene con `VALIDACION_ENTRADA_486`.
 
 ## Teléfonos por diferencia, bandera y vistas sin stores (19/11 en la noche)
 

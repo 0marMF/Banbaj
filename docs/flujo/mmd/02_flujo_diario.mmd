@@ -10,7 +10,11 @@ flowchart TD
     F -- no --> F1["ACTUALIZACION DEL DIA SIN TERMINAR OK<br/>(error: se revirtió sola)"]
     F -- sí --> G["ops.sp_cuadre_automatico<br/>pagos del SCBPAG contra PMTFIL"]
     G --> H{"¿Ya hay ASIG del día?"}
-    H -- sí --> I["DIA COMPLETO<br/>ops.sp_arribo_automatico<br/>(diagrama 05)"]
+    H -- sí --> H2{"¿Llegó la base de un segmento<br/>que hoy no se asignó?"}
+    H2 -- sí --> H3["Otra ops.sp_asignacion_486<br/>solo con ese segmento"]
+    H2 -- no --> I["DIA COMPLETO"]
+    H3 --> I2
+    I --> I2["ops.sp_arribo_automatico<br/>para cada asignación OK del día<br/>(diagrama 05)"]
     H -- no --> J{"¿Llegaron las bases maestras?"}
     J -- no --> J1["ACTUALIZACION OK · SIN ASIGNACION"]
     J -- sí --> K["ops.sp_asignacion_486<br/>(diagrama 03)"]

@@ -75,8 +75,9 @@ El job llama `ops.sp_diario_486` cada 30 minutos. El procedimiento decide qué h
 1. Si es sábado o domingo, no hace nada.
 2. Si todavía no corre la **actualización** del día y ya están sus archivos, la corre.
 3. Si la actualización no terminó bien, se detiene. La asignación nunca corre sin la actualización OK del mismo día.
-4. Si todavía no corre la **asignación** y ya llegaron bases maestras, la corre.
-5. Si ya corrieron las dos, contesta "DIA COMPLETO" y no repite nada.
+4. Si todavía no corre la **asignación** y ya llegaron bases maestras, la corre con lo que haya llegado.
+5. Si ya corrió una asignación y llega la base de otro segmento (por ejemplo Consumo después de TDC), corre **otra asignación solo con ese segmento** (20/11). Cada una tiene sus archivos, su retiro y su arribo a CYBER.
+6. Si ya corrió todo, contesta "DIA COMPLETO" y no repite nada.
 
 Cada proceso es una **corrida** (`ops.CORRIDA`) con número, tipo (ACT, ASIG, RET, ETI), fecha, estatus y mensaje. Cada paso deja un renglón en `ops.BITACORA`.
 

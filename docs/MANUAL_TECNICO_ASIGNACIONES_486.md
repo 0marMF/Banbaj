@@ -42,7 +42,7 @@ Este manual explica el proceso en ese orden. No hace falta saber programar: todo
 
 **Entra:** `SERTEC_Saldos_tdc*.txt`, `SERTEC_Saldos_Cons*.txt` y `SERTEC_Pagos*.txt`.
 
-1. **Validación de los archivos** (antes de tocar nada; ver la sección *Validación de la entrada*). Si un archivo no pasa, la corrida se cancela, no cambia nada y llega `VALIDACION_ENTRADA_486`.
+1. **Validación de los archivos** (antes de tocar nada; ver la sección *Validación de la entrada*). Si un archivo no pasa, la corrida se cancela, no cambia nada y llega `VALIDACION_ENTRADA_486`. Desde el 20/11 también para si los saldos traen una cuenta repetida, si más del 30 % no está en el DAT (archivo de otro segmento) o si el archivo es idéntico al de un día anterior. Los pagos repetidos (mismo crédito, importe y fecha) solo se avisan.
 2. **Respaldo** del DAT: si algo falla después, se regresa solo a como estaba.
 3. **Saldos y pagos:** actualiza saldo actual, vencido, pago mínimo y PVS de cada cuenta. Los pagos negativos se excluyen y se avisan con `PAGOS_NEGATIVOS_486`.
 4. **Retiros:** las cuentas que cumplen un criterio de retiro (saldo cero o negativo, etc.) se retiran solas, salvo que en un segmento pasen del 50 % de sus cuentas. En ese caso llega un hallazgo y el retiro espera la revisión del equipo.
@@ -55,8 +55,12 @@ Este manual explica el proceso en ese orden. No hace falta saber programar: todo
 
 **Entra:** `BASE MAESTRA_TARJETA*.csv`, `BASE MAESTRA_CONSUMO*.csv` y `BASE MAESTRA_HIPOTECARIO*.csv`. Solo corre si la actualización del día ya terminó OK.
 
+**Llave única: el riesgo** (20/11). En TDC es el ACC_NUM; en Consumo e Hipotecario, el crédito. Con él se reparten los folios nuevos, se reconocen las reasignadas (el riesgo ya tuvo folio) y se decide qué se devuelve (el riesgo ya no viene en su base). La cuenta que se armaba en TDC (últimos 4 dígitos de PRIME+4DIG + RFC) sigue yendo a CYBER como cuenta del banco (DMSSNUM, SCBPAG), pero ya no identifica la cuenta.
+
+**Un segmento a la vez** (20/11). Si llega TDC y Consumo llega más tarde, cada uno tiene su propia asignación, con sus archivos, sus avisos y su confirmación. Una base que ya se asignó ese día no se vuelve a tomar.
+
 1. **Aviso de inicio** a Operación (`INICIO_ASIG_486`).
-2. **Validación de las bases** (layout y datos). Si no pasan, la corrida se cancela y llega `VALIDACION_ENTRADA_486`.
+2. **Validación de las bases** (layout y datos). Si no pasan, la corrida se cancela y llega `VALIDACION_ENTRADA_486`. Desde el 20/11 también para si el riesgo viene repetido (en la base o entre TDC y Consumo), si trae letras o pasa de 20 dígitos, o si la base es idéntica a la de un día anterior. Avisa, sin parar, si un riesgo llega con otro RFC o cambia de segmento.
 3. **Homologación:** etiqueta cada cuenta (segmento, estatus, tramo, tipo…) con los **catálogos** que mantiene el equipo. La **ETIQUETA6** vale `REE` cuando la base dice "APLICA PLAN DE PAGOS" (TDC) o "APLICA RESTRUCTURA" (Consumo); sale en U1EXT2 del SCBSDOS y sustituye a la lista TOP, que ya no se carga.
 4. **Cuentas nuevas y reasignadas:** asigna folio (`486-<folio>`) y guarda el histórico. Con más de 100 nuevas avisa a AEM (`ALERTA_NUEVAS_486`).
 5. **Devoluciones:** las cuentas que ya no vienen se retiran solas, con el mismo tope de 50 % por segmento. Al cerrar el retiro sale el ZIP con el correo de devolución (Operación con el ZIP y AEM en copia oculta).
@@ -187,7 +191,10 @@ Antes de tocar el DAT, cada archivo se revisa contra las reglas de `cfg.VALIDACI
 | `TELEFONO` | Teléfonos con letras o con menos de 10 o más de 12 dígitos |
 | `CORREO` | Correos sin @, con espacios o sin dominio |
 | `CATALOGO` | Valor que no está en el catálogo |
-| `LLAVE_UNICA` | Cuenta repetida en el archivo |
+| `LLAVE_UNICA` | Riesgo repetido en el archivo (bases maestras y, desde el 20/11, saldos) |
+| `DIGITOS` | Riesgo con letras o de más de 20 dígitos |
+| `ARCHIVO_IGUAL` | El archivo es idéntico al de un día anterior (el banco reenvió el viejo) |
+| `CRUCE_DAT` | Más del 30 % de los renglones de los saldos no están en el DAT (archivo de otro segmento o cliente) |
 | `NO_VACIO` | Columna vacía (se corrió o cambió) |
 | `VOLUMEN` | Muchos menos o muchos más renglones que la última carga buena (archivo cortado o duplicado) |
 
@@ -279,6 +286,8 @@ SELECT PASO, ESTATUS, REGISTROS, MENSAJE FROM ops.BITACORA WHERE ID_CORRIDA = <i
 EXEC ops.sp_arribo_automatico;                                                                      -- en qué va el arribo: ESPERANDO SALDOS, ESPERANDO SCBTEL…
 ```
 
+Si llegaron dos segmentos en momentos distintos, ese día hay dos asignaciones: `EXEC ops.sp_arribo_automatico;` muestra en qué va cada una.
+
 | Estatus de la corrida | Significa |
 |---|---|
 | `OK` | Terminó bien |
@@ -333,6 +342,12 @@ EXEC ops.sp_revertir_corrida <id>, @confirmar = 1;    -- la deshace
 ```
 
 Revertir regresa el DAT, el histórico, los folios y la base maestra a como estaban antes de esa corrida. Solo se puede revertir la última. **Lo que ya se subió a CYBER no se deshace**: avisa a sistemas antes de revertir una corrida cuyos archivos ya estén arriba.
+
+## Pruebas de entorno
+
+Para probar en el servidor sin tocar CYBER ni mandar correos reales (antes de producción, o después de un cambio grande), corre en orden los scripts de `pruebas_entorno/` (su `LEEME.md` explica cada uno): modo prueba, bajada de CYBER, correos, detección y lectura de archivos, asignación de prueba, reversión y apagar el modo prueba. Todo lo que muestran son conteos; nunca datos de clientes.
+
+**Siempre termina con `08_modo_prueba_apagar.sql`.** Mientras el modo de prueba está encendido, los correos solo llegan a quien hizo la prueba y nada se escribe en CYBER.
 
 ## Procesos a mano
 
