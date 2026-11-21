@@ -150,7 +150,7 @@ BEGIN
                 WHEN 'CATALOGO'    THEN N'cfg.fn_catalogo(@cliente, @valor, x.V) IS NULL'
                 WHEN 'NO_VACIO'    THEN N'(x.V IS NULL OR x.V = N''-'')'
                 WHEN 'DIGITOS'     THEN N'(x.V LIKE N''%[^0-9]%'' OR LEN(x.V) NOT BETWEEN ' + CAST(@min AS NVARCHAR(5)) + N' AND ' + CAST(@max AS NVARCHAR(5)) + N')'
-                WHEN 'CRUCE_DAT'   THEN N'NOT EXISTS (SELECT 1 FROM dat.DAT_486 d WHERE d.CLIENTE = @cliente AND d.' + QUOTENAME(@valor) + N' = x.V)'
+                WHEN 'CRUCE_DAT'   THEN N'k.EN_DAT IS NULL'
             END;
             SET @esperado = CASE @tipo
                 WHEN 'IMPORTE'     THEN N'Importe'
@@ -165,16 +165,20 @@ BEGIN
                 WHEN 'CRUCE_DAT'   THEN CONCAT(N'Que esté en el DAT (', @valor, N')')
             END;
             IF @anom IS NULL GOTO siguiente;
+            /* CRUCE_DAT: la búsqueda en el DAT va en un OUTER APPLY (no se puede agregar sobre una subconsulta) */
+            DECLARE @extra NVARCHAR(400) = CASE WHEN @tipo = 'CRUCE_DAT'
+                THEN N' OUTER APPLY (SELECT TOP (1) 1 AS EN_DAT FROM dat.DAT_486 d WHERE d.CLIENTE = @cliente AND d.' + QUOTENAME(@valor) + N' = x.V) k'
+                ELSE N'' END;
             SET @sql = N'SELECT @rev = COUNT(*), @ano = ISNULL(SUM(CASE WHEN ' + @anom + N' THEN 1 ELSE 0 END), 0) FROM ' + @raw_q
-                     + N' r CROSS APPLY (SELECT ' + @col + N' AS V) x WHERE ' + @datos + N' AND (' + @eval + N');';
+                     + N' r CROSS APPLY (SELECT ' + @col + N' AS V) x' + @extra + N' WHERE ' + @datos + N' AND (' + @eval + N');';
             /* Ejemplos: en catálogos el valor tal cual (es una etiqueta, no un dato personal); en lo demás, enmascarado */
             IF @tipo = 'CATALOGO'
                 SET @sql += N'SELECT @ej = STRING_AGG(CONCAT(N''"'', V, N''" ('', N, N'')''), N'', '') FROM (SELECT TOP (10) x.V, COUNT(*) AS N FROM ' + @raw_q
-                          + N' r CROSS APPLY (SELECT ' + @col + N' AS V) x WHERE ' + @datos + N' AND (' + @eval + N') AND ' + @anom
+                          + N' r CROSS APPLY (SELECT ' + @col + N' AS V) x' + @extra + N' WHERE ' + @datos + N' AND (' + @eval + N') AND ' + @anom
                           + N' GROUP BY x.V ORDER BY COUNT(*) DESC) e;';
             ELSE
                 SET @sql += N'SELECT @ej = STRING_AGG(CONCAT(N''renglón '', ID, N'': '', ISNULL(cfg.fn_enmascarar(V), N''(vacío)'')), N''; '') WITHIN GROUP (ORDER BY ID) FROM (SELECT TOP (5) r.ID, x.V FROM ' + @raw_q
-                          + N' r CROSS APPLY (SELECT ' + @col + N' AS V) x WHERE ' + @datos + N' AND (' + @eval + N') AND ' + @anom
+                          + N' r CROSS APPLY (SELECT ' + @col + N' AS V) x' + @extra + N' WHERE ' + @datos + N' AND (' + @eval + N') AND ' + @anom
                           + N' ORDER BY r.ID) e;';
             EXEC sp_executesql @sql, N'@fila INT, @cliente VARCHAR(10), @valor NVARCHAR(100), @rev INT OUTPUT, @ano INT OUTPUT, @ej NVARCHAR(1000) OUTPUT',
                  @fila = @fila, @cliente = @cliente, @valor = @valor, @rev = @rev OUTPUT, @ano = @ano OUTPUT, @ej = @ej OUTPUT;

@@ -68,7 +68,7 @@ BEGIN
     BEGIN
         IF NULLIF(LTRIM(RTRIM(@correo)), N'') IS NULL OR @correo NOT LIKE N'%_@_%._%'
             THROW 50850, 'Indica @correo: la dirección que va a recibir todos los correos de la prueba.', 1;
-        IF RIGHT(@carpeta, 1) <> N'\' SET @carpeta += N'\';
+        IF RIGHT(@carpeta, 1) NOT IN (N'\', N'/') SET @carpeta += N'\';
         INSERT INTO @claves VALUES ('CORREO_PRUEBA_PARA', @correo), ('CYBER_SOLO_LECTURA', N'1'),
                                    ('RUTA_SALIDA', @carpeta), ('RUTA_MIS', @carpeta), ('CARPETA_ZIP', @carpeta);
         /* Valores de antes (solo la primera vez: si ya estaba en modo prueba no se pisan) */
