@@ -240,4 +240,5 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [ ] **Cuentas TDC sin RIESGO en FoxPro:** al migrar se quedan con la llave de antes y no se reconocen en la siguiente base (salen como devolución y entran como nuevas). Revisar el resumen de `ops.sp_llave_riesgo_migrar`.
 - [ ] **CRUCE_DAT de saldos (30 %):** calibrar con unas semanas de archivos reales; si el banco manda saldos de cuentas que no son nuestras, subir la tolerancia.
 - [ ] **Segundo segmento el mismo día:** su SCBSDOS, teléfonos y correos llevan todo el DAT; el operador sube los dos SCBSDOS. Confirmar con el equipo que no estorba.
+- [ ] **Saldos del segundo segmento:** el arribo da los saldos por subidos cuando las cuentas con `DMHOSTUP` del día igualan las del SCBSDOS. Si el primer SCBSDOS ya marcó casi todo y en la segunda asignación las nuevas igualan a las retiradas, podría darlos por subidos antes de tiempo. Vigilar los primeros días con dos asignaciones.
 - [ ] **Pruebas de entorno** en el servidor antes de producción (`pruebas_entorno/`).
