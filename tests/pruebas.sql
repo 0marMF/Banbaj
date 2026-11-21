@@ -55,6 +55,10 @@ UPDATE cfg.VALIDACION_DATO SET PCT_MAX = 100
 WHERE CLIENTE = '486' AND ((CODIGO = 'MAESTRA_TDC' AND CAMPO = 'SDO_ACT' AND TIPO = 'IMPORTE')
                         OR (CODIGO = 'MAESTRA_CONSUMO' AND CAMPO = 'CORREO1' AND TIPO = 'CORREO')
                         OR (CODIGO = 'MAESTRA_CONSUMO' AND TIPO = 'LLAVE_UNICA'));
+/* 20/11: el escenario vuelve a leer los mismos archivos en varias fechas y sus saldos traen a propósito un crédito que no
+   está en el DAT; ARCHIVO_IGUAL y CRUCE_DAT se prueban aparte (bloque LLAVE POR RIESGO) */
+UPDATE cfg.VALIDACION_DATO SET ACTIVO = 0 WHERE CLIENTE = '486' AND TIPO = 'ARCHIVO_IGUAL';
+UPDATE cfg.VALIDACION_DATO SET PCT_MAX = 100 WHERE CLIENTE = '486' AND TIPO = 'CRUCE_DAT';
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, MOTIVO) VALUES ('486', 'CUENTA', '20000008', 'Prueba de exclusión');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'TELEFONO', '5533333333', '486-104', 'Prueba de queja (TELBAJ)');
 INSERT INTO cfg.EXCLUSION (CLIENTE, TIPO, VALOR, VALOR2, MOTIVO) VALUES ('486', 'CORREO', 'malo@correo.com', '20000009', 'Prueba de EMAILMALO');
@@ -1739,6 +1743,173 @@ SET @rs = CONCAT((SELECT CAST(ACTIVO AS INT) FROM cfg.VISTA_USUARIO WHERE CLIENT
                  (SELECT COUNT(*) FROM cfg.VISTA_COLUMNA WHERE CLIENTE = '486' AND VISTA = 'MIS'), '|',
                  (SELECT COUNT(*) FROM cfg.VISTA_COLUMNA WHERE CLIENTE = '486' AND VISTA = 'AEM'));
 EXEC pru.sp_igual N'SEMILLA: conserva las vistas de usuarios que cambió el equipo (MIS activa con sus columnas, AEM con 20)', N'1|3|20', @rs;
+GO
+
+/* ---------------------------------------------------------------------
+   LLAVE POR RIESGO, VALIDACIONES NUEVAS, ASIGNACIÓN POR SEGMENTO Y PRUEBAS DE ENTORNO (20/11)
+   --------------------------------------------------------------------- */
+DECLARE @rs NVARCHAR(4000), @err INT, @msg NVARCHAR(4000), @c INT, @f DATE, @n INT, @dat INT, @bra INT;
+
+/* La cuenta TDC nueva queda con llave = riesgo y la armada en CTA_BANCO (que es lo que va a CYBER) */
+SET @rs = CONCAT((SELECT TOP (1) CONCAT(CUENTA, ':', CTA_BANCO, ':', RIESGO) FROM dat.HISTORIA_FOLIO WHERE CUENTA2 = '486-100003' ORDER BY ID DESC), '|',
+                 CASE WHEN EXISTS (SELECT 1 FROM ops.SALIDA_LINEA WHERE ARCHIVO = 'SCBSDOS' AND LINEA LIKE N'%3333XAXX010101000%') THEN 'SI' ELSE 'NO' END, '|',
+                 CASE WHEN EXISTS (SELECT 1 FROM ops.SALIDA_LINEA WHERE ARCHIVO = 'SCBSDOS' AND LINEA LIKE N'%486-100003%1000000003%') THEN 'SI' ELSE 'NO' END);
+EXEC pru.sp_igual N'LLAVE: TDC nueva con llave = ACC_NUM y la cuenta armada en CTA_BANCO; en el SCBSDOS va la armada (DMSSNUM) y el riesgo',
+     N'1000000003:3333XAXX010101000:1000000003|SI|SI', @rs;
+
+/* Pagos repetidos en el archivo (20000004, 500, dos veces): aviso */
+SET @rs = CONCAT((SELECT COUNT(*) FROM ops.BITACORA WHERE PASO = 'ACT PAGOS REPETIDOS' AND ESTATUS = 'AVISO' AND REGISTROS = 1 AND MENSAJE NOT LIKE N'%20000004%'), '|',
+                 (SELECT CASE WHEN COUNT(*) > 0 THEN 'SI' ELSE 'NO' END FROM mail.ENVIO WHERE PLANTILLA = 'HALLAZGO_486'));
+SET @rs = CASE WHEN LEFT(@rs, 1) <> '0' THEN STUFF(@rs, 1, CHARINDEX('|', @rs) - 1, 'SI') ELSE @rs END;
+EXEC pru.sp_igual N'PAGOS: repetidos en el archivo avisan (enmascarado) y se arriban todos', N'SI|SI', @rs;
+
+/* Reglas nuevas en la semilla y PRIME+4DIG ya no es llave */
+SET @rs = CONCAT((SELECT COUNT(*) FROM cfg.VALIDACION_DATO WHERE CLIENTE = '486' AND TIPO = 'DIGITOS'), '|',
+                 (SELECT COUNT(*) FROM cfg.VALIDACION_DATO WHERE CLIENTE = '486' AND TIPO = 'ARCHIVO_IGUAL'), '|',
+                 (SELECT COUNT(*) FROM cfg.VALIDACION_DATO WHERE CLIENTE = '486' AND TIPO = 'CRUCE_DAT'), '|',
+                 (SELECT COUNT(*) FROM cfg.VALIDACION_DATO WHERE CLIENTE = '486' AND CODIGO LIKE 'SALDOS%' AND TIPO = 'LLAVE_UNICA'), '|',
+                 (SELECT CAST(ACTIVO AS INT) FROM cfg.VALIDACION_DATO WHERE CLIENTE = '486' AND CODIGO = 'MAESTRA_TDC' AND CAMPO = 'PRIME4DIG' AND TIPO = 'LLAVE_UNICA'), '|',
+                 (SELECT STRING_AGG(CONCAT(CODIGO, '=', LLAVE_DAT), ',') WITHIN GROUP (ORDER BY CODIGO) FROM cfg.ARCHIVO WHERE CLIENTE = '486' AND CODIGO LIKE 'MAESTRA%'));
+EXEC pru.sp_igual N'VALIDACION: reglas nuevas (dígitos, archivo igual, cruce, repetidos en saldos), PRIME+4DIG apagado, devolución por RIESGO',
+     N'3|5|2|2|0|MAESTRA_CONSUMO=RIESGO,MAESTRA_HIPO=RIESGO,MAESTRA_TDC=RIESGO', @rs;
+
+/* Prueba de lectura: lee y valida sin tocar el DAT ni la base guardada */
+SELECT @dat = COUNT(*) FROM dat.DAT_486;
+SELECT @bra = COUNT(*) FROM dat.BASE_RECIBIDA_ARCHIVO;
+EXEC ops.sp_prueba_lectura @proceso = 'ASIG', @fecha = '2031-01-06';
+SET @c = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'PRUEBA');
+SET @rs = CONCAT((SELECT STRING_AGG(CONCAT(CODIGO, ':', ESTATUS), ',') WITHIN GROUP (ORDER BY CODIGO) FROM ops.ARCHIVO_CARGADO WHERE ID_CORRIDA = @c AND ESTATUS = 'CARGADO'), '|',
+                 (SELECT COUNT(*) FROM dat.DAT_486) - @dat, '|', (SELECT COUNT(*) FROM dat.BASE_RECIBIDA_ARCHIVO) - @bra, '|',
+                 (SELECT CONCAT(PROCESO, ':', ESTATUS) FROM ops.CORRIDA WHERE ID_CORRIDA = @c));
+EXEC pru.sp_igual N'PRUEBA LECTURA: lee y valida las bases sin tocar el DAT ni la base guardada; corrida PRUEBA cancelada',
+     N'MAESTRA_CONSUMO:CARGADO,MAESTRA_TDC:CARGADO|0|0|PRUEBA:CANCELADA', @rs;
+
+/* ARCHIVO_IGUAL y CRUCE_DAT con los saldos: la huella de la prueba de lectura se pasa a una actualización OK anterior */
+UPDATE cfg.VALIDACION_DATO SET ACTIVO = 1 WHERE CLIENTE = '486' AND TIPO = 'ARCHIVO_IGUAL';
+UPDATE cfg.VALIDACION_DATO SET PCT_MAX = 0 WHERE CLIENTE = '486' AND TIPO = 'CRUCE_DAT' AND CODIGO = 'SALDOS_TDC';
+EXEC ops.sp_prueba_lectura @proceso = 'ACT', @fecha = '2031-01-06';
+SET @c = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'PRUEBA');
+DECLARE @act_ok INT = (SELECT MIN(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ACT' AND ESTATUS = 'OK');
+DELETE FROM ops.ARCHIVO_HUELLA WHERE ID_CORRIDA = @act_ok;
+UPDATE ops.ARCHIVO_HUELLA SET ID_CORRIDA = @act_ok WHERE ID_CORRIDA = @c;
+EXEC ops.sp_prueba_lectura @proceso = 'ACT', @fecha = '2031-01-07';
+SET @c = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'PRUEBA');
+SET @rs = CONCAT((SELECT COUNT(*) FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @c AND CODIGO = 'SALDOS_TDC' AND TIPO = 'ARCHIVO_IGUAL' AND DETIENE = 1), '|',
+                 (SELECT COUNT(*) FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @c AND CODIGO = 'SALDOS_TDC' AND TIPO = 'CRUCE_DAT' AND DETIENE = 1 AND ANOMALOS > 0), '|',
+                 (SELECT COUNT(*) FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @c AND TIPO = 'LLAVE_UNICA'));
+UPDATE cfg.VALIDACION_DATO SET ACTIVO = 0 WHERE CLIENTE = '486' AND TIPO = 'ARCHIVO_IGUAL';
+UPDATE cfg.VALIDACION_DATO SET PCT_MAX = 100 WHERE CLIENTE = '486' AND TIPO = 'CRUCE_DAT';
+EXEC pru.sp_igual N'VALIDACION: archivo idéntico al de un día anterior y saldos que no cruzan con el DAT detienen; sin repetidos no hay aviso',
+     N'1|1|0', @rs;
+
+/* Riesgo repetido entre segmentos: detiene la asignación y avisa */
+DECLARE @dup INT, @tdc_id INT = (SELECT ID_ARCHIVO FROM cfg.ARCHIVO WHERE CLIENTE = '486' AND CODIGO = 'MAESTRA_TDC'),
+        @con_id INT = (SELECT ID_ARCHIVO FROM cfg.ARCHIVO WHERE CLIENTE = '486' AND CODIGO = 'MAESTRA_CONSUMO');
+EXEC ops.sp_corrida_iniciar '486', 'ASIG', '2031-01-08', NULL, @dup OUTPUT;
+INSERT INTO ops.ARCHIVO_CARGADO (ID_CORRIDA, ID_ARCHIVO, CODIGO, RUTA, ESTATUS) VALUES (@dup, @tdc_id, 'MAESTRA_TDC', N'prueba', 'CARGADO'), (@dup, @con_id, 'MAESTRA_CONSUMO', N'prueba', 'CARGADO');
+INSERT INTO stg.ENT_MAESTRA_TDC (ID_CORRIDA, FILA, CUENTA, RIESGO, SEGMENTO2) VALUES (@dup, 2, '7000000001', '7000000001', 'TDC'), (@dup, 3, '7000000002', '7000000002', 'TDC');
+INSERT INTO stg.ENT_MAESTRA_CONSUMO (ID_CORRIDA, FILA, CUENTA, RIESGO, SEGMENTO2) VALUES (@dup, 2, '7000000001', '7000000001', 'CONSUMO');
+SET @err = 0;
+BEGIN TRY
+    EXEC ops.sp_asig_unir_layout @dup;
+END TRY
+BEGIN CATCH
+    SET @err = ERROR_NUMBER();
+END CATCH;
+SET @rs = CONCAT(@err, '|', (SELECT CONCAT(TIPO, ':', CAMPO, ':', ANOMALOS, ':', CAST(DETIENE AS INT)) FROM ops.VALIDACION_ENTRADA WHERE ID_CORRIDA = @dup AND CODIGO = 'LAYOUT_486'), '|',
+                 (SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @dup AND PLANTILLA = 'VALIDACION_ENTRADA_486'));
+EXEC ops.sp_corrida_finalizar @dup, 'CANCELADA', N'Prueba de riesgo repetido entre segmentos';
+EXEC pru.sp_igual N'LLAVE: el mismo riesgo en TDC y Consumo detiene la asignación y avisa al equipo', N'50025|LLAVE_UNICA:RIESGO:1:1|1', @rs;
+
+/* Avisos: mismo riesgo con otro RFC y cambio de segmento (no detienen) */
+DECLARE @av INT, @t1 VARCHAR(20) = (SELECT MIN(CUENTA) FROM dat.DAT_486 WHERE SEGMENTO2 = 'TDC' AND NULLIF(RFC, '') IS NOT NULL),
+        @c1 VARCHAR(20) = (SELECT MIN(CUENTA) FROM dat.DAT_486 WHERE SEGMENTO2 = 'CONSUMO');
+EXEC ops.sp_corrida_iniciar '486', 'ASIG', '2031-01-09', NULL, @av OUTPUT;
+INSERT INTO ops.ARCHIVO_CARGADO (ID_CORRIDA, ID_ARCHIVO, CODIGO, RUTA, ESTATUS) VALUES (@av, @tdc_id, 'MAESTRA_TDC', N'prueba', 'CARGADO');
+INSERT INTO stg.ENT_MAESTRA_TDC (ID_CORRIDA, FILA, CUENTA, RIESGO, RFC, SEGMENTO2)
+VALUES (@av, 2, @t1, @t1, 'OTRO010101AAA', 'TDC'), (@av, 3, @c1, @c1, (SELECT RFC FROM dat.DAT_486 WHERE CUENTA = @c1), 'TDC');
+EXEC ops.sp_asig_unir_layout @av;
+SET @rs = CONCAT((SELECT CONCAT(ESTATUS, ':', REGISTROS) FROM ops.BITACORA WHERE ID_CORRIDA = @av AND PASO = 'ASIG AVISOS LLAVE'), '|',
+                 (SELECT CASE WHEN MENSAJE LIKE N'%otro RFC%: 1%' AND MENSAJE LIKE N'%CONSUMO -> TDC%' AND MENSAJE NOT LIKE N'%' + @t1 + N'%' THEN 'SI' ELSE 'NO' END
+                  FROM ops.BITACORA WHERE ID_CORRIDA = @av AND PASO = 'ASIG AVISOS LLAVE'), '|',
+                 (SELECT COUNT(*) FROM mail.ENVIO WHERE ID_CORRIDA = @av AND PLANTILLA = 'HALLAZGO_486'));
+EXEC ops.sp_corrida_finalizar @av, 'CANCELADA', N'Prueba de avisos de la llave';
+EXEC pru.sp_igual N'LLAVE: avisa (enmascarado) el riesgo con otro RFC y el cambio de segmento, sin detener', N'AVISO:2|SI|1', @rs;
+
+/* Una asignación por segmento: lo ya asignado ese día no se vuelve a tomar; en otro día las dos bases cuentan */
+SELECT TOP (1) @f = c.FECHA_PROCESO FROM ops.CORRIDA c
+WHERE c.PROCESO = 'ASIG' AND c.ESTATUS = 'OK'
+  AND (SELECT COUNT(DISTINCT a.SEGMENTO2) FROM ops.ARCHIVO_CARGADO ac JOIN cfg.ARCHIVO a ON a.ID_ARCHIVO = ac.ID_ARCHIVO
+       WHERE ac.ID_CORRIDA = c.ID_CORRIDA AND ac.ESTATUS = 'CARGADO' AND a.SEGMENTO2 IS NOT NULL) = 2
+ORDER BY c.ID_CORRIDA;
+DECLARE @p1 INT, @p2 INT, @seg INT;
+EXEC ops.sp_archivos_presentes '486', 'ASIG', @f, @p1 OUTPUT, @solo_pendientes = 1;
+EXEC ops.sp_archivos_presentes '486', 'ASIG', '2031-01-10', @p2 OUTPUT, @solo_pendientes = 1;
+EXEC ops.sp_corrida_iniciar '486', 'ASIG', @f, NULL, @seg OUTPUT;
+SET @msg = NULL;
+BEGIN TRY
+    EXEC ops.sp_cargar_proceso @seg, @n OUTPUT;
+END TRY
+BEGIN CATCH
+    SET @msg = CONCAT(ERROR_NUMBER(), ':', LEFT(ERROR_MESSAGE(), 27));
+END CATCH;
+EXEC ops.sp_corrida_finalizar @seg, 'CANCELADA', N'Prueba de asignación por segmento';
+SET @rs = CONCAT(CASE WHEN @f IS NULL THEN 'SIN FECHA' ELSE '' END, @p1, '|', @p2, '|', @msg, '|',
+                 (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @seg AND PASO = 'CARGA SEGMENTOS' AND ESTATUS = 'AVISO'));
+EXEC pru.sp_igual N'SEGMENTOS: el segmento ya asignado ese día no se vuelve a tomar; en un día nuevo las dos bases están pendientes',
+     N'0|2|50024:No llegó ninguna base nueva|1', @rs;
+
+/* Modo de prueba: correos redirigidos y CYBER solo lectura; al apagar todo regresa */
+EXEC ops.sp_prueba_modo @activar = 1, @correo = N'prueba@ejemplo.com', @carpeta = N'/tmp/prueba/';
+CREATE TABLE #armado (PARA NVARCHAR(MAX), CC NVARCHAR(MAX), CCO NVARCHAR(MAX), ASUNTO NVARCHAR(255), CUERPO_HTML NVARCHAR(MAX), ADJUNTOS NVARCHAR(MAX));
+INSERT INTO #armado EXEC mail.sp_enviar @plantilla = 'HALLAZGO_486', @solo_prueba = 1;
+DECLARE @tc INT = (SELECT TOP (1) ID_CORRIDA FROM ops.CYBER_SCRIPT WHERE SCRIPT = 'TEL_ACTIVA_BANDERA' ORDER BY ID_CORRIDA DESC);
+SET @err = 0;
+BEGIN TRY
+    EXEC ops.sp_cyber_ejecutar @tc, 'TEL_ACTIVA_BANDERA';      -- sin servidor vinculado: en modo prueba no falla, no ejecuta
+END TRY
+BEGIN CATCH
+    SET @err = ERROR_NUMBER();
+END CATCH;
+SET @rs = CONCAT((SELECT VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'CYBER_SOLO_LECTURA'), '|',
+                 (SELECT CONCAT(PARA, ':', CASE WHEN CC IS NULL AND CCO IS NULL THEN 'SOLO' ELSE 'CON COPIA' END, ':', LEFT(ASUNTO, 8)) FROM #armado), '|',
+                 @err, '|', (SELECT TOP (1) ESTATUS FROM ops.BITACORA WHERE ID_CORRIDA = @tc AND PASO = 'CYBER EJECUTA' ORDER BY ID DESC), '|',
+                 (SELECT VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'RUTA_MIS'));
+DECLARE @mis_antes NVARCHAR(400) = (SELECT VALOR FROM ops.PRUEBA_PARAM WHERE CLIENTE = '486' AND CLAVE = 'RUTA_MIS');
+EXEC ops.sp_prueba_modo @activar = 0;
+SET @rs = CONCAT(@rs, '|', (SELECT STRING_AGG(CONCAT(CLAVE, '=', VALOR), ',') WITHIN GROUP (ORDER BY CLAVE) FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE IN ('CORREO_PRUEBA_PARA', 'CYBER_SOLO_LECTURA')), '|',
+                 CASE WHEN (SELECT VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'RUTA_MIS') = @mis_antes THEN 'MIS REPUESTA' ELSE 'MIS NO' END, '|',
+                 (SELECT COUNT(*) FROM ops.PRUEBA_PARAM));
+EXEC pru.sp_igual N'PRUEBA ENTORNO: modo prueba manda correos solo a la dirección de prueba, no escribe en CYBER y al apagarse repone todo',
+     N'1|prueba@ejemplo.com:SOLO:[PRUEBA]|0|AVISO|/tmp/prueba/|CORREO_PRUEBA_PARA=,CYBER_SOLO_LECTURA=0|MIS REPUESTA|0', @rs;
+
+/* Cambio de llave de lo ya cargado: TDC con RIESGO pasa a la llave nueva; sin RIESGO se queda; las corridas de antes
+   ya no se revierten */
+INSERT INTO dat.DAT_486 (FOLIO, CLIENTE, CUENTA, CUENTA2, RIESGO, SEGMENTO2, SUB_CTE)
+VALUES ('900001', '486', '9001XAXX010101000', '486-900001', '1000009001', 'TDC', 'NVA'),
+       ('900002', '486', '9002XAXX010101000', '486-900002', NULL, 'TDC', 'NVA');
+INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, ID_CORRIDA_ALTA)
+VALUES ('486', '9001XAXX010101000', 900001, '486-900001', 'TDC', '1000009001', 'NVA', 'A', '2026-01-01', 0);
+DECLARE @ult INT = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA);
+EXEC ops.sp_llave_riesgo_migrar @confirmar = 1, @mostrar = 0;
+SET @err = 0;
+BEGIN TRY
+    EXEC ops.sp_revertir_corrida @ult, @confirmar = 0;
+END TRY
+BEGIN CATCH
+    SET @err = ERROR_NUMBER();
+END CATCH;
+SET @rs = CONCAT((SELECT CONCAT(CUENTA, ':', CTA_BANCO) FROM dat.DAT_486 WHERE CUENTA2 = '486-900001'), '|',
+                 (SELECT CONCAT(CUENTA, ':', CTA_BANCO) FROM dat.DAT_486 WHERE CUENTA2 = '486-900002'), '|',
+                 (SELECT CONCAT(CUENTA, ':', CTA_BANCO) FROM dat.HISTORIA_FOLIO WHERE CUENTA2 = '486-900001'), '|',
+                 (SELECT COUNT(*) FROM dat.DAT_486 WHERE CTA_BANCO IS NULL), '|',
+                 CASE WHEN (SELECT TRY_CONVERT(INT, VALOR) FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'LLAVE_RIESGO_MIGRADA') = @ult THEN 'MARCA' ELSE 'SIN MARCA' END, '|',
+                 CASE WHEN @err IN (50303, 50304, 50305) THEN 'NO REVIERTE' ELSE CONCAT('REVIERTE ', @err) END);
+DELETE FROM dat.HISTORIA_FOLIO WHERE CUENTA2 IN ('486-900001', '486-900002');
+DELETE FROM dat.DAT_486 WHERE CUENTA2 IN ('486-900001', '486-900002');
+DELETE FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'LLAVE_RIESGO_MIGRADA';
+EXEC pru.sp_igual N'LLAVE: ops.sp_llave_riesgo_migrar pasa TDC a riesgo (DAT e histórico), deja la que no tiene riesgo y marca hasta dónde no se revierte',
+     N'1000009001:9001XAXX010101000|9002XAXX010101000:9002XAXX010101000|1000009001:9001XAXX010101000|0|MARCA|NO REVIERTE', @rs;
 GO
 
 /* ---------------------------------------------------------------------
