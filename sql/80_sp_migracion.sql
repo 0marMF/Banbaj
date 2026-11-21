@@ -553,6 +553,9 @@ BEGIN
             SELECT CLIENTE, TIPO, VALOR, VALOR2, MOTIVO, REQ, ACTIVO, ISNULL(FE_ALTA, SYSDATETIME()), @mig FROM #d_exc;
         END;
         COMMIT TRANSACTION;
+        /* 20/11: lo migrado trae la llave de FoxPro (en TDC la cuenta armada); pasa a la llave por riesgo */
+        IF EXISTS (SELECT 1 FROM @dest WHERE D IN ('DAT', 'HISTORIA'))
+            EXEC ops.sp_llave_riesgo_migrar @cliente = @cliente, @confirmar = 1;
         SELECT DESTINO, TABLA, FILAS AS FILAS_CARGADAS FROM #res ORDER BY ORDEN;
         SELECT TEXTO AS AVISO FROM #aviso ORDER BY ID;
         PRINT 'Listo: carga confirmada. Borra los CSV de la carpeta (traen datos de clientes).';
@@ -570,5 +573,113 @@ BEGIN
     /* Las tablas de paso traen datos de clientes: no se quedan */
     DECLARE @drop NVARCHAR(MAX) = (SELECT STRING_AGG(CAST(N'DROP TABLE IF EXISTS stg.' + QUOTENAME(N'MIG_' + FUENTE) + N';' AS NVARCHAR(MAX)), N' ') FROM #fuente);
     EXEC (@drop);
+END;
+GO
+
+/* ---------------------------------------------------------------------
+   Cambio de llave por riesgo (20/11). Desde esta versión la llave única del DAT y del histórico (CUENTA) es el
+   riesgo en todos los segmentos: con ella se reparten folios y se reconocen reasignadas y retiros. En Consumo e
+   Hipotecario ya lo era (CUENTA = crédito = RIESGO); en TDC era la cuenta armada (últimos 4 dígitos de
+   PRIME+4DIG + RFC), que ahora se guarda en CTA_BANCO y sigue yendo a CYBER (DMSSNUM, SCBPAG, etiquetas).
+
+   Este procedimiento pasa a la llave nueva lo que ya está cargado (lo que tenga CTA_BANCO vacío):
+     - DAT: CTA_BANCO = la CUENTA de antes; en TDC, CUENTA = RIESGO.
+     - Histórico: igual, renglón por renglón.
+     - Último renglón de la base maestra (vistas): en Consumo e Hipotecario la llave era DES_PROD y pasa a RIESGO.
+   Una cuenta TDC sin RIESGO, con RIESGO de más de 20 caracteres o con un RIESGO que ya usa otra cuenta se queda
+   con su llave de antes (sale en el resumen): esa cuenta no se va a reconocer en la siguiente base.
+   Las corridas de antes ya no se pueden revertir (su respaldo trae la llave vieja): queda LLAVE_RIESGO_MIGRADA.
+   Se puede volver a correr: solo toma lo que falta. Lo llama ops.sp_migrar_486 al terminar.
+   EXEC ops.sp_llave_riesgo_migrar;                    -- revisa (no cambia nada)
+   EXEC ops.sp_llave_riesgo_migrar @confirmar = 1;     -- aplica
+   --------------------------------------------------------------------- */
+CREATE OR ALTER PROCEDURE ops.sp_llave_riesgo_migrar
+    @cliente   VARCHAR(10) = '486',
+    @confirmar BIT         = 0,
+    @mostrar   BIT         = 1
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF EXISTS (SELECT 1 FROM ops.CORRIDA WHERE CLIENTE = @cliente AND ESTATUS = 'EN_PROCESO')
+        THROW 50920, 'Hay una corrida en proceso; espera a que termine.', 1;
+
+    /* DAT: cuentas sin pasar */
+    SELECT d.CUENTA AS ANT, LTRIM(RTRIM(d.RIESGO)) AS RIESGO, d.SEGMENTO2,
+           CAST(CASE WHEN ISNULL(d.SEGMENTO2, '') <> 'TDC' THEN 'SIN CAMBIO (llave = crédito)'
+                     WHEN NULLIF(LTRIM(RTRIM(d.RIESGO)), '') IS NULL THEN 'TDC SIN RIESGO (se queda la llave de antes)'
+                     WHEN LEN(LTRIM(RTRIM(d.RIESGO))) > 20 THEN 'TDC RIESGO DE MAS DE 20 (se queda la llave de antes)'
+                     WHEN LTRIM(RTRIM(d.RIESGO)) = d.CUENTA THEN 'SIN CAMBIO (llave = crédito)'
+                     ELSE 'TDC CAMBIA A RIESGO' END AS VARCHAR(60)) AS ESTADO
+    INTO #dat
+    FROM dat.DAT_486 d WHERE d.CLIENTE = @cliente AND d.CTA_BANCO IS NULL;
+    /* RIESGO repetido entre las que cambian, o que ya es la llave de otra cuenta que no cambia */
+    UPDATE x SET ESTADO = 'TDC RIESGO REPETIDO (se queda la llave de antes)'
+    FROM #dat x
+    WHERE x.ESTADO = 'TDC CAMBIA A RIESGO'
+      AND ((SELECT COUNT(*) FROM #dat y WHERE y.ESTADO = 'TDC CAMBIA A RIESGO' AND y.RIESGO = x.RIESGO) > 1
+           OR EXISTS (SELECT 1 FROM dat.DAT_486 o WHERE o.CLIENTE = @cliente AND o.CUENTA = x.RIESGO
+                        AND NOT EXISTS (SELECT 1 FROM #dat z WHERE z.ANT = o.CUENTA AND z.ESTADO = 'TDC CAMBIA A RIESGO')));
+
+    /* Histórico: renglones TDC sin pasar; los de una cuenta del DAT que se queda con la llave de antes, también se quedan */
+    SELECT h.ID, h.CUENTA AS ANT, LTRIM(RTRIM(h.RIESGO)) AS RIESGO,
+           CAST(CASE WHEN ISNULL(h.SEGMENTO2, '') <> 'TDC' THEN 'SIN CAMBIO'
+                     WHEN NULLIF(LTRIM(RTRIM(h.RIESGO)), '') IS NULL OR LEN(LTRIM(RTRIM(h.RIESGO))) > 20 THEN 'TDC SE QUEDA (sin RIESGO válido)'
+                     WHEN EXISTS (SELECT 1 FROM #dat k WHERE k.ANT = h.CUENTA AND k.ESTADO LIKE 'TDC%' AND k.ESTADO <> 'TDC CAMBIA A RIESGO') THEN 'TDC SE QUEDA (su cuenta del DAT se queda)'
+                     WHEN LTRIM(RTRIM(h.RIESGO)) = h.CUENTA THEN 'SIN CAMBIO'
+                     ELSE 'TDC CAMBIA A RIESGO' END AS VARCHAR(60)) AS ESTADO
+    INTO #his
+    FROM dat.HISTORIA_FOLIO h WHERE h.CLIENTE = @cliente AND h.CTA_BANCO IS NULL;
+
+    /* Base maestra por cuenta (Consumo e Hipotecario): DES_PROD -> RIESGO */
+    SELECT b.CODIGO, b.LLAVE AS ANT, CAST(MIN(LTRIM(RTRIM(d.RIESGO))) AS NVARCHAR(60)) AS NUEVA
+    INTO #bmc
+    FROM dat.BASE_MAESTRA_CUENTA b
+    JOIN cfg.ARCHIVO a ON a.CLIENTE = b.CLIENTE AND a.CODIGO = b.CODIGO AND a.LLAVE_DAT = 'RIESGO' AND a.SEGMENTO2 <> 'TDC'
+    JOIN dat.DAT_486 d ON d.CLIENTE = b.CLIENTE AND d.SEGMENTO2 = a.SEGMENTO2 AND d.DES_PROD = b.LLAVE
+    WHERE b.CLIENTE = @cliente AND NULLIF(LTRIM(RTRIM(d.RIESGO)), '') IS NOT NULL AND LTRIM(RTRIM(d.RIESGO)) <> b.LLAVE
+    GROUP BY b.CODIGO, b.LLAVE;
+    DELETE x FROM #bmc x
+    WHERE (SELECT COUNT(*) FROM #bmc y WHERE y.CODIGO = x.CODIGO AND y.NUEVA = x.NUEVA) > 1
+       OR EXISTS (SELECT 1 FROM dat.BASE_MAESTRA_CUENTA o WHERE o.CLIENTE = @cliente AND o.CODIGO = x.CODIGO AND o.LLAVE = x.NUEVA);
+
+    IF @mostrar = 1
+    BEGIN
+        SELECT 'DAT' AS TABLA, ESTADO, SEGMENTO2, COUNT(*) AS CUENTAS FROM #dat GROUP BY ESTADO, SEGMENTO2
+        UNION ALL SELECT 'HISTORICO', ESTADO, NULL, COUNT(*) FROM #his GROUP BY ESTADO
+        UNION ALL SELECT 'BASE MAESTRA POR CUENTA', 'CONSUMO / HIPOTECARIO A RIESGO', NULL, COUNT(*) FROM #bmc
+        ORDER BY 1, 2, 3;
+        IF @confirmar = 0 PRINT 'Solo revisión: no se cambió nada. Ejecuta con @confirmar = 1 para aplicar.';
+    END;
+    IF @confirmar = 0 RETURN;
+
+    DECLARE @ult INT = ISNULL((SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE CLIENTE = @cliente), 0);
+    BEGIN TRANSACTION;
+        UPDATE d SET CTA_BANCO = LEFT(x.ANT, 20), CUENTA = CASE WHEN x.ESTADO = 'TDC CAMBIA A RIESGO' THEN x.RIESGO ELSE d.CUENTA END
+        FROM dat.DAT_486 d JOIN #dat x ON x.ANT = d.CUENTA
+        WHERE d.CLIENTE = @cliente AND d.CTA_BANCO IS NULL;
+        UPDATE h SET CTA_BANCO = LEFT(x.ANT, 20), CUENTA = CASE WHEN x.ESTADO = 'TDC CAMBIA A RIESGO' THEN x.RIESGO ELSE h.CUENTA END
+        FROM dat.HISTORIA_FOLIO h JOIN #his x ON x.ID = h.ID;
+        /* Devoluciones pendientes de revisar: con la llave nueva */
+        UPDATE v SET CUENTA = x.RIESGO
+        FROM ops.DEVOLUCION v JOIN #dat x ON x.ANT = v.CUENTA AND x.ESTADO = 'TDC CAMBIA A RIESGO'
+        WHERE v.CLIENTE = @cliente AND v.PROCESADA = 0;
+        UPDATE b SET LLAVE = x.NUEVA
+        FROM dat.BASE_MAESTRA_CUENTA b JOIN #bmc x ON x.CODIGO = b.CODIGO AND x.ANT = b.LLAVE
+        WHERE b.CLIENTE = @cliente;
+        IF EXISTS (SELECT 1 FROM cfg.PARAMETRO WHERE CLIENTE = @cliente AND CLAVE = 'LLAVE_RIESGO_MIGRADA')
+            UPDATE cfg.PARAMETRO SET VALOR = CAST(@ult AS VARCHAR(20)) WHERE CLIENTE = @cliente AND CLAVE = 'LLAVE_RIESGO_MIGRADA'
+              AND ISNULL(TRY_CONVERT(INT, VALOR), 0) < @ult;
+        ELSE
+            INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION)
+            VALUES (@cliente, 'LLAVE_RIESGO_MIGRADA', CAST(@ult AS VARCHAR(20)),
+                    N'Última corrida antes del cambio de llave por riesgo (20/11): esa y las anteriores ya no se pueden revertir. Lo escribe ops.sp_llave_riesgo_migrar');
+    COMMIT TRANSACTION;
+    IF @mostrar = 1
+        SELECT 'APLICADO' AS RESULTADO,
+               (SELECT COUNT(*) FROM #dat WHERE ESTADO = 'TDC CAMBIA A RIESGO') AS DAT_TDC_A_RIESGO,
+               (SELECT COUNT(*) FROM #dat WHERE ESTADO LIKE 'TDC%' AND ESTADO <> 'TDC CAMBIA A RIESGO') AS DAT_TDC_SE_QUEDAN,
+               (SELECT COUNT(*) FROM #his WHERE ESTADO = 'TDC CAMBIA A RIESGO') AS HISTORICO_A_RIESGO,
+               (SELECT COUNT(*) FROM #bmc) AS BASE_MAESTRA_A_RIESGO;
 END;
 GO

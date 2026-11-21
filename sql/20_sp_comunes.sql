@@ -85,12 +85,13 @@ BEGIN
 
     DECLARE @cliente VARCHAR(10), @codigo VARCHAR(50), @ruta NVARCHAR(400), @patron NVARCHAR(200),
             @sep VARCHAR(5), @comillas BIT, @codepage VARCHAR(10), @fdl VARCHAR(10), @fila_enc INT,
-            @ncols INT, @ncols_cfg INT, @destino SYSNAME, @obligatorio BIT, @fecha DATE, @err NVARCHAR(4000);
+            @ncols INT, @ncols_cfg INT, @destino SYSNAME, @obligatorio BIT, @fecha DATE, @err NVARCHAR(4000), @es_prueba BIT;
 
     SELECT @cliente = a.CLIENTE, @codigo = a.CODIGO, @ruta = a.RUTA, @patron = a.PATRON_NOMBRE,
            @sep = a.SEPARADOR, @comillas = a.CON_COMILLAS, @codepage = a.CODEPAGE, @fdl = a.FIN_DE_LINEA,
            @fila_enc = a.FILA_ENCABEZADO, @ncols_cfg = a.NUM_COLUMNAS, @destino = a.TABLA_DESTINO,
-           @obligatorio = a.OBLIGATORIO, @fecha = c.FECHA_PROCESO
+           @obligatorio = a.OBLIGATORIO, @fecha = c.FECHA_PROCESO,
+           @es_prueba = CASE WHEN c.PROCESO = 'PRUEBA' THEN 1 ELSE 0 END    -- prueba de lectura (20/11): no guarda la base ni el último renglón por cuenta
     FROM cfg.ARCHIVO a
     JOIN ops.CORRIDA c ON c.ID_CORRIDA = @id_corrida
     WHERE a.ID_ARCHIVO = @id_archivo;
@@ -277,7 +278,7 @@ BEGIN
         EXEC ops.sp_validar_datos_archivo @id_corrida, @id_archivo, @raw_q, @fila_enc;
 
     /* 6b. Base completa: todas las columnas, tal como llegaron (cfg.ARCHIVO.GUARDAR_COMPLETO) */
-    IF EXISTS (SELECT 1 FROM cfg.ARCHIVO WHERE ID_ARCHIVO = @id_archivo AND GUARDAR_COMPLETO = 1)
+    IF @es_prueba = 0 AND EXISTS (SELECT 1 FROM cfg.ARCHIVO WHERE ID_ARCHIVO = @id_archivo AND GUARDAR_COMPLETO = 1)
     BEGIN
         /* Llave JSON = encabezado; vacío -> COL_n, repetido -> nombre_n; el punto se cambia por _ (FOR JSON lo anida) */
         SELECT POS, LEFT(REPLACE(CASE WHEN NULLIF(LTRIM(RTRIM(NOMBRE)), N'') IS NULL THEN CONCAT(N'COL_', POS)
@@ -345,7 +346,7 @@ BEGIN
 
     /* 8b. Último renglón de la base maestra por cuenta (vistas de usuarios, 18/11): llave = cfg.ARCHIVO.LLAVE_DAT */
     DECLARE @llave_dat SYSNAME = (SELECT LLAVE_DAT FROM cfg.ARCHIVO WHERE ID_ARCHIVO = @id_archivo AND GUARDAR_COMPLETO = 1);
-    IF @llave_dat IS NOT NULL AND EXISTS (SELECT 1 FROM #map WHERE CAMPO = @llave_dat AND POS IS NOT NULL)
+    IF @es_prueba = 0 AND @llave_dat IS NOT NULL AND EXISTS (SELECT 1 FROM #map WHERE CAMPO = @llave_dat AND POS IS NOT NULL)
     BEGIN
         SET @sql = N';WITH n AS (SELECT CAST(LTRIM(RTRIM(CAST(e.' + QUOTENAME(@llave_dat) + N' AS NVARCHAR(60)))) AS NVARCHAR(60)) AS LLAVE, b.DATOS,
                           ROW_NUMBER() OVER (PARTITION BY LTRIM(RTRIM(CAST(e.' + QUOTENAME(@llave_dat) + N' AS NVARCHAR(60)))) ORDER BY e.FILA DESC) AS RN
@@ -413,11 +414,35 @@ BEGIN
     SELECT @cliente = CLIENTE, @proceso = PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida;
 
     SET @recibidos = 0;
-    DECLARE @id INT, @ok BIT;
+    DECLARE @id INT, @ok BIT, @fecha DATE = (SELECT FECHA_PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida),
+            @omitidos NVARCHAR(400);
+    /* Una asignación por segmento (20/11): la base de un segmento que ya se asignó hoy (corrida OK o en proceso) no se
+       vuelve a tomar; así, si el otro segmento llega más tarde, su asignación solo trae lo suyo */
+    SELECT @omitidos = STRING_AGG(CAST(CONCAT(a.CODIGO, N' (corrida ', x.ID_CORRIDA, N')') AS NVARCHAR(MAX)), N', ')
+    FROM cfg.ARCHIVO a
+    CROSS APPLY (SELECT TOP (1) c.ID_CORRIDA FROM ops.ARCHIVO_CARGADO ac
+                 JOIN ops.CORRIDA c ON c.ID_CORRIDA = ac.ID_CORRIDA
+                 JOIN cfg.ARCHIVO a2 ON a2.ID_ARCHIVO = ac.ID_ARCHIVO
+                 WHERE @proceso = 'ASIG' AND c.CLIENTE = @cliente AND c.PROCESO = 'ASIG' AND c.FECHA_PROCESO = @fecha
+                   AND c.ID_CORRIDA <> @id_corrida AND c.ESTATUS IN ('OK', 'EN_PROCESO') AND ac.ESTATUS = 'CARGADO'
+                   AND a2.SEGMENTO2 = a.SEGMENTO2
+                 ORDER BY c.ID_CORRIDA DESC) x
+    WHERE a.CLIENTE = @cliente AND a.PROCESO = @proceso AND a.ACTIVO = 1 AND a.SEGMENTO2 IS NOT NULL;
+    IF @omitidos IS NOT NULL
+    BEGIN
+        SET @omitidos = CONCAT(N'Segmentos ya asignados hoy, no se vuelven a tomar: ', @omitidos);
+        EXEC ops.sp_log @id_corrida, 'CARGA SEGMENTOS', 'AVISO', NULL, @omitidos;
+    END;
     DECLARE cur CURSOR LOCAL FAST_FORWARD FOR
-        SELECT ID_ARCHIVO FROM cfg.ARCHIVO
-        WHERE CLIENTE = @cliente AND PROCESO = @proceso AND ACTIVO = 1
-        ORDER BY ORDEN, ID_ARCHIVO;
+        SELECT a.ID_ARCHIVO FROM cfg.ARCHIVO a
+        WHERE a.CLIENTE = @cliente AND a.PROCESO = @proceso AND a.ACTIVO = 1
+          AND NOT (@proceso = 'ASIG' AND a.SEGMENTO2 IS NOT NULL AND EXISTS (
+                SELECT 1 FROM ops.ARCHIVO_CARGADO ac
+                JOIN ops.CORRIDA c ON c.ID_CORRIDA = ac.ID_CORRIDA
+                JOIN cfg.ARCHIVO a2 ON a2.ID_ARCHIVO = ac.ID_ARCHIVO
+                WHERE c.CLIENTE = @cliente AND c.PROCESO = 'ASIG' AND c.FECHA_PROCESO = @fecha AND c.ID_CORRIDA <> @id_corrida
+                  AND c.ESTATUS IN ('OK', 'EN_PROCESO') AND ac.ESTATUS = 'CARGADO' AND a2.SEGMENTO2 = a.SEGMENTO2))
+        ORDER BY a.ORDEN, a.ID_ARCHIVO;
     OPEN cur;
     FETCH NEXT FROM cur INTO @id;
     WHILE @@FETCH_STATUS = 0
@@ -438,6 +463,11 @@ BEGIN
         THROW 50025, @msg, 1;
     END;
 
+    IF @recibidos = 0 AND @omitidos IS NOT NULL
+    BEGIN
+        SET @omitidos = CONCAT(N'No llegó ninguna base nueva: ', @omitidos);
+        THROW 50024, @omitidos, 1;
+    END;
     IF @recibidos = 0
         THROW 50024, 'No se recibió ningún archivo para este proceso.', 1;
 END;

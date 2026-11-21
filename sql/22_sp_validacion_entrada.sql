@@ -59,7 +59,7 @@ BEGIN
         FROM cfg.VALIDACION_DATO v
         LEFT JOIN #map m ON m.CAMPO = v.CAMPO
         WHERE v.CLIENTE = @cliente AND v.CODIGO = @codigo AND v.ACTIVO = 1
-          AND (m.POS IS NOT NULL OR v.TIPO = 'VOLUMEN')
+          AND (m.POS IS NOT NULL OR v.TIPO IN ('VOLUMEN', 'ARCHIVO_IGUAL'))
         ORDER BY v.CAMPO, v.TIPO;
     OPEN cur;
     FETCH NEXT FROM cur INTO @id, @campo, @tipo, @valor, @pct_max, @pos;
@@ -91,6 +91,28 @@ BEGIN
             GOTO siguiente;
         END;
 
+        IF @tipo = 'ARCHIVO_IGUAL'
+        BEGIN
+            /* 20/11: el mismo contenido que el último archivo bueno de otro día (el banco reenvió el anterior) */
+            DECLARE @huella BIGINT, @h_ant BIGINT, @f_ant INT, @c_ant INT;
+            SET @sql = N'SELECT @rev = COUNT(*), @huella = CHECKSUM_AGG(BINARY_CHECKSUM(*)) FROM ' + @raw_q + N' r WHERE ' + @datos + N';';
+            EXEC sp_executesql @sql, N'@fila INT, @rev INT OUTPUT, @huella BIGINT OUTPUT', @fila = @fila, @rev = @rev OUTPUT, @huella = @huella OUTPUT;
+            DELETE FROM ops.ARCHIVO_HUELLA WHERE ID_CORRIDA = @id_corrida AND CODIGO = @codigo;
+            INSERT INTO ops.ARCHIVO_HUELLA (ID_CORRIDA, CODIGO, FILAS, HUELLA) VALUES (@id_corrida, @codigo, @rev, @huella);
+            SELECT TOP (1) @h_ant = h.HUELLA, @f_ant = h.FILAS, @c_ant = h.ID_CORRIDA
+            FROM ops.ARCHIVO_HUELLA h JOIN ops.CORRIDA c ON c.ID_CORRIDA = h.ID_CORRIDA
+            WHERE h.CODIGO = @codigo AND h.ID_CORRIDA <> @id_corrida AND c.ESTATUS = 'OK'
+              AND c.FECHA_PROCESO < (SELECT FECHA_PROCESO FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida)
+            ORDER BY h.ID_CORRIDA DESC;
+            IF @rev > 0 AND @f_ant = @rev AND @h_ant = @huella
+                INSERT INTO ops.VALIDACION_ENTRADA (ID_CORRIDA, CODIGO, TIPO, CAMPO, ESPERADO, REVISADOS, ANOMALOS, PCT, PCT_MAX, EJEMPLOS, DETIENE)
+                VALUES (@id_corrida, @codigo, @tipo, N'*', N'Distinto al último archivo bueno de otro día', @rev, @rev, 100, @pct_max,
+                        CONCAT(N'Mismos ', @rev, N' renglones y mismo contenido que el de la corrida ', @c_ant, N': el banco pudo reenviar el archivo anterior'),
+                        CASE WHEN 100 > @pct_max THEN 1 ELSE 0 END);
+            SELECT @huella = NULL, @h_ant = NULL, @f_ant = NULL, @c_ant = NULL;
+            GOTO siguiente;
+        END;
+
         IF @tipo = 'LLAVE_UNICA'
         BEGIN
             SET @esperado = N'Sin cuentas repetidas';
@@ -108,11 +130,15 @@ BEGIN
             SET @eval = CASE WHEN @tipo = 'NO_VACIO' THEN N'1 = 1'
                              WHEN @tipo IN ('TELEFONO', 'CORREO') THEN N'x.V IS NOT NULL AND x.V NOT IN (N''0'', N''-'')'
                              ELSE N'x.V IS NOT NULL AND x.V <> N''-''' END;
-            IF @tipo = 'TELEFONO'
+            IF @tipo IN ('TELEFONO', 'DIGITOS')
             BEGIN
-                SET @min = ISNULL(TRY_CONVERT(INT, LEFT(ISNULL(@valor, N'10-12'), CHARINDEX(N'-', ISNULL(@valor, N'10-12') + N'-') - 1)), 10);
-                SET @max = ISNULL(TRY_CONVERT(INT, NULLIF(SUBSTRING(ISNULL(@valor, N'10-12'), CHARINDEX(N'-', ISNULL(@valor, N'10-12') + N'-') + 1, 20), N'')), @min);
+                DECLARE @rango NVARCHAR(100) = ISNULL(@valor, CASE @tipo WHEN 'TELEFONO' THEN N'10-12' ELSE N'1-20' END);
+                SET @min = ISNULL(TRY_CONVERT(INT, LEFT(@rango, CHARINDEX(N'-', @rango + N'-') - 1)), 1);
+                SET @max = ISNULL(TRY_CONVERT(INT, NULLIF(SUBSTRING(@rango, CHARINDEX(N'-', @rango + N'-') + 1, 20), N'')), @min);
             END;
+            /* CRUCE_DAT (20/11): VALOR = columna del DAT contra la que se cruza (solo letras, números y _) */
+            IF @tipo = 'CRUCE_DAT' AND (@valor IS NULL OR @valor LIKE N'%[^A-Za-z0-9_]%' OR COL_LENGTH('dat.DAT_486', @valor) IS NULL)
+                GOTO siguiente;
             SET @anom = CASE @tipo
                 WHEN 'IMPORTE'     THEN N'cfg.fn_importe(x.V) IS NULL'
                 WHEN 'NO_NEGATIVO' THEN N'cfg.fn_importe(x.V) < 0'
@@ -123,6 +149,8 @@ BEGIN
                 WHEN 'CORREO'      THEN N'(x.V NOT LIKE N''%_@_%._%'' OR x.V LIKE N''%@%@%'' OR x.V LIKE N''% %'' OR x.V LIKE N''%[,;]%'')'
                 WHEN 'CATALOGO'    THEN N'cfg.fn_catalogo(@cliente, @valor, x.V) IS NULL'
                 WHEN 'NO_VACIO'    THEN N'(x.V IS NULL OR x.V = N''-'')'
+                WHEN 'DIGITOS'     THEN N'(x.V LIKE N''%[^0-9]%'' OR LEN(x.V) NOT BETWEEN ' + CAST(@min AS NVARCHAR(5)) + N' AND ' + CAST(@max AS NVARCHAR(5)) + N')'
+                WHEN 'CRUCE_DAT'   THEN N'NOT EXISTS (SELECT 1 FROM dat.DAT_486 d WHERE d.CLIENTE = @cliente AND d.' + QUOTENAME(@valor) + N' = x.V)'
             END;
             SET @esperado = CASE @tipo
                 WHEN 'IMPORTE'     THEN N'Importe'
@@ -133,6 +161,8 @@ BEGIN
                 WHEN 'CORREO'      THEN N'nombre@dominio.algo (0 y - = vacío)'
                 WHEN 'CATALOGO'    THEN N'Valor del catálogo ' + ISNULL(@valor, N'')
                 WHEN 'NO_VACIO'    THEN N'Con dato'
+                WHEN 'DIGITOS'     THEN CONCAT(N'Solo dígitos, de ', @min, N' a ', @max)
+                WHEN 'CRUCE_DAT'   THEN CONCAT(N'Que esté en el DAT (', @valor, N')')
             END;
             IF @anom IS NULL GOTO siguiente;
             SET @sql = N'SELECT @rev = COUNT(*), @ano = ISNULL(SUM(CASE WHEN ' + @anom + N' THEN 1 ELSE 0 END), 0) FROM ' + @raw_q

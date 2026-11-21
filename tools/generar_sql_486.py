@@ -65,8 +65,9 @@ def sql_dat(dat):
         "    ID_CORRIDA_ULT  INT          NULL",
         "    FE_ULT_ACT      DATETIME2(0) NULL",
         "    ETIQUETA6       VARCHAR(15)  NULL",
+        "    CTA_BANCO       VARCHAR(20)  NULL",
     ]
-    vista = ", ".join("d.CUENTA2 AS CUENTA" if c == "CUENTA" else "d.CUENTA AS CUENTA3" if c == "CUENTA3" else f"d.{c}" for c, _, _ in dat)
+    vista = ", ".join("d.CUENTA2 AS CUENTA" if c == "CUENTA" else "ISNULL(d.CTA_BANCO, d.CUENTA) AS CUENTA3" if c == "CUENTA3" else f"d.{c}" for c, _, _ in dat)
     return f"""USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
 GO
 /* =====================================================================
@@ -106,6 +107,12 @@ GO
 IF COL_LENGTH('dat.DAT_486', 'ETIQUETA6') IS NULL ALTER TABLE dat.DAT_486 ADD ETIQUETA6 VARCHAR(15) NULL;
 IF COL_LENGTH('ops.RESPALDO_DAT_486', 'ETIQUETA6') IS NULL ALTER TABLE ops.RESPALDO_DAT_486 ADD ETIQUETA6 VARCHAR(15) NULL;
 GO
+/* 20/11: la llave única (CUENTA) es el riesgo en todos los segmentos. CTA_BANCO es la cuenta del banco que va a CYBER
+   (DMSSNUM del SCBSDOS, SCBPAG, listas de etiquetas): en TDC la armada (últimos 4 dígitos de PRIME+4DIG + RFC), en
+   Consumo e Hipotecario el crédito. NULL = registro de antes del cambio (ops.sp_llave_riesgo_migrar lo llena). */
+IF COL_LENGTH('dat.DAT_486', 'CTA_BANCO') IS NULL ALTER TABLE dat.DAT_486 ADD CTA_BANCO VARCHAR(20) NULL;
+IF COL_LENGTH('ops.RESPALDO_DAT_486', 'CTA_BANCO') IS NULL ALTER TABLE ops.RESPALDO_DAT_486 ADD CTA_BANCO VARCHAR(20) NULL;
+GO
 """
 
 
@@ -115,10 +122,10 @@ GO
 # (los .txt del banco vienen separados por comas, con comillas opcionales, igual que un CSV).
 ARCHIVOS = [
     ("MAESTRA_TDC", "ASIG", "TDC", "BASE MAESTRA[_]TARJETA%.csv", 100, "stg.ENT_MAESTRA_TDC", "RIESGO", 0, 10, 1,
-     "Base maestra TDC guardada como CSV. Devolución por RIESGO (asig_bases)."),
-    ("MAESTRA_CONSUMO", "ASIG", "CONSUMO", "BASE MAESTRA[_]CONSUMO%.csv", 115, "stg.ENT_MAESTRA_CONSUMO", "DES_PROD", 0, 20, 1,
-     "Base maestra Consumo guardada como CSV. Devolución por DES_PROD (asig_bases)."),
-    ("MAESTRA_HIPO", "ASIG", "HIPOTECARIO", "BASE MAESTRA[_]HIPOTECARIO%.csv", 118, "stg.ENT_MAESTRA_HIPO", "DES_PROD", 0, 30, 1,
+     "Base maestra TDC guardada como CSV. Llave única y devolución por RIESGO (ACC_NUM, 20/11)."),
+    ("MAESTRA_CONSUMO", "ASIG", "CONSUMO", "BASE MAESTRA[_]CONSUMO%.csv", 115, "stg.ENT_MAESTRA_CONSUMO", "RIESGO", 0, 20, 1,
+     "Base maestra Consumo guardada como CSV. Devolución por RIESGO (llave única desde el 20/11; antes DES_PROD)."),
+    ("MAESTRA_HIPO", "ASIG", "HIPOTECARIO", "BASE MAESTRA[_]HIPOTECARIO%.csv", 118, "stg.ENT_MAESTRA_HIPO", "RIESGO", 0, 30, 1,
      "Sin archivo de ejemplo: columnas tomadas de la hoja RAW, confirmar NUM_COLUMNAS y encabezados."),
     ("SALDOS_TDC", "ACT", "TDC", "SERTEC[_]Saldos[_]tdc%.txt", 8, "stg.ENT_SALDOS_TDC", "RIESGO", 0, 10, 1,
      "Cruce por ACC_NUM = DAT.RIESGO."),
@@ -160,8 +167,9 @@ def tel_dom(extra_tels):
 # (CAMPO, ENCABEZADO o None si es derivado, (TIPO, TRANSFORMACION), OBLIGATORIO, ENCABEZADO_CON_FECHA, COMENTARIO)
 COLUMNAS = {
     "MAESTRA_TDC": [
-        ("PRIME4DIG", "PRIME+4DIG", C(30), 1, False, "Base para armar la CUENTA"),
-        ("CUENTA", None, ("VARCHAR(20)", "{v}"), 0, False, "Derivado: últimos 4 dígitos de PRIME+4DIG + RFC (regla del mapeo; antes la aplicaba la macro, que ya no se usa)"),
+        ("PRIME4DIG", "PRIME+4DIG", C(30), 1, False, "Base para armar la cuenta del banco (CTA_BANCO)"),
+        ("CUENTA", None, ("VARCHAR(20)", "{v}"), 0, False, "Derivado: = RIESGO (ACC_NUM). Llave única desde el 20/11"),
+        ("CTA_BANCO", None, ("VARCHAR(20)", "{v}"), 0, False, "Derivado: últimos 4 dígitos de PRIME+4DIG + RFC (regla del mapeo); es la cuenta que va a CYBER (DMSSNUM)"),
         ("RIESGO", "ACC_NUM", C(35), 1, False, None),
         ("NOMBRE1", "NAME2", C(50), 0, False, None),
         ("NAME1", "NAME1", C(50), 0, False, "Respaldo: si NAME2 viene vacío o '-' se usa NAME1 (regla que hacía la macro)"),
@@ -209,6 +217,7 @@ COLUMNAS = {
         ("CORREO2", "CORREO2", C(100), 0, False, None),
         ("ETIQUETA1", "COSECHAS", C(10), 0, False, None),
         ("RIESGO", None, ("VARCHAR(35)", "{v}"), 0, False, "Derivado: = CUENTA"),
+        ("CTA_BANCO", None, ("VARCHAR(20)", "{v}"), 0, False, "Derivado: = CUENTA (cuenta del banco para CYBER)"),
         ("NOMBRE2", None, ("VARCHAR(20)", "{v}"), 0, False, "Derivado: = RFC"),
         ("SEGMENTO2", None, ("VARCHAR(20)", "{v}"), 0, False, "Derivado"),
         ("SALDO3", None, ("DECIMAL(18,2)", "{v}"), 0, False, "Derivado: SALDO2 / 3"),
@@ -233,6 +242,7 @@ COLUMNAS = {
         ("CORREO2", "CORREO2", C(100), 0, False, None),
         ("ETIQUETA1", "COSECHAS", C(10), 0, False, None),
         ("RIESGO", None, ("VARCHAR(35)", "{v}"), 0, False, "Derivado: = CUENTA"),
+        ("CTA_BANCO", None, ("VARCHAR(20)", "{v}"), 0, False, "Derivado: = CUENTA (cuenta del banco para CYBER)"),
         ("SEGMENTO2", None, ("VARCHAR(20)", "{v}"), 0, False, "Derivado"),
         ("TIPO", None, ("VARCHAR(25)", "{v}"), 0, False, "Derivado: HIPO_CAS / HIPO_VEN / HIPO_VIG"),
     ] + tel_dom([("TEL6", "TEL_FIJO OMNI"), ("TEL7", "TEL_MOVIL OMNI"), ("TEL8", "BURO_TEL_1"), ("TEL9", "BURO_TEL_2"),
@@ -289,11 +299,13 @@ AI = "COLLATE Latin1_General_CI_AI"
 HOMOLOGACION = (
     [("stg.ENT_MAESTRA_TDC",) + x for x in [
         ("SEGMENTO2", "'TDC'", None, "Segmento", None),
-        ("CUENTA", "LEFT(RIGHT(LTRIM(RTRIM(t.PRIME4DIG)), 4) + LTRIM(RTRIM(ISNULL(t.RFC, ''))), 20)", None,
-         "Cuenta TDC = últimos 4 dígitos de PRIME+4DIG + RFC (regla del mapeo)", None),
+        ("CTA_BANCO", "LEFT(RIGHT(LTRIM(RTRIM(t.PRIME4DIG)), 4) + LTRIM(RTRIM(ISNULL(t.RFC, ''))), 20)", None,
+         "Cuenta del banco TDC (va a CYBER) = últimos 4 dígitos de PRIME+4DIG + RFC (regla del mapeo)", None),
+        ("CUENTA", "LEFT(NULLIF(LTRIM(RTRIM(t.RIESGO)), ''), 20)", None,
+         "Llave única = riesgo (ACC_NUM): folios, reasignadas y retiros (20/11)", "Cambio 20/11"),
         ("NOMBRE1", "t.NAME1", "t.NOMBRE1 IS NULL OR LTRIM(RTRIM(t.NOMBRE1)) IN ('', '-')",
          "Si NAME2 viene vacío o '-' se usa NAME1 (regla que hacía la macro)", None),
-        ("DES_PROD", "t.CUENTA", None, "DES_PROD = CUENTA (paso.prg)", None),
+        ("DES_PROD", "t.CTA_BANCO", None, "DES_PROD = cuenta del banco (paso.prg)", None),
         KH("GARAN", "GARANTIA_TDC", "Garantizada 1 / 0", "REQ 2021-024042"),
     ] + MORA + [
         ("SDO_ACT", "t.SDO_VDO", "t.SDO_ACT IS NULL OR t.SDO_ACT <= 0",
@@ -310,6 +322,7 @@ HOMOLOGACION = (
     + [("stg.ENT_MAESTRA_CONSUMO",) + x for x in [
         ("SEGMENTO2", "'CONSUMO'", None, "Segmento", None),
         ("RIESGO", "t.CUENTA", None, "RIESGO = CUENTA", None),
+        ("CTA_BANCO", "t.CUENTA", None, "Cuenta del banco = crédito", None),
         ("NOMBRE2", "LEFT(t.RFC, 20)", None, "NOMBRE2 = RFC", None),
         ("ESTRA3", K("TIPO_CREDITO_CONSUMO", "TIPO_CREDITO"), f"{K('TIPO_CREDITO_CONSUMO', 'TIPO_CREDITO')} IS NOT NULL",
          "Tipo de crédito (catálogo TIPO_CREDITO_CONSUMO; sin valor en el catálogo se queda el texto recortado)", None),
@@ -323,6 +336,7 @@ HOMOLOGACION = (
     + [("stg.ENT_MAESTRA_HIPO",) + x for x in [
         ("SEGMENTO2", "'HIPOTECARIO'", None, "Segmento", None),
         ("RIESGO", "t.CUENTA", None, "RIESGO = CUENTA", "REQ 2023-067064"),
+        ("CTA_BANCO", "t.CUENTA", None, "Cuenta del banco = crédito", None),
         ("TIPO", K("TIPO_HIPO", "SEGMENTO"), f"{K('TIPO_HIPO', 'SEGMENTO')} IS NOT NULL", "Tipo por estatus (catálogo TIPO_HIPO)", "REQ 2023-067064"),
     ] + MORA + [
         KH("ETIQUETA5", "ENFOQUE_HIPO", "Enfoque", "REQ 2023-067064"),
@@ -332,11 +346,11 @@ HOMOLOGACION = (
         ("DIRECC3", "LEFT(cfg.fn_solo_digitos(t.DIRECC3), 5)", "t.DIRECC3 LIKE '%[^0-9]%'", "CP sin letras", None),
         ("DIRECC3", "'0' + t.DIRECC3", "LEN(t.DIRECC3) = 4", "CP a 5 dígitos", None),
         ("DIRECC4", "REPLACE(t.DIRECC4, '\\', '')", "t.DIRECC4 LIKE '%\\%'", "Quita '\\' de la ciudad", None),
-        ("DIRECC2", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
-        ("DIRECC3", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
-        ("DIRECC4", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
-        ("EDO", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
-        ("DIRECC1", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal); va al final porque DIRECC1 es parte de la condición", None),
+        ("DIRECC2", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2, t.CTA_BANCO) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
+        ("DIRECC3", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2, t.CTA_BANCO) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
+        ("DIRECC4", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2, t.CTA_BANCO) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
+        ("EDO", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2, t.CTA_BANCO) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal)", None),
+        ("DIRECC1", "''", "EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'DIRECCION' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CUENTA2, t.CTA_BANCO) AND e.VALOR2 = t.DIRECC1)", "Dirección mala (dirmal); va al final porque DIRECC1 es parte de la condición", None),
     ]]
 )
 
@@ -435,7 +449,7 @@ REGLAS = [
     ("ASIG", "POST_CARGA", "SDO_ACT_CONSUMO_CERO", "stg.ENT_MAESTRA_CONSUMO", "t.SDO_ACT <= 0", "FILAS", "ALERTAR",
      "Cuentas de Consumo con saldo actual <= 0 en la base maestra: reportarlo al banco", "ALERTA_SDO_ACT_CONS_486", 10, None),
     ("ASIG", "PRE_ALTA", "EXCLUSION_CUENTAS", "stg.LAYOUT_486",
-     "t.ES_EXISTENTE = 0 AND EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'CUENTA' AND e.ACTIVO = 1 AND e.VALOR = t.CUENTA)",
+     "t.ES_EXISTENTE = 0 AND EXISTS (SELECT 1 FROM cfg.EXCLUSION e WHERE e.CLIENTE = '{CLIENTE}' AND e.TIPO = 'CUENTA' AND e.ACTIVO = 1 AND e.VALOR IN (t.CUENTA, t.CTA_BANCO))",
      "FILAS", "EXCLUIR", "Cuenta en la lista de exclusión (exc486)", None, 10, "Yolanda Osornio 02/09/2020"),
     ("ACT", "POST_CARGA", "PAGOS_NEGATIVOS", "stg.ENT_PAGOS", "t.IMPORTE < 0", "FILAS", "EXCLUIR",
      "Llegaron pagos negativos: no se arriban (no salen en SCBPAG) y se avisa al equipo de asignaciones", "PAGOS_NEGATIVOS_486", 10, None),
@@ -477,8 +491,9 @@ def v_contacto(cod, tels, correos=("CORREO1", "CORREO2")):
 TELS13 = [f"TEL{i}" for i in range(1, 14)]
 VALIDACIONES = (
     [("MAESTRA_TDC", "*", "VOLUMEN", "30-300", 0, "Renglones contra la última carga buena (archivo cortado o duplicado)"),
-     ("MAESTRA_TDC", "PRIME4DIG", "LLAVE_UNICA", None, 0, "PRIME+4DIG repetido"),
-     ("MAESTRA_TDC", "RIESGO", "LLAVE_UNICA", None, 0, "ACC_NUM repetido"),
+     ("MAESTRA_TDC", "RIESGO", "LLAVE_UNICA", None, 0, "ACC_NUM repetido (es la llave única desde el 20/11)"),
+     ("MAESTRA_TDC", "RIESGO", "DIGITOS", "1-20", 0, "ACC_NUM con letras o de más de 20 dígitos (la llave única mide 20)"),
+     ("MAESTRA_TDC", "*", "ARCHIVO_IGUAL", None, 0, "Idéntico al último archivo bueno de otro día (el banco reenvió el anterior)"),
      ("MAESTRA_TDC", "RIESGO", "NO_VACIO", None, 1, "ACC_NUM vacío"),
      ("MAESTRA_TDC", "SDO_VDO", "NO_VACIO", None, 5, "Saldo PRIME vacío (la columna se corrió o cambió)"),
      ("MAESTRA_TDC", "SEGMENTO", "CATALOGO", "ESTATUS_TDC", 0, "Estatus que no está en el catálogo"),
@@ -488,7 +503,9 @@ VALIDACIONES = (
     + v_importes("MAESTRA_TDC", ["SDO_ACT", "SDO_VDO", "PAG_MIN", "SALDO1", "SALDO2"], TOPE_SALDO["TDC"])
     + v_contacto("MAESTRA_TDC", TELS13)
     + [("MAESTRA_CONSUMO", "*", "VOLUMEN", "30-300", 0, "Renglones contra la última carga buena (archivo cortado o duplicado)"),
-       ("MAESTRA_CONSUMO", "CUENTA", "LLAVE_UNICA", None, 0, "Crédito repetido"),
+       ("MAESTRA_CONSUMO", "CUENTA", "LLAVE_UNICA", None, 0, "Crédito repetido (es la llave única)"),
+       ("MAESTRA_CONSUMO", "CUENTA", "DIGITOS", "1-20", 0, "Crédito con letras o de más de 20 dígitos (la llave única mide 20)"),
+       ("MAESTRA_CONSUMO", "*", "ARCHIVO_IGUAL", None, 0, "Idéntico al último archivo bueno de otro día (el banco reenvió el anterior)"),
        ("MAESTRA_CONSUMO", "DES_PROD", "LLAVE_UNICA", None, 0, "Crédito CYBER repetido"),
        ("MAESTRA_CONSUMO", "CUENTA", "NO_VACIO", None, 1, "Crédito vacío"),
        ("MAESTRA_CONSUMO", "SDO_ACT", "NO_VACIO", None, 5, "Adeudo total vacío (la columna se corrió o cambió)"),
@@ -499,7 +516,8 @@ VALIDACIONES = (
     + v_importes("MAESTRA_CONSUMO", ["CAPITAL", "SDO_ACT", "SDO_VDO", "SALDO1", "SALDO2"], TOPE_SALDO["CONSUMO"])
     + v_contacto("MAESTRA_CONSUMO", TELS13)
     + [("MAESTRA_HIPO", "*", "VOLUMEN", "30-300", 0, "Renglones contra la última carga buena (archivo cortado o duplicado)"),
-       ("MAESTRA_HIPO", "CUENTA", "LLAVE_UNICA", None, 0, "Crédito repetido"),
+       ("MAESTRA_HIPO", "CUENTA", "LLAVE_UNICA", None, 0, "Crédito repetido (es la llave única)"),
+       ("MAESTRA_HIPO", "*", "ARCHIVO_IGUAL", None, 0, "Idéntico al último archivo bueno de otro día (el banco reenvió el anterior)"),
        ("MAESTRA_HIPO", "DES_PROD", "LLAVE_UNICA", None, 0, "Crédito CYBER repetido"),
        ("MAESTRA_HIPO", "CUENTA", "NO_VACIO", None, 1, "Crédito vacío"),
        ("MAESTRA_HIPO", "SDO_ACT", "NO_VACIO", None, 5, "Adeudo total vacío (la columna se corrió o cambió)"),
@@ -509,10 +527,16 @@ VALIDACIONES = (
     + v_contacto("MAESTRA_HIPO", [f"TEL{i}" for i in range(1, 17)])
     # Actualización: un saldo negativo o cero es un criterio de retiro (cfg.REGLA RETIRO_*), no se valida aquí
     + [("SALDOS_TDC", "*", "VOLUMEN", "30-300", 0, "Renglones contra la última carga buena (archivo cortado o duplicado)"),
-       ("SALDOS_TDC", "RIESGO", "NO_VACIO", None, 1, "ACC_NUM vacío")]
+       ("SALDOS_TDC", "RIESGO", "NO_VACIO", None, 1, "ACC_NUM vacío"),
+       ("SALDOS_TDC", "RIESGO", "LLAVE_UNICA", None, 0, "ACC_NUM repetido en saldos (20/11: para y avisa)"),
+       ("SALDOS_TDC", "RIESGO", "CRUCE_DAT", "RIESGO", 30, "ACC_NUM que no está en el DAT: más del 30 % = archivo de otro segmento o de otro cliente"),
+       ("SALDOS_TDC", "*", "ARCHIVO_IGUAL", None, 0, "Idéntico al último archivo bueno de otro día (el banco reenvió el anterior)")]
     + v_importes("SALDOS_TDC", ["SDO_ACT", "PAG_MIN"], TOPE_SALDO["TDC"], negativos=False)
     + [("SALDOS_CONS", "*", "VOLUMEN", "30-300", 0, "Renglones contra la última carga buena (archivo cortado o duplicado)"),
        ("SALDOS_CONS", "DES_PROD", "NO_VACIO", None, 1, "Crédito CYBER vacío"),
+       ("SALDOS_CONS", "DES_PROD", "LLAVE_UNICA", None, 0, "Crédito CYBER repetido en saldos (20/11: para y avisa)"),
+       ("SALDOS_CONS", "DES_PROD", "CRUCE_DAT", "DES_PROD", 30, "Crédito CYBER que no está en el DAT: más del 30 % = archivo de otro segmento o de otro cliente"),
+       ("SALDOS_CONS", "*", "ARCHIVO_IGUAL", None, 0, "Idéntico al último archivo bueno de otro día (el banco reenvió el anterior)"),
        ("SALDOS_CONS", "PVS", "ENTERO", None, 0, "Días de mora que no son número")]
     + v_importes("SALDOS_CONS", ["SDO_ACT", "SDO_VDO", "PAG_MIN"], TOPE_SALDO["CONSUMO"], negativos=False)
     + v_importes("SALDOS_HIP", ["SDO_ACT"], TOPE_SALDO["HIPO"], negativos=False)
@@ -619,6 +643,8 @@ PARAMETROS = [
     ("ETIQUETADO_ALIAS", "SEG_CICLO=TRAMO,CLASIFICA=ESTRA3,ETIQUETA2=DES_PROD,ETIQUETA3=SEG,ETIQUETA4=RIESGO,LEYENDA=NOMBRE2,"
      "SALDO_VEN=SDO_VDO,ETIQUETA10=ETIQUETA,MORA=ETIQUETA1",
      "ETIQUETAS486.xlsx: nombre en el DAT de Operación = columna de nuestro DAT (ETIQUETA6 sale de la base maestra: REE, catálogos ETIQUETA6_TDC y ETIQUETA6_CONSUMO)"),
+    ("CORREO_PRUEBA_PARA", "", "Pruebas de entorno (20/11): si tiene una dirección, todos los correos van solo ahí con [PRUEBA] en el asunto. Lo pone y lo quita ops.sp_prueba_modo; vacío en producción"),
+    ("CYBER_SOLO_LECTURA", "0", "Pruebas de entorno (20/11): 1 = ningún script se ejecuta en CYBER (solo queda en la bitácora); las consultas sí. Lo pone y lo quita ops.sp_prueba_modo; 0 en producción"),
     ("RUTA_SALIDA", "C:\\BANBAJ\\486\\SALIDA\\", "ops.sp_exportar_salidas: carpeta de los archivos planos (se crea <AAAAMMDD>_corrida<ID>)"),
     ("RETROCESO_AUTOMATICO", "1", "1 = si una corrida falla, el DAT, histórico, folios y base maestra regresan solos a como estaban (ops.sp_retroceso_automatico); 0 = se dejan para revisar a mano"),
     ("RUTA_MIS", RUTA_Q + "\\MIS\\SERTEC98\\CLIENTES\\486\\", "ops.sp_exportar_salidas deja aquí también DAT486_<fecha>.csv (antes prog15.prg copiaba el DAT). Q: = \\\\192.168.50.13\\q"),
@@ -678,7 +704,7 @@ SCB_EXPR = {
     "U1FTECAR": ("CONSTANTE", "'BANCO BAJIO'"),
     "U1FOLIO": ("TEXTO", "LTRIM(d.FOLIO)"),
     "U1ESTRATG4": ("TEXTO", "d.RIESGO"),
-    "DMSSNUM": ("TEXTO", "d.CUENTA"),
+    "DMSSNUM": ("TEXTO", "ISNULL(d.CTA_BANCO, d.CUENTA)"),
     "U1EMAIL": ("TEXTO", "d.DES_PROD"),
     "U1ACTASIG": ("IMPORTE_SIGNO", "d.SALDO1"),
     "U1VDOASIG": ("IMPORTE_SIGNO", "d.SALDO2"),
@@ -690,11 +716,11 @@ SCB_EXPR = {
     "U1USO1": ("TEXTO", "CONVERT(VARCHAR(20), CAST(d.SALDO1 AS DECIMAL(13,2)))"),
     "U1USO2": ("TEXTO", "CONVERT(VARCHAR(20), CAST(d.SALDO2 AS DECIMAL(13,2)))"),
     "U1USO3": ("TEXTO", "CONVERT(VARCHAR(20), CAST(d.SALDO3 AS DECIMAL(13,2)))"),
-    "U1USO4": ("TEXTO", "cfg.fn_etiqueta('{CLIENTE}', 'STATUS', d.CUENTA)"),
+    "U1USO4": ("TEXTO", "COALESCE(cfg.fn_etiqueta('{CLIENTE}', 'STATUS', d.CTA_BANCO), cfg.fn_etiqueta('{CLIENTE}', 'STATUS', d.CUENTA))"),
     "U1STATUS": ("TEXTO", "d.SUB_CTE"),
     "DMADL1": ("TEXTO", "LTRIM(d.FOLIO)"),
-    "DMP1": ("TEXTO", "cfg.fn_etiqueta('{CLIENTE}', 'DM1', d.CUENTA)"),
-    "DMP2": ("TEXTO", "COALESCE(cfg.fn_etiqueta('{CLIENTE}', 'ETI', d.CUENTA), d.ETIQUETA5)"),
+    "DMP1": ("TEXTO", "COALESCE(cfg.fn_etiqueta('{CLIENTE}', 'DM1', d.CTA_BANCO), cfg.fn_etiqueta('{CLIENTE}', 'DM1', d.CUENTA))"),
+    "DMP2": ("TEXTO", "COALESCE(cfg.fn_etiqueta('{CLIENTE}', 'ETI', d.CTA_BANCO), cfg.fn_etiqueta('{CLIENTE}', 'ETI', d.CUENTA), d.ETIQUETA5)"),
     "U1ESTRATG2": ("TEXTO", "d.TRAMO"),
     "U1ESTRATG3": ("TEXTO", "d.ESTRA3"),
 }
@@ -932,6 +958,8 @@ def sql_semilla(scb, dat):
     for cod, campo, tipo_v, valor, pct, desc in VALIDACIONES:
         L.append(f"IF NOT EXISTS (SELECT 1 FROM cfg.VALIDACION_DATO WHERE CLIENTE = {cli} AND CODIGO = {q(cod)} AND CAMPO = {q(campo)} AND TIPO = {q(tipo_v)}) "
                  f"INSERT INTO cfg.VALIDACION_DATO (CLIENTE, CODIGO, CAMPO, TIPO, VALOR, PCT_MAX, DESCRIPCION) VALUES ({cli}, {q(cod)}, {q(campo)}, {q(tipo_v)}, {q(valor)}, {pct}, {q(desc)});")
+    L.append("/* 20/11: PRIME+4DIG ya no es llave (la llave es el riesgo); se apaga su regla de repetidos */")
+    L.append(f"UPDATE cfg.VALIDACION_DATO SET ACTIVO = 0 WHERE CLIENTE = {cli} AND CODIGO = 'MAESTRA_TDC' AND CAMPO = 'PRIME4DIG' AND TIPO = 'LLAVE_UNICA' AND ACTIVO = 1;")
     L.append("")
 
     L.append("/* Ladas válidas (19/11): copia inicial de PHNVAL de CYBER (tools/datos/PHNVAL.csv). Solo si cfg.PHNVAL está vacía:")

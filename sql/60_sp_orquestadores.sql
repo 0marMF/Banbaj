@@ -243,16 +243,20 @@ GO
                                  ha corrido hoy -> ops.sp_actualizacion_486
                               2. si la actualización de hoy terminó OK, llegó la
                                  base maestra y no ha corrido -> ops.sp_asignacion_486
+                                 Si después llega la base de otro segmento (20/11),
+                                 corre otra asignación solo con ese segmento.
+                              3. arribo automático de cada asignación del día
                               No repite lo que ya corrió (OK, ERROR o CANCELADA).
                               Si una corrida falla, el DAT regresa solo a como
                               estaba (ops.sp_retroceso_automatico); se corrige la
                               causa y se vuelve a correr a mano.
    ===================================================================== */
 CREATE OR ALTER PROCEDURE ops.sp_archivos_presentes
-    @cliente VARCHAR(10),
-    @proceso VARCHAR(10),
-    @fecha   DATE,
-    @n       INT OUTPUT
+    @cliente         VARCHAR(10),
+    @proceso         VARCHAR(10),
+    @fecha           DATE,
+    @n               INT OUTPUT,
+    @solo_pendientes BIT = 0         -- 1 = solo bases de segmentos que ninguna asignación de ese día intentó (20/11)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -265,7 +269,13 @@ BEGIN
                    N'{AAAAMMDD}',   CONVERT(CHAR(8), @fecha, 112)),
                    N'{DD-MM-AAAA}', REPLACE(CONVERT(CHAR(10), @fecha, 105), '.', '-')),
                    N'{AAAA-MM-DD}', CONVERT(CHAR(10), @fecha, 23))
-        FROM cfg.ARCHIVO WHERE CLIENTE = @cliente AND PROCESO = @proceso AND ACTIVO = 1
+        FROM cfg.ARCHIVO a WHERE a.CLIENTE = @cliente AND a.PROCESO = @proceso AND a.ACTIVO = 1
+          AND NOT (@solo_pendientes = 1 AND EXISTS (
+                SELECT 1 FROM ops.ARCHIVO_CARGADO ac
+                JOIN ops.CORRIDA c ON c.ID_CORRIDA = ac.ID_CORRIDA
+                JOIN cfg.ARCHIVO a2 ON a2.ID_ARCHIVO = ac.ID_ARCHIVO
+                WHERE c.CLIENTE = @cliente AND c.PROCESO = @proceso AND c.FECHA_PROCESO = @fecha AND c.ESTATUS <> 'REVERTIDA'
+                  AND ac.ESTATUS <> 'NO_RECIBIDO' AND (a2.SEGMENTO2 = a.SEGMENTO2 OR (a.SEGMENTO2 IS NULL AND a2.ID_ARCHIVO = a.ID_ARCHIVO))))
         ORDER BY 1;
     OPEN cur;
     FETCH NEXT FROM cur INTO @ruta, @patron;
@@ -336,7 +346,21 @@ BEGIN
     /* 2. Asignación (puede no llegar) */
     IF EXISTS (SELECT 1 FROM ops.CORRIDA WHERE CLIENTE = '486' AND PROCESO = 'ASIG' AND FECHA_PROCESO = @fecha AND ESTATUS <> 'REVERTIDA')
     BEGIN
-        SELECT 'DIA COMPLETO' AS RESULTADO;
+        /* Una asignación por segmento (20/11): si llegó la base de un segmento que ninguna asignación de hoy intentó
+           (p. ej. Consumo después de TDC), corre otra asignación solo con ese segmento */
+        EXEC ops.sp_archivos_presentes '486', 'ASIG', @fecha, @n OUTPUT, @solo_pendientes = 1;
+        IF @n > 0 AND NOT EXISTS (SELECT 1 FROM ops.CORRIDA WHERE CLIENTE = '486' AND PROCESO = 'ASIG' AND ESTATUS = 'EN_PROCESO')
+        BEGIN
+            BEGIN TRY
+                EXEC ops.sp_asignacion_486 @fecha = @fecha, @hora_llegada = @hora, @id_corrida = @id OUTPUT;
+                SELECT 'ASIGNACION DE OTRO SEGMENTO OK' AS RESULTADO, @id AS CORRIDA;
+            END TRY
+            BEGIN CATCH
+                SELECT 'ASIGNACION DE OTRO SEGMENTO CON ERROR' AS RESULTADO, ERROR_MESSAGE() AS DETALLE;
+            END CATCH;
+        END
+        ELSE
+            SELECT 'DIA COMPLETO' AS RESULTADO;
         /* 3. Arribo automático de correos y teléfonos en cuanto el operador sube SCBSDOS y SCBTEL (decisión 02/11) */
         BEGIN TRY
             EXEC ops.sp_arribo_automatico @fecha = @fecha;

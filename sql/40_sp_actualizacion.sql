@@ -157,7 +157,7 @@ GO
 
 /* ---------------------------------------------------------------------
    Pagos (pagos.prg). Se arriban TODOS los pagos (decisión): la CUENTA de
-   SCBPAG (crédito del banco) se busca en este orden:
+   SCBPAG (cuenta del banco: CTA_BANCO, en TDC la armada) se busca en este orden:
      1. DAT por RIESGO   2. DAT por CUENTA
      3. histórico de folios por RIESGO   4. histórico por CUENTA (cuentas retiradas)
      5. si no aparece, el CREDITO tal como llegó (sin CUENTA2)
@@ -182,15 +182,15 @@ BEGIN
     END;
 
     SELECT p.FILA, p.RIESGO, p.IMPORTE, p.FECHA,
-           COALESCE(d.CUENTA, h.CUENTA, LEFT(LTRIM(RTRIM(p.RIESGO)), 25)) AS CUENTA,
+           COALESCE(d.CTA_BANCO, d.CUENTA, h.CTA_BANCO, h.CUENTA, LEFT(LTRIM(RTRIM(p.RIESGO)), 25)) AS CUENTA,   -- cuenta del banco, como va en SCBPAG
            COALESCE(d.CUENTA2, h.CUENTA2) AS CUENTA2,
            CASE WHEN d.CUENTA IS NOT NULL THEN 'DAT' WHEN h.CUENTA IS NOT NULL THEN 'HISTORICO' ELSE 'SIN CRUCE' END AS FUENTE
     INTO #p
     FROM stg.ENT_PAGOS p
-    OUTER APPLY (SELECT TOP (1) x.CUENTA, x.CUENTA2 FROM dat.DAT_486 x
+    OUTER APPLY (SELECT TOP (1) x.CUENTA, x.CUENTA2, x.CTA_BANCO FROM dat.DAT_486 x
                  WHERE x.CLIENTE = @cliente AND (x.RIESGO = p.RIESGO OR x.CUENTA = p.RIESGO)
                  ORDER BY CASE WHEN x.RIESGO = p.RIESGO THEN 0 ELSE 1 END, x.CUENTA2) d
-    OUTER APPLY (SELECT TOP (1) y.CUENTA, y.CUENTA2 FROM dat.HISTORIA_FOLIO y
+    OUTER APPLY (SELECT TOP (1) y.CUENTA, y.CUENTA2, y.CTA_BANCO FROM dat.HISTORIA_FOLIO y
                  WHERE d.CUENTA IS NULL AND y.CLIENTE = @cliente AND (y.RIESGO = p.RIESGO OR y.CUENTA = p.RIESGO)
                  ORDER BY CASE WHEN y.RIESGO = p.RIESGO THEN 0 ELSE 1 END, ISNULL(y.FE_BAJA, '9999-12-31') DESC, y.ID DESC) h
     WHERE p.ID_CORRIDA = @id_corrida AND p.IMPORTE >= 0;
@@ -216,6 +216,26 @@ BEGIN
     EXEC ops.sp_log @id_corrida, 'ACT PAGOS', 'OK', @nuevos, @msg;
     IF EXISTS (SELECT 1 FROM #p WHERE FUENTE = 'SIN CRUCE')
         EXEC ops.sp_log @id_corrida, 'ACT PAGOS', 'AVISO', NULL, N'Hay pagos de créditos que no están en el DAT ni en el histórico; se arriban con el crédito tal como llegó.';
+
+    /* 20/11: pagos repetidos en el archivo (mismo riesgo, importe y fecha). Se arriban todos, como hoy, pero se avisa */
+    DECLARE @rep INT, @ej NVARCHAR(600), @json NVARCHAR(MAX), @det NVARCHAR(1000);
+    SELECT @rep = COUNT(*) FROM (SELECT RIESGO FROM #p GROUP BY RIESGO, IMPORTE, FECHA HAVING COUNT(*) > 1) x;
+    IF @rep > 0
+    BEGIN
+        SELECT @ej = STRING_AGG(CAST(CONCAT(cfg.fn_enmascarar(RIESGO), N' (', N, N' veces)') AS NVARCHAR(MAX)), N', ')
+        FROM (SELECT TOP (5) RIESGO, COUNT(*) AS N FROM #p GROUP BY RIESGO, IMPORTE, FECHA HAVING COUNT(*) > 1 ORDER BY RIESGO) e;
+        SET @det = CONCAT(N'Pagos repetidos en el archivo (mismo crédito, importe y fecha): ', @rep, N' grupos (', @ej, N'). Se arribaron todos.');
+        EXEC ops.sp_log @id_corrida, 'ACT PAGOS REPETIDOS', 'AVISO', @rep, @det;
+        SET @json = (SELECT N'Pagos repetidos' AS TIPO, @det AS DETALLE,
+                            N'No detiene la actualización. Confirmar con el banco si son pagos distintos; si no, quitar el repetido del SCBPAG antes de subirlo.' AS ACCION,
+                            N'ACT' AS PROCESO, N'' AS HTML_TABLA
+                     FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
+        BEGIN TRY
+            EXEC mail.sp_enviar @plantilla = 'HALLAZGO_486', @id_corrida = @id_corrida, @valores = @json;
+        END TRY
+        BEGIN CATCH
+        END CATCH;
+    END;
 END;
 GO
 

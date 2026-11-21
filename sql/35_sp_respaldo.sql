@@ -66,8 +66,12 @@ BEGIN
     IF @estatus = 'EN_PROCESO' THROW 50302, 'La corrida sigue en proceso; ciérrala antes de revertirla.', 1;
     IF NOT EXISTS (SELECT 1 FROM ops.RESPALDO_CONTROL WHERE ID_CORRIDA = @id_corrida)
         THROW 50303, 'No hay respaldo de esa corrida (se conservan solo los últimos RESPALDOS_A_CONSERVAR).', 1;
-    IF EXISTS (SELECT 1 FROM ops.CORRIDA WHERE CLIENTE = @cliente AND ID_CORRIDA > @id_corrida AND ESTATUS <> 'REVERTIDA' AND REVERTIDA_AUTO = 0)
+    IF EXISTS (SELECT 1 FROM ops.CORRIDA WHERE CLIENTE = @cliente AND ID_CORRIDA > @id_corrida AND ESTATUS <> 'REVERTIDA' AND REVERTIDA_AUTO = 0
+                                          AND PROCESO <> 'PRUEBA')     -- las pruebas de lectura no tocan el DAT
         THROW 50304, 'Hay corridas posteriores sin revertir: revierte primero la más reciente.', 1;
+    /* 20/11: el respaldo de una corrida anterior al cambio de llave trae las cuentas TDC con la llave vieja */
+    IF @id_corrida <= ISNULL(TRY_CONVERT(INT, cfg.fn_param(@cliente, 'LLAVE_RIESGO_MIGRADA')), 0)
+        THROW 50305, 'La corrida es anterior al cambio de llave por riesgo (ops.sp_llave_riesgo_migrar): su respaldo trae la llave vieja y no se puede revertir.', 1;
 
     SELECT @folio = ULTIMO_FOLIO FROM ops.RESPALDO_CONTROL WHERE ID_CORRIDA = @id_corrida;
 

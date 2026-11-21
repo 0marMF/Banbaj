@@ -94,6 +94,11 @@ BEGIN
         CLOSE val; DEALLOCATE val;
     END;
 
+    /* Pruebas de entorno (20/11): con CORREO_PRUEBA_PARA todo correo va solo a esa dirección, con [PRUEBA] en el asunto */
+    DECLARE @redir NVARCHAR(400) = NULLIF(LTRIM(RTRIM(cfg.fn_param(ISNULL(@cliente, '486'), 'CORREO_PRUEBA_PARA'))), N'');
+    IF @redir IS NOT NULL
+        SELECT @para = @redir, @cc = NULL, @cco = NULL, @asunto = LEFT(N'[PRUEBA] ' + @asunto, 255);
+
     IF @solo_prueba = 1
     BEGIN
         INSERT INTO mail.ENVIO (ID_CORRIDA, PLANTILLA, PARA, CC, CCO, ASUNTO, ADJUNTOS, ESTATUS)

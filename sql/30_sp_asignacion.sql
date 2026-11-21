@@ -3,7 +3,8 @@ GO
 /* =====================================================================
    Banbaj · 30 Asignación 486
    ---------------------------------------------------------------------
-   ops.sp_asig_unir_layout    une las bases maestras recibidas en stg.LAYOUT_486
+   ops.sp_asig_unir_layout    une las bases maestras recibidas en stg.LAYOUT_486 (riesgo repetido entre segmentos: detiene)
+   ops.sp_asig_avisos_llave   avisos: mismo riesgo con otro RFC, cambio de segmento (20/11)
    ops.sp_asig_devolucion     cuentas del DAT que no vinieron en la base de su segmento
    ops.sp_asig_existentes     actualiza en DAT las cuentas que ya existen
    ops.sp_asig_alta           REA / NVA, folios y alta en DAT + histórico
@@ -67,24 +68,99 @@ BEGIN
     END;
     CLOSE cur; DEALLOCATE cur;
 
-    /* Duplicados por CUENTA: se conserva el primero, los demás a rechazos */
-    ;WITH d AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY CUENTA ORDER BY ORIGEN) AS RN FROM stg.LAYOUT_486)
+    /* Sin llave (riesgo vacío): a rechazos */
     INSERT INTO ops.RECHAZO (ID_CORRIDA, ORIGEN, MOTIVO, DATOS)
-    SELECT @id_corrida, 'LAYOUT_486', N'CUENTA duplicada en el layout',
-           (SELECT d.CUENTA, d.ORIGEN, d.DES_PROD, d.RIESGO FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
-    FROM d WHERE RN > 1 OR CUENTA IS NULL;
+    SELECT @id_corrida, 'LAYOUT_486', N'Sin riesgo (llave única) en el layout',
+           (SELECT d.ORIGEN, d.DES_PROD FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+    FROM stg.LAYOUT_486 d WHERE d.CUENTA IS NULL;
+    DELETE FROM stg.LAYOUT_486 WHERE CUENTA IS NULL;
 
-    ;WITH d AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY CUENTA ORDER BY ORIGEN) AS RN FROM stg.LAYOUT_486)
-    DELETE FROM d WHERE RN > 1 OR CUENTA IS NULL;
+    /* 20/11: la llave (riesgo) repetida en la asignación detiene la corrida y avisa al equipo, igual que la validación
+       de la entrada. Dentro de una base ya la detiene la regla LLAVE_UNICA; aquí queda el mismo riesgo en dos segmentos. */
+    IF EXISTS (SELECT 1 FROM stg.LAYOUT_486 GROUP BY CUENTA HAVING COUNT(*) > 1)
+    BEGIN
+        DECLARE @rep INT, @ej NVARCHAR(1000), @msg NVARCHAR(2048);
+        SELECT @rep = COUNT(*) FROM (SELECT CUENTA FROM stg.LAYOUT_486 GROUP BY CUENTA HAVING COUNT(*) > 1) x;
+        SELECT @ej = STRING_AGG(CAST(CONCAT(cfg.fn_enmascarar(CUENTA), N' (', O, N')') AS NVARCHAR(MAX)), N'; ')
+        FROM (SELECT TOP (5) CUENTA, STRING_AGG(ORIGEN, N' y ') AS O FROM stg.LAYOUT_486 GROUP BY CUENTA HAVING COUNT(*) > 1 ORDER BY CUENTA) e;
+        INSERT INTO ops.VALIDACION_ENTRADA (ID_CORRIDA, CODIGO, TIPO, CAMPO, ESPERADO, REVISADOS, ANOMALOS, PCT, PCT_MAX, EJEMPLOS, DETIENE)
+        VALUES (@id_corrida, 'LAYOUT_486', 'LLAVE_UNICA', N'RIESGO', N'Cada riesgo en un solo segmento', @total, @rep,
+                CAST(@rep * 100.0 / NULLIF(@total, 0) AS DECIMAL(7,2)), 0, LEFT(@ej, 1000), 1);
+        EXEC ops.sp_log @id_corrida, 'ASIG UNIR LAYOUT', 'ERROR', @rep, N'Riesgos repetidos entre segmentos: la asignación se detiene.';
+        EXEC ops.sp_validacion_entrada_avisar @id_corrida, @msg OUTPUT;
+        THROW 50025, @msg, 1;
+    END;
 
     EXEC ops.sp_log @id_corrida, 'ASIG UNIR LAYOUT', 'OK', @total;
+    EXEC ops.sp_asig_avisos_llave @id_corrida;
+END;
+GO
+
+/* ---------------------------------------------------------------------
+   Avisos de la llave por riesgo (20/11). No detienen la asignación; llegan
+   al equipo en el correo de hallazgos:
+   - mismo riesgo con otro RFC que el que tiene el DAT (riesgo reutilizado o
+     dato corregido por el banco);
+   - cambio de segmento: la cuenta llega en otro segmento que el del DAT o,
+     si regresa (reasignada), que el de su último registro en el histórico.
+   --------------------------------------------------------------------- */
+CREATE OR ALTER PROCEDURE ops.sp_asig_avisos_llave
+    @id_corrida  INT,
+    @solo_prueba BIT = 0
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @cliente VARCHAR(10) = (SELECT CLIENTE FROM ops.CORRIDA WHERE ID_CORRIDA = @id_corrida);
+    DECLARE @rfc INT, @seg INT, @ej_rfc NVARCHAR(600), @ej_seg NVARCHAR(600), @msg NVARCHAR(4000), @json NVARCHAR(MAX);
+
+    SELECT l.CUENTA, l.ORIGEN INTO #rfc
+    FROM stg.LAYOUT_486 l
+    JOIN dat.DAT_486 d ON d.CUENTA = l.CUENTA
+    WHERE l.ID_CORRIDA = @id_corrida
+      AND NULLIF(LTRIM(RTRIM(l.RFC)), '') IS NOT NULL AND NULLIF(LTRIM(RTRIM(d.RFC)), '') IS NOT NULL
+      AND UPPER(REPLACE(LTRIM(RTRIM(l.RFC)), ' ', '')) <> UPPER(REPLACE(LTRIM(RTRIM(d.RFC)), ' ', ''));
+    SELECT l.CUENTA, CONCAT(x.SEG, N' -> ', l.SEGMENTO2) AS CAMBIO INTO #seg
+    FROM stg.LAYOUT_486 l
+    OUTER APPLY (SELECT TOP (1) d.SEGMENTO2 AS SEG FROM dat.DAT_486 d WHERE d.CUENTA = l.CUENTA) dd
+    OUTER APPLY (SELECT TOP (1) h.SEGMENTO2 AS SEG FROM dat.HISTORIA_FOLIO h
+                 WHERE dd.SEG IS NULL AND h.CLIENTE = @cliente AND h.CUENTA = l.CUENTA ORDER BY h.FE_ALTA DESC, h.ID DESC) hh
+    CROSS APPLY (SELECT ISNULL(dd.SEG, hh.SEG) AS SEG) x
+    WHERE l.ID_CORRIDA = @id_corrida AND x.SEG IS NOT NULL AND x.SEG <> l.SEGMENTO2;
+
+    SELECT @rfc = COUNT(*), @ej_rfc = STRING_AGG(CAST(cfg.fn_enmascarar(CUENTA) AS NVARCHAR(MAX)), N', ') FROM (SELECT TOP (5) CUENTA FROM #rfc ORDER BY CUENTA) e;
+    SET @rfc = (SELECT COUNT(*) FROM #rfc);
+    SELECT @ej_seg = STRING_AGG(CAST(CONCAT(cfg.fn_enmascarar(CUENTA), N' (', CAMBIO, N')') AS NVARCHAR(MAX)), N', ') FROM (SELECT TOP (5) CUENTA, CAMBIO FROM #seg ORDER BY CUENTA) e;
+    SET @seg = (SELECT COUNT(*) FROM #seg);
+    IF @rfc = 0 AND @seg = 0
+    BEGIN
+        IF @solo_prueba = 0 EXEC ops.sp_log @id_corrida, 'ASIG AVISOS LLAVE', 'OK', 0, N'Sin riesgos con otro RFC ni cambios de segmento.';
+        RETURN;
+    END;
+    SET @msg = CONCAT(CASE WHEN @rfc > 0 THEN CONCAT(N'Riesgos con otro RFC que el del DAT: ', @rfc, N' (', @ej_rfc, N')') ELSE N'' END,
+                      CASE WHEN @rfc > 0 AND @seg > 0 THEN N' · ' ELSE N'' END,
+                      CASE WHEN @seg > 0 THEN CONCAT(N'Cuentas que cambian de segmento: ', @seg, N' (', @ej_seg, N')') ELSE N'' END);
+    IF @solo_prueba = 1
+    BEGIN
+        SELECT @rfc AS OTRO_RFC, @seg AS CAMBIO_SEGMENTO, @msg AS MENSAJE;
+        RETURN;
+    END;
+    EXEC ops.sp_log @id_corrida, 'ASIG AVISOS LLAVE', 'AVISO', @rfc + @seg, @msg;
+    SET @json = (SELECT N'Avisos de la llave por riesgo' AS TIPO, @msg AS DETALLE,
+                        N'No detiene la asignación. Revisar con el banco si el riesgo es el mismo crédito; las cuentas que cambian de segmento quedan en el segmento nuevo.' AS ACCION,
+                        N'ASIG' AS PROCESO, N'' AS HTML_TABLA
+                 FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
+    BEGIN TRY
+        EXEC mail.sp_enviar @plantilla = 'HALLAZGO_486', @id_corrida = @id_corrida, @valores = @json;
+    END TRY
+    BEGIN CATCH
+    END CATCH;
 END;
 GO
 
 /* ---------------------------------------------------------------------
    Devolución por segmento (asig_bases.prg): cuentas del DAT de ese
    SEGMENTO2 que no vienen en la base maestra recibida.
-   Llave por archivo en cfg.ARCHIVO.LLAVE_DAT (Consumo/Hipo DES_PROD, TDC RIESGO).
+   Llave por archivo en cfg.ARCHIVO.LLAVE_DAT: RIESGO en todos los segmentos (20/11; antes Consumo/Hipo DES_PROD).
    Tope: si se devolvería más del TOPE_DEVOLUCION_PCT del segmento se
    detiene (una base incompleta provocaría un retiro masivo).
    --------------------------------------------------------------------- */
@@ -260,8 +336,8 @@ BEGIN
              + N'WHERE ID_CORRIDA = @id_corrida AND ES_EXISTENTE = 0;';
     EXEC sp_executesql @sql, N'@id_corrida INT', @id_corrida = @id_corrida;
 
-    INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, ID_CORRIDA_ALTA)
-    SELECT @cliente, CUENTA, CAST(FOLIO AS INT), CUENTA2, SEGMENTO2, LEFT(RIESGO, 35), SUB_CTE, 'A', @fecha, @id_corrida
+    INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, CTA_BANCO, SUB_CTE, ESTATUS, FE_ALTA, ID_CORRIDA_ALTA)
+    SELECT @cliente, CUENTA, CAST(FOLIO AS INT), CUENTA2, SEGMENTO2, LEFT(RIESGO, 35), CTA_BANCO, SUB_CTE, 'A', @fecha, @id_corrida
     FROM stg.LAYOUT_486
     WHERE ID_CORRIDA = @id_corrida AND ES_EXISTENTE = 0;
 
@@ -303,7 +379,7 @@ BEGIN
 
     /* Histórico: baja con foto del registro */
     UPDATE h SET ESTATUS = 'B', FE_BAJA = @fecha, MOTIVO_BAJA = LEFT(v.MOTIVO, 60), ID_CORRIDA_BAJA = @id_corrida,
-                 RIESGO = ISNULL(h.RIESGO, LEFT(d.RIESGO, 35)),
+                 RIESGO = ISNULL(h.RIESGO, LEFT(d.RIESGO, 35)), CTA_BANCO = ISNULL(h.CTA_BANCO, d.CTA_BANCO),
                  DATOS_BAJA = (SELECT d.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
     FROM dat.HISTORIA_FOLIO h
     JOIN ops.DEVOLUCION v ON v.CUENTA = h.CUENTA AND v.ID_CORRIDA = @id_corrida AND v.PROCESADA = 0
@@ -311,9 +387,9 @@ BEGIN
     WHERE h.CLIENTE = @cliente AND h.ESTATUS = 'A';
 
     /* Cuentas sin histórico (cargadas antes de la migración): se registra la baja */
-    INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA,
+    INSERT INTO dat.HISTORIA_FOLIO (CLIENTE, CUENTA, FOLIO, CUENTA2, SEGMENTO2, RIESGO, CTA_BANCO, SUB_CTE, ESTATUS, FE_ALTA, FE_BAJA,
                                     MOTIVO_BAJA, ID_CORRIDA_BAJA, DATOS_BAJA, ID_CORRIDA_ALTA)
-    SELECT @cliente, d.CUENTA, ISNULL(TRY_CONVERT(INT, d.FOLIO), 0), ISNULL(d.CUENTA2, ''), d.SEGMENTO2, LEFT(d.RIESGO, 35),
+    SELECT @cliente, d.CUENTA, ISNULL(TRY_CONVERT(INT, d.FOLIO), 0), ISNULL(d.CUENTA2, ''), d.SEGMENTO2, LEFT(d.RIESGO, 35), d.CTA_BANCO,
            CASE WHEN LEFT(d.SUB_CTE, 3) IN ('NVA', 'REA') THEN LEFT(d.SUB_CTE, 3) ELSE 'NVA' END, 'B',
            ISNULL(d.FE_ASIG, @fecha), @fecha, LEFT(v.MOTIVO, 60), @id_corrida,
            (SELECT d.* FOR JSON PATH, WITHOUT_ARRAY_WRAPPER), 0     -- 0 = sin alta registrada (para el retroceso)

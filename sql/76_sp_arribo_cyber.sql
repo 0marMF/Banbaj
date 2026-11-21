@@ -70,6 +70,13 @@ BEGIN
         SELECT @script AS SCRIPT, BLOQUE, PLSQL FROM #b ORDER BY BLOQUE;
         RETURN;
     END;
+    /* Pruebas de entorno (20/11): con CYBER_SOLO_LECTURA = 1 no se escribe nada en CYBER; solo queda en la bitácora */
+    IF ISNULL(cfg.fn_param(@cliente, 'CYBER_SOLO_LECTURA'), '0') = '1'
+    BEGIN
+        SET @msg = CONCAT(@script, N': ', @sentencias, N' sentencias NO ejecutadas en CYBER (CYBER_SOLO_LECTURA = 1, modo de prueba)');
+        EXEC ops.sp_log @id_corrida, 'CYBER EJECUTA', 'AVISO', @sentencias, @msg;
+        RETURN;
+    END;
     IF NOT EXISTS (SELECT 1 FROM sys.servers WHERE name = @srv)
     BEGIN
         SET @msg = CONCAT(N'No existe el servidor vinculado ', @srv, N'.');
@@ -566,10 +573,11 @@ GO
      Sin pendientes = CYBER ya tiene todo lo que necesita el procedimiento: se arriba en la siguiente vuelta.
    EXEC ops.sp_marcar_arribo <corrida>, 'FIN' da todo por subido. */
 CREATE OR ALTER PROCEDURE ops.sp_arribo_automatico
-    @fecha     DATE = NULL,
-    @cliente   VARCHAR(10) = '486',
-    @sin_bajar BIT = 0,                  -- 1 = usa lo que ya está en stg.CYBER_DELQMST_ACT y stg.CYBER_PHONE_G1 (pruebas)
-    @resultado NVARCHAR(400) = NULL OUTPUT
+    @fecha      DATE = NULL,
+    @cliente    VARCHAR(10) = '486',
+    @sin_bajar  BIT = 0,                 -- 1 = usa lo que ya está en stg.CYBER_DELQMST_ACT y stg.CYBER_PHONE_G1 (pruebas)
+    @resultado  NVARCHAR(400) = NULL OUTPUT,
+    @id_corrida INT = NULL               -- NULL = cada asignación OK del día, de la más antigua a la más reciente (20/11)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -580,15 +588,43 @@ BEGIN
         SELECT @resultado AS ARRIBO;
         RETURN;
     END;
+    /* Una asignación por segmento (20/11): el arribo de cada una sigue su propio camino. Se revisan todas las del día;
+       si solo hay una, el resultado es el de siempre. */
+    IF @id_corrida IS NULL
+    BEGIN
+        DECLARE @c INT, @r1 NVARCHAR(400), @todas NVARCHAR(4000) = N'', @k INT = 0;
+        DECLARE ca CURSOR LOCAL FAST_FORWARD FOR
+            SELECT ID_CORRIDA FROM ops.CORRIDA
+            WHERE CLIENTE = @cliente AND PROCESO = 'ASIG' AND FECHA_PROCESO = @fecha AND ESTATUS = 'OK'
+            ORDER BY ID_CORRIDA;
+        OPEN ca; FETCH NEXT FROM ca INTO @c;
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            SET @r1 = NULL;
+            EXEC ops.sp_arribo_automatico @fecha = @fecha, @cliente = @cliente, @sin_bajar = @sin_bajar, @resultado = @r1 OUTPUT, @id_corrida = @c;
+            SET @k += 1;
+            SET @todas = CONCAT(@todas, CASE WHEN @k > 1 THEN N' | ' ELSE N'' END, N'corrida ', @c, N': ', @r1);
+            SET @resultado = @r1;
+            FETCH NEXT FROM ca INTO @c;
+        END;
+        CLOSE ca; DEALLOCATE ca;
+        IF @k = 0
+        BEGIN
+            SET @resultado = N'SIN ASIGNACION OK DEL DIA';
+            SELECT @resultado AS ARRIBO;
+        END
+        ELSE IF @k > 1
+            SET @resultado = LEFT(@todas, 400);
+        RETURN;
+    END;
     DECLARE @id INT, @srv SYSNAME = ISNULL(cfg.fn_param(@cliente, 'CYBER_LINKED_SERVER'), 'CYBER'),
             @min DECIMAL(5,2) = ISNULL(TRY_CONVERT(DECIMAL(5,2), cfg.fn_param(@cliente, 'ARRIBO_MIN_PCT')), 95),
             @p_c INT, @r_c INT, @p_d INT, @r_d INT, @p_t INT, @r_t INT, @ok_c BIT, @ok_d BIT, @ok_t BIT,
             @hecho_s BIT, @hecho_c BIT, @hecho_t BIT, @hecho_g BIT, @hecho_b BIT, @fin BIT, @listo_s BIT = 0, @res NVARCHAR(400) = N'',
             @err NVARCHAR(4000), @acc NVARCHAR(4000);
 
-    SELECT TOP (1) @id = ID_CORRIDA FROM ops.CORRIDA
-    WHERE CLIENTE = @cliente AND PROCESO = 'ASIG' AND FECHA_PROCESO = @fecha AND ESTATUS = 'OK'
-    ORDER BY ID_CORRIDA DESC;
+    SELECT @id = ID_CORRIDA FROM ops.CORRIDA
+    WHERE ID_CORRIDA = @id_corrida AND CLIENTE = @cliente AND PROCESO = 'ASIG' AND ESTATUS = 'OK';
     IF @id IS NULL
     BEGIN
         SET @resultado = N'SIN ASIGNACION OK DEL DIA';

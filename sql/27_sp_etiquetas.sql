@@ -14,9 +14,9 @@ GO
    @tipo_llave:
      FOLIO          -> el archivo trae el folio (con o sin '486-'); se guarda como CUENTA2
      CUENTA2        -> el archivo ya trae '486-folio'
-     CUENTA         -> crédito del banco (DAT.CUENTA), para tipos que cruzan por DMSSNUM
+     CUENTA         -> cuenta del banco (DAT.CTA_BANCO, la que va en DMSSNUM; en TDC la armada)
      FOLIO_O_CUENTA -> el valor se busca primero como folio del DAT y, si no, como
-                       crédito (DAT.CUENTA); se guarda como CUENTA2. Lo que no está
+                       riesgo o cuenta del banco; se guarda como CUENTA2. Lo que no está
                        en el DAT se descarta.
 
    Etiqueta '-' = vacía a propósito: se guarda '' y en la salida deja el campo en blanco.
@@ -72,7 +72,8 @@ BEGIN
                                                                                               THEN SUBSTRING(LTRIM(RTRIM(e.LLAVE_ORIGEN)), LEN(@prefijo) + 1, 50)
                                                                                               ELSE LTRIM(RTRIM(e.LLAVE_ORIGEN)) END)),
                            (SELECT TOP (1) d.CUENTA2 FROM dat.DAT_486 d
-                            WHERE d.CLIENTE = @cliente AND TRY_CONVERT(DECIMAL(38,0), d.CUENTA) = TRY_CONVERT(DECIMAL(38,0), LTRIM(RTRIM(e.LLAVE_ORIGEN)))))
+                            WHERE d.CLIENTE = @cliente
+                              AND TRY_CONVERT(DECIMAL(38,0), LTRIM(RTRIM(e.LLAVE_ORIGEN))) IN (TRY_CONVERT(DECIMAL(38,0), d.CUENTA), TRY_CONVERT(DECIMAL(38,0), d.CTA_BANCO))))
                     ELSE cfg.fn_llave_etiqueta(@cliente, e.LLAVE_ORIGEN, @tipo_llave) END AS LLAVE,
                CASE WHEN LTRIM(RTRIM(REPLACE(e.ETIQUETA, CHAR(13), ''))) = N'-' THEN N'' ELSE cfg.fn_texto(e.ETIQUETA) END AS VALOR,
                e.LLAVE_ORIGEN
@@ -105,7 +106,7 @@ BEGIN
     WHERE e.CLIENTE = @cliente AND e.TIPO = @tipo AND e.ACTIVO = 1
       AND NOT EXISTS (SELECT 1 FROM dat.DAT_486 d
                       WHERE (@tipo_llave IN ('FOLIO', 'CUENTA2', 'FOLIO_O_CUENTA') AND d.CUENTA2 = e.LLAVE)
-                         OR (@tipo_llave = 'CUENTA' AND d.CUENTA = e.LLAVE));
+                         OR (@tipo_llave = 'CUENTA' AND ISNULL(d.CTA_BANCO, d.CUENTA) = e.LLAVE));
 
     SELECT @tipo AS TIPO, @modo AS MODO, @leidos AS LEIDOS, @cargados AS CARGADOS,
            @invalidos AS SIN_FOLIO_O_ETIQUETA, @repetidos AS REPETIDOS, @fuera_dat AS NO_ESTAN_EN_DAT;
