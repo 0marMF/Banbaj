@@ -549,7 +549,7 @@ VALIDACIONES = (
 # no se ejecuta PROC_DAT_486, decisión 19/11)
 CYBER_CAMPOS = [
     ("ESTATUS", "d.DMACRC2", "Estatus de la cuenta en CYBER (DELQMST.DMACRC2, la misma tabla donde se validan los saldos)"),
-    ("ABAN_SR", "r.ABAN_SR", "Días desde la última gestión de usuario que empieza con 1 o a, como lo dejó PROC_DAT_486 en RPT_DAT_486_1 la última vez que se corrió en CYBER"),
+    ("ABAN_SR", "r.ABAN_SR", "Días desde la última gestión de usuario que empieza con 1 o a. r = CYBER_TABLA_ABANDONO (de fábrica RPT_DAT_486_1, como la dejó PROC_DAT_486 la última vez que se corrió en CYBER)"),
     ("ABAN_CR", "r.ABAN_CR", "Días desde la última gestión de usuario que empieza con z (RPT_DAT_486_1)"),
     ("SDO_CYBER", "d.DMCURBAL", "Saldo actual en CYBER (DELQMST.DMCURBAL)"),
 ]
@@ -586,6 +586,8 @@ VISTAS = [
 
 PARAMETROS = [
     ("PREFIJO_CUENTA2", "486-", "Prefijo de la cuenta en CYBER"),
+    ("CYBER_TABLA_ABANDONO", "RCVRY.RPT_DAT_486_1", "Tabla de CYBER de donde las vistas toman ABAN_SR y ABAN_CR (alias r de cfg.CYBER_CAMPO; 19/11: RPT_DAT_486_1 tal como la dejó PROC_DAT_486, sin ejecutarlo). Para tomarlos de otra tabla, cambiar este parámetro y CYBER_LLAVE_ABANDONO"),
+    ("CYBER_LLAVE_ABANDONO", "CUENTA", "Columna de CYBER_TABLA_ABANDONO con la cuenta (486-folio) que se cruza con DELQMST.DMACCT"),
     ("VISTAS_USUARIO", "1", "1 (18/11) = al terminar la actualización y la asignación, y cuando suben los saldos, se bajan de CYBER los campos de las vistas (directo de DELQMST y RPT_DAT_486_1, sin ejecutar el store desde el 19/11) y se arma la tabla de cada usuario (cfg.VISTA_USUARIO: AEM, MIS); 0 = no se actualizan"),
     ("VALIDAR_LAYOUT", "1", "1 (17/11) = si a un archivo le falta cualquier campo que toma el proceso (cfg.ARCHIVO_COLUMNA, obligatorio u opcional), la corrida se detiene antes de tocar el DAT y se avisa al equipo de asignaciones (VALIDACION_ENTRADA_486); 0 = como antes: solo los obligatorios detienen"),
     ("VALIDAR_DATOS", "1", "1 (17/11) = cada archivo se revisa con las reglas de cfg.VALIDACION_DATO (importes, teléfonos, correos, catálogos, cuentas repetidas, volumen); si una supera su tolerancia, la corrida se detiene antes de tocar el DAT y se avisa (VALIDACION_ENTRADA_486); 0 = no se revisan"),

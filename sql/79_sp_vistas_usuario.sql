@@ -71,12 +71,18 @@ BEGIN
            @expr = STRING_AGG(CAST(EXPRESION + N' as ' + CAMPO AS NVARCHAR(MAX)), N', ') WITHIN GROUP (ORDER BY CAMPO)
     FROM #c;
 
-    /* Alias que pueden usar las expresiones: d = DELQMST (cuentas activas del cliente), u = UDA1 y r = RPT_DAT_486_1 tal
-       como esté en CYBER (decisión 19/11: no se ejecuta PROC_DAT_486; sus datos son los de la última vez que se corrió allá) */
+    /* Alias que pueden usar las expresiones: d = DELQMST (cuentas activas del cliente), u = UDA1 y r = la tabla de abandono
+       (ABAN_SR, ABAN_CR), tal como esté en CYBER (decisión 19/11: no se ejecuta PROC_DAT_486). La tabla r y su columna de
+       cuenta son parámetros (CYBER_TABLA_ABANDONO, CYBER_LLAVE_ABANDONO; de fábrica RCVRY.RPT_DAT_486_1 y CUENTA): para
+       tomar ABAN_SR de otra tabla basta cambiarlos (y, si la columna se llama distinto, la EXPRESION en cfg.CYBER_CAMPO) */
+    DECLARE @tab_r NVARCHAR(128) = ISNULL(NULLIF(LTRIM(RTRIM(cfg.fn_param(@cliente, 'CYBER_TABLA_ABANDONO'))), N''), N'RCVRY.RPT_DAT_486_1'),
+            @llave_r NVARCHAR(128) = ISNULL(NULLIF(LTRIM(RTRIM(cfg.fn_param(@cliente, 'CYBER_LLAVE_ABANDONO'))), N''), N'CUENTA');
+    IF @tab_r LIKE N'%[^A-Za-z0-9_.]%' OR @llave_r LIKE N'%[^A-Za-z0-9_]%'
+        THROW 50831, 'CYBER_TABLA_ABANDONO (esquema.tabla) o CYBER_LLAVE_ABANDONO (columna) con caracteres inválidos.', 1;
     IF EXISTS (SELECT 1 FROM #c WHERE EXPRESION LIKE N'u.%' OR EXPRESION LIKE N'%[^A-Za-z0-9_]u.%')
         SET @joins += N' left join RCVRY.uda1 u on u.u1acct = d.dmacct';
     IF EXISTS (SELECT 1 FROM #c WHERE EXPRESION LIKE N'r.%' OR EXPRESION LIKE N'%[^A-Za-z0-9_]r.%')
-        SET @joins += N' left join RCVRY.rpt_dat_486_1 r on r.cuenta = d.dmacct';
+        SET @joins += N' left join ' + @tab_r + N' r on r.' + @llave_r + N' = d.dmacct';
     SET @q = N'select d.dmacct, ' + @expr + N' from RCVRY.delqmst d' + @joins
            + N' where d.dmacctg = ''1'' and d.dmcompany = ''' + @cliente + N''' and d.dmstatus is null';
     SET @consulta = @q;

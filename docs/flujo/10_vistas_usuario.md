@@ -27,7 +27,7 @@ Cada usuario tiene **su propio esquema** (el nombre de la vista en minúsculas: 
 | ORIGEN | CAMPO es | Ejemplo |
 |---|---|---|
 | `DAT` | Columna de `dat.DAT_486` | `CUENTA` ← `CUENTA2`; `ETIQUETA03` ← `TIPO` |
-| `CYBER` | Un campo de `cfg.CYBER_CAMPO`: columna de `DELQMST` (d), `UDA1` (u) o `RPT_DAT_486_1` (r) | `ESTATUS_CYBER` ← `ESTATUS` (`d.DMACRC2`); `ABANDONO_SR` ← `ABAN_SR` (`r.ABAN_SR`) |
+| `CYBER` | Un campo de `cfg.CYBER_CAMPO`: columna de `DELQMST` (d), `UDA1` (u) o la tabla de abandono (r: `CYBER_TABLA_ABANDONO`, de fábrica `RPT_DAT_486_1`) | `ESTATUS_CYBER` ← `ESTATUS` (`d.DMACRC2`); `ABANDONO_SR` ← `ABAN_SR` (`r.ABAN_SR`) |
 | `MAESTRA` | Encabezado de la base maestra, tal como lo manda el banco | Cualquier columna de la base de TDC, Consumo o Hipotecario |
 | `CONSTANTE` | Valor fijo (si es un número, va como número) | `GRUPO` ← `1` |
 
@@ -76,7 +76,17 @@ Si el login ya existe, solo cambia la contraseña. Para dar de baja a un usuario
 
 **Bitácora:** `DAT CYBER` (cuántas cuentas bajaron), `VISTA USUARIO` (una por usuario, con sus avisos), `VISTAS USUARIO` o `VISTAS USUARIO SALDOS`.
 
-**Parámetros:** `VISTAS_USUARIO` (1 de fábrica). Campos de CYBER: `cfg.CYBER_CAMPO`.
+**Parámetros:** `VISTAS_USUARIO` (1 de fábrica); `CYBER_TABLA_ABANDONO` y `CYBER_LLAVE_ABANDONO` (tabla de CYBER de ABAN_SR / ABAN_CR y su columna con la cuenta; de fábrica `RCVRY.RPT_DAT_486_1` y `CUENTA`). Campos de CYBER: `cfg.CYBER_CAMPO`.
+
+**Para tomar ABAN_SR de otra tabla** (si CYBER deja de llenar `RPT_DAT_486_1`): no hay que cambiar código.
+
+```sql
+USE [BNABAJ_486];
+UPDATE cfg.PARAMETRO SET VALOR = 'RCVRY.OTRA_TABLA' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_TABLA_ABANDONO';   -- tabla (esquema.tabla)
+UPDATE cfg.PARAMETRO SET VALOR = 'CUENTA'           WHERE CLIENTE = '486' AND CLAVE = 'CYBER_LLAVE_ABANDONO';   -- su columna con la cuenta 486-folio
+UPDATE cfg.CYBER_CAMPO SET EXPRESION = 'r.ABAN_SR'  WHERE CAMPO = 'ABAN_SR';                                    -- solo si la columna se llama distinto
+EXEC ops.sp_dat_cyber_bajar @id_corrida = <última corrida OK>, @solo_mostrar = 1;                               -- ver la consulta que se manda a Oracle
+```
 
 **Permisos en Oracle** del usuario de `CYBER_ORACLE`: `SELECT` en `RCVRY.DELQMST`, `RCVRY.RPT_DAT_486_1` y, si algún campo la usa, `RCVRY.UDA1`. Ya no necesita `EXECUTE` en `PROC_DAT_486`.
 

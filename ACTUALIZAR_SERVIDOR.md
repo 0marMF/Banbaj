@@ -82,6 +82,20 @@ Si ya tienes la versión del 19/11 (o la de la noche del 19/11), esto es lo que 
 - **Validaciones nuevas que paran:** riesgo repetido en los saldos o entre segmentos, riesgo con letras o de más de 20 dígitos, archivo idéntico al de un día anterior y saldos que no cruzan con el DAT. **Avisos sin parar:** riesgo con otro RFC, cambio de segmento y pagos repetidos.
 - **Una asignación por segmento:** si el otro segmento llega más tarde, el job corre otra asignación solo con él; el arribo sigue cada asignación del día.
 - **Pruebas de entorno:** `sql/85_sp_pruebas_entorno.sql` y la carpeta `pruebas_entorno/`.
+- **Tabla de ABAN_SR por parámetro:** las vistas toman ABAN_SR / ABAN_CR de `CYBER_TABLA_ABANDONO` (de fábrica `RCVRY.RPT_DAT_486_1`), cruzando por `CYBER_LLAVE_ABANDONO` (`CUENTA`). Si después hay que apuntarla a otra tabla, se cambian esos dos parámetros (y la `EXPRESION` de `cfg.CYBER_CAMPO` si la columna se llama distinto); no hay que tocar código:
+
+```sql
+USE [BNABAJ_486];
+UPDATE cfg.PARAMETRO SET VALOR = 'RCVRY.OTRA_TABLA' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_TABLA_ABANDONO';   -- tabla (esquema.tabla)
+UPDATE cfg.PARAMETRO SET VALOR = 'CUENTA'           WHERE CLIENTE = '486' AND CLAVE = 'CYBER_LLAVE_ABANDONO';   -- su columna con la cuenta 486-folio
+UPDATE cfg.CYBER_CAMPO SET EXPRESION = 'r.ABAN_SR'  WHERE CAMPO = 'ABAN_SR';                                    -- solo si la columna se llama distinto
+EXEC ops.sp_dat_cyber_bajar @id_corrida = <última corrida OK>, @solo_mostrar = 1;                               -- ver la consulta que se manda a Oracle
+```
+
+- **Lo que necesita el DBA de CYBER** (sin esto todo sigue funcionando en modo `ACTUAL`):
+  - instalar `cyber/486/oracle/JSP_TELEFONOS_DEPURA_486.sql`: crea la tabla `RCVRY.JSP_TAB_TEL_DEPURA_486` (los cambios que manda Banbaj: I = inactivar, A = activar, N = nuevo) y el store, que revisa que estén completos, inactiva y activa sin tocar gestores de queja, llena `JSP_VALIDADOR_TELEFONOS` y anota cada etapa en `RPT_LOG_CYBER` con la bandera 416;
+  - los `GRANT` del encabezado del archivo, `SELECT` en `RCVRY.PHONE` (la foto) y, si cambia la tabla de abandono, `SELECT` en la nueva;
+  - después: `UPDATE cfg.PARAMETRO SET VALOR = 'DIFERENCIA' WHERE CLIENTE = '486' AND CLAVE = 'TEL_DEPURACION';`
 
 Como cambian muchos scripts, corre **todos** los de `sql/`:
 

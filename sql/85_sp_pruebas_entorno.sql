@@ -154,7 +154,7 @@ BEGIN
         (N'PHONE_G1 (arribo del SCBTEL)', CONCAT(N'select count(*) from RCVRY.phone_g1 where phacctg = ''1'' and phacct like ''', @cliente, N'-%''')),
         (N'ADDRESS (correos)', CONCAT(N'select count(*) from RCVRY.address a join RCVRY.delqmst d on d.dmacctg = a.adacctg and d.dmacct = a.adacct where d.dmacctg = ''1'' and d.dmcompany = ''', @cliente, N''' and d.dmstatus is null')),
         (N'UDA1 (vistas, pago mínimo)', N'select count(*) from RCVRY.uda1 where rownum <= 1'),
-        (N'RPT_DAT_486_1 (ABAN_SR de las vistas)', N'select count(*) from RCVRY.rpt_dat_486_1'),
+        (N'Tabla de abandono (ABAN_SR de las vistas, CYBER_TABLA_ABANDONO)', CONCAT(N'select count(*) from ', ISNULL(NULLIF(cfg.fn_param(@cliente, 'CYBER_TABLA_ABANDONO'), N''), N'RCVRY.RPT_DAT_486_1'))),
         (N'PHNVAL (ladas válidas)', CONCAT(N'select count(*) from ', ISNULL(NULLIF(cfg.fn_param(@cliente, 'CYBER_TABLA_LADAS'), N''), N'RCVRY.PHNVAL'))),
         (N'RPT_LOG_CYBER_REG: bandera de correos y teléfonos (1 = encendida)', CONCAT(N'select nvl(max(status), -1) from RCVRY.rpt_log_cyber_reg where id_proc = ', ISNULL(NULLIF(cfg.fn_param(@cliente, 'CYBER_BANDERA_TELEFONOS'), N''), N'416'))),
         (N'JSP_TAB_TEL_REMESA_486 (remesa de teléfonos)', N'select count(*) from RCVRY.jsp_tab_tel_remesa_486'),

@@ -1696,6 +1696,18 @@ SET @rs = CONCAT(CASE WHEN @q LIKE N'select d.dmacct, r.ABAN_SR as ABAN_SR, d.DM
                  CASE WHEN @q LIKE N'%actfil%' OR @q LIKE N'%PROC_DAT%' OR @q LIKE N'%uda1%' THEN 1 ELSE 0 END);
 IF @rs NOT LIKE N'1|%' PRINT CONCAT(N'CONSULTA: ', @q);
 EXEC pru.sp_igual N'VISTAS: ESTATUS sale de DELQMST.DMACRC2 y ABAN_SR de RPT_DAT_486_1 (sin store, sin ACTFIL)', N'1|0', @rs;
+/* La tabla de ABAN_SR es un parámetro (por si después se toma de otra) */
+UPDATE cfg.PARAMETRO SET VALOR = 'RCVRY.OTRA_TABLA' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_TABLA_ABANDONO';
+UPDATE cfg.PARAMETRO SET VALOR = 'DMACCT' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_LLAVE_ABANDONO';
+EXEC ops.sp_dat_cyber_bajar @idv, @sin_bajar = 1, @solo_mostrar = 1, @consulta = @q OUTPUT;
+SET @rs = CASE WHEN @q LIKE N'%left join RCVRY.OTRA_TABLA r on r.DMACCT = d.dmacct%' THEN N'1' ELSE N'0' END;
+UPDATE cfg.PARAMETRO SET VALOR = 'RCVRY.X;drop' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_TABLA_ABANDONO';
+SET @err = NULL;
+BEGIN TRY EXEC ops.sp_dat_cyber_bajar @idv, @sin_bajar = 1, @solo_mostrar = 1, @consulta = @q OUTPUT; END TRY BEGIN CATCH SET @err = CAST(ERROR_NUMBER() AS NVARCHAR(10)); END CATCH;
+SET @rs = CONCAT(@rs, '|', @err);
+UPDATE cfg.PARAMETRO SET VALOR = 'RCVRY.RPT_DAT_486_1' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_TABLA_ABANDONO';
+UPDATE cfg.PARAMETRO SET VALOR = 'CUENTA' WHERE CLIENTE = '486' AND CLAVE = 'CYBER_LLAVE_ABANDONO';
+EXEC pru.sp_igual N'VISTAS: la tabla y la columna de cuenta de ABAN_SR se cambian por parámetro (y se validan)', N'1|50831', @rs;
 SET @err = NULL;
 BEGIN TRY EXEC cfg.sp_vista_columna_alta 'MIS', N'X_CYBER', 'CYBER', N'NO_EXISTE'; END TRY BEGIN CATCH SET @err = CAST(ERROR_NUMBER() AS NVARCHAR(10)); END CATCH;
 EXEC pru.sp_igual N'VISTAS: un campo de CYBER que no está en cfg.CYBER_CAMPO no se puede dar de alta', N'50838', @err;
