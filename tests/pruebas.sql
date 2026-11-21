@@ -877,7 +877,10 @@ DECLARE @sin_c2 INT = (SELECT COUNT(*) FROM dat.PAGO_ARRIBADO WHERE ID_CORRIDA =
 INSERT INTO stg.CYBER_PAGO (CUENTA, MONTO, FECHA)
 SELECT CUENTA2, CONVERT(VARCHAR(30), IMPORTE), '03/11/2026' FROM dat.PAGO_ARRIBADO WHERE ID_CORRIDA = @pc AND ORIGEN = 'CORRIDA' AND ID <> @falta
 UNION ALL SELECT '486-999999', '10.00', '03/11/2026';
-EXEC ops.sp_cuadrar_pagos @pc;
+IF @pc IS NULL
+    INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) VALUES (N'PAGOS: hay pagos arribados para el cuadre', 0, N'No hay pagos de ninguna actualización (¿falló la actualización?)');
+ELSE
+    EXEC ops.sp_cuadrar_pagos @pc;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
 FROM (SELECT N'PAGOS: cuadre contra CYBER detecta el que no subió' AS p,
              CONCAT(1 + @sin_c2, '|AVISO|1|0') AS e,
