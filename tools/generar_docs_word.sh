@@ -20,4 +20,8 @@ pandoc docs/MANUAL_TECNICO_ASIGNACIONES_486.md -f markdown --resource-path=docs 
 pandoc docs/flujo/README.md docs/flujo/[0-9]*.md -f markdown --resource-path=docs/flujo --lua-filter=tools/ajustar_imagenes.lua --reference-doc=tools/plantilla_word.docx \
   --toc --toc-depth=1 -M toc-title=Contenido -M lang=es-MX -s \
   -o "docs/Flujo y diagramas Banbaj 486.docx"
+# Guía de pruebas de entorno (ruta de los archivos del banco y los 8 scripts)
+pandoc pruebas_entorno/GUIA_PRUEBAS_ENTORNO.md -f markdown --reference-doc=tools/plantilla_word.docx \
+  --toc --toc-depth=2 -M toc-title=Contenido -M lang=es-MX -s \
+  -o "pruebas_entorno/Guia de pruebas de entorno Banbaj 486.docx"
 echo "Listo: docs/*.docx"

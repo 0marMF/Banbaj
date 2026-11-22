@@ -1,5 +1,7 @@
 # Pruebas de entorno (antes de producción)
 
+Guía en Word (dónde dejar los archivos del banco y cada paso): `Guia de pruebas de entorno Banbaj 486.docx`.
+
 Scripts para probar en el servidor que todo lo de afuera responde antes de prender el job: CYBER, correo, carpetas del banco, lectura de archivos y una asignación completa que después se revierte. Se corren en SSMS, en orden, sobre `BNABAJ_486`, con los scripts de `sql/` ya instalados (incluido `sql/85_sp_pruebas_entorno.sql`).
 
 | # | Script | Qué prueba | ¿Toca algo? |
