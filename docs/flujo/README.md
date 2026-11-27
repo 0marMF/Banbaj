@@ -24,6 +24,7 @@ Cada diagrama tiene tres partes:
 | 08 | [Migración](08_migracion.md) | De los DBF de FoxPro a las tablas de Banbaj |
 | 09 | [Validación de la entrada](09_validacion_entrada.md) | Layout y datos de cada archivo antes de tocar el DAT; layout y etiquetas editables por el equipo |
 | 10 | [Vistas de usuarios](10_vistas_usuario.md) | Qué ve cada usuario externo (AEM, MIS), de dónde sale cada columna y cuándo se actualiza |
+| 11 | [Pruebas de entorno](11_pruebas_entorno.md) | Los 8 pasos antes de producción y cómo se asegura que el paso 7 revierta todo |
 
 # Cómo modificar un flujo con Claude Code
 

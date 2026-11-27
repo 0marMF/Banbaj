@@ -26,7 +26,7 @@ Cada usuario tiene **su propio esquema** (el nombre de la vista en minúsculas: 
 
 | ORIGEN | CAMPO es | Ejemplo |
 |---|---|---|
-| `DAT` | Columna de `dat.DAT_486` | `CUENTA` ← `CUENTA2`; `ETIQUETA03` ← `TIPO` |
+| `DAT` | Columna de `dat.DAT_486` | `CUENTA` ← `CUENTA2`; `ETIQUETA03` ← `TIPO`; `ETIQUETA06` ← `ETIQUETA6` (el REE, 26/11) |
 | `CYBER` | Un campo de `cfg.CYBER_CAMPO`: columna de `DELQMST` (d), `UDA1` (u) o la tabla de abandono (r: `CYBER_TABLA_ABANDONO`, de fábrica `RPT_DAT_486_1`) | `ESTATUS_CYBER` ← `ESTATUS` (`d.DMACRC2`); `ABANDONO_SR` ← `ABAN_SR` (`r.ABAN_SR`) |
 | `MAESTRA` | Encabezado de la base maestra, tal como lo manda el banco | Cualquier columna de la base de TDC, Consumo o Hipotecario |
 | `CONSTANTE` | Valor fijo (si es un número, va como número) | `GRUPO` ← `1` |

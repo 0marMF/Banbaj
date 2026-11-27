@@ -68,6 +68,7 @@ def sql_dat(dat):
         "    CTA_BANCO       VARCHAR(20)  NULL",
     ]
     vista = ", ".join("d.CUENTA2 AS CUENTA" if c == "CUENTA" else "ISNULL(d.CTA_BANCO, d.CUENTA) AS CUENTA3" if c == "CUENTA3" else f"d.{c}" for c, _, _ in dat)
+    vista += ", d.ETIQUETA6"   # 26/11: el REE va en el DAT de MIS (al final, para no mover las columnas que ya lee)
     return f"""USE [BNABAJ_486];   -- base del 486 (si la instalas con otro nombre, cámbialo aquí)
 GO
 /* =====================================================================
@@ -589,6 +590,7 @@ VISTAS = [
         ("SALDO01", "DAT", "SALDO1"),
         ("SALDO02", "DAT", "SALDO2"),
         ("SALDO03", "DAT", "SALDO3"),
+        ("ETIQUETA06", "DAT", "ETIQUETA6"),   # 26/11: el REE (U1EXT2), en el DAT que ve AEM
     ]),
     ("MIS", 0, 0, "Equipo de MIS: usa datos de las bases maestras que no están en el DAT. El equipo de asignaciones agrega sus columnas (cfg.sp_vista_columna_alta) y la activa", []),
 ]
@@ -1171,7 +1173,7 @@ def main():
     for cod, campo, tipo_v, valor, pct, desc in VALIDACIONES:
         assert cod in campos and (campo == "*" or campo in campos[cod]), f"validación sobre un campo que no existe: {cod}.{campo}"
         assert tipo_v != "CATALOGO" or valor in cats, f"validación con un catálogo que no existe: {valor}"
-    cols_dat = {c[0] for c in dat}
+    cols_dat = {c[0] for c in dat} | {"ETIQUETA6", "CTA_BANCO", "ID_CORRIDA_ALTA", "ID_CORRIDA_ULT", "FE_ULT_ACT"}   # las que se agregan al final
     for vista, ret, act, desc, cols in VISTAS:
         for enc, origen, campo in cols:
             assert origen in ("DAT", "CYBER", "MAESTRA", "CONSTANTE"), f"vista {vista}: origen inválido {origen}"

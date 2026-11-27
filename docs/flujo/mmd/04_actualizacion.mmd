@@ -11,11 +11,11 @@ flowchart LR
         A5["ops.sp_validar RETIRO<br/>→ ops.DEVOLUCION"] --> A6["ops.sp_retiro_decidir<br/>tope 50 % por segmento"]
         A6 --> A7["ops.sp_act_aplicar<br/>saldos al DAT + scripts<br/>ACT_SALDOS, ACT_VENCIDO, ACT_PAGMIN"]
         A7 --> A8["ops.sp_act_pagos<br/>dat.PAGO_ARRIBADO"]
-        A8 --> A9["ops.sp_homologar dat.DAT_486<br/>ops.sp_retiro (si se decidió)"]
+        A8 --> A9["ops.sp_homologar dat.DAT_486<br/>ops.sp_etiqueta6_blanqueo (tramo)<br/>ops.sp_retiro (si se decidió)"]
     end
     subgraph F3["3 · Salidas"]
         direction TB
-        A10["ops.sp_act_script_pvs_ree<br/>script ACT_PVS_REE"] --> A11["ops.sp_generar_salidas 'ACT'<br/>SCBPAG"]
+        A10["ops.sp_act_script_pvs_ree<br/>script ACT_PVS_REE<br/>+ u1ext2 = '' de los blanqueados"] --> A11["ops.sp_generar_salidas 'ACT'<br/>SCBPAG"]
         A11 --> A12["ops.sp_corrida_finalizar OK"]
     end
     subgraph F4["4 · Al terminar OK (fuera de la corrida)"]

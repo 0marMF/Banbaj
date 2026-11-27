@@ -2011,7 +2011,10 @@ EXEC ops.sp_prueba_modo @activar = 0;
 EXEC ops.sp_corrida_iniciar '486', 'ACT', '2026-11-27', NULL, @cn OUTPUT;
 UPDATE ops.CORRIDA SET ESTATUS = 'CANCELADA', FIN = SYSDATETIME() WHERE ID_CORRIDA = @cn;
 SET @rs = CONCAT(@rs, (SELECT COUNT(*) FROM ops.PRUEBA_CORRIDA WHERE ID_CORRIDA = @cn));
-EXEC pru.sp_igual N'PRUEBA ENTORNO: con el modo de prueba encendido la corrida queda anotada al iniciar; con el modo apagado no', N'ACT|0', @rs;
+SET @res = NULL;
+BEGIN TRY EXEC ops.sp_prueba_revertir @confirmar = 0, @anotar_corrida = -1; END TRY BEGIN CATCH SET @res = CAST(ERROR_NUMBER() AS NVARCHAR(10)); END CATCH;
+SET @rs = CONCAT(@rs, '|', @res);
+EXEC pru.sp_igual N'PRUEBA ENTORNO: con el modo de prueba encendido la corrida queda anotada al iniciar; con el modo apagado no; @anotar_corrida inválida 50856', N'ACT|0|50856', @rs;
 GO
 
 /* ---------------------------------------------------------------------

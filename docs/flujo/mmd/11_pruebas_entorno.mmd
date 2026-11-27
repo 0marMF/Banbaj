@@ -1,0 +1,25 @@
+flowchart LR
+    P0(["Archivos del banco en la carpeta del día<br/>Q:\CYBER\C_486\año\mes\día\"]) --> P1
+    subgraph A["Antes de tocar el DAT"]
+        direction TB
+        P1["01 · ops.sp_prueba_modo @activar = 1<br/>correos solo a ti · CYBER solo lectura<br/>salidas a C:\BANBAJ\486\PRUEBA\ · jobs apagados<br/>ops.PRUEBA_PARAM guarda lo de antes"]
+        P1 --> P2["02 · ops.sp_prueba_cyber<br/>servidor vinculado, tablas, bajadas"]
+        P2 --> P3["03 · ops.sp_prueba_correo<br/>Database Mail y plantillas"]
+        P3 --> P4["04 · ops.sp_prueba_archivos<br/>carpeta del día y patrones"]
+        P4 --> P5["05 · ops.sp_prueba_lectura<br/>layout y reglas · corrida PRUEBA cancelada"]
+    end
+    subgraph B["Toca el DAT (se revierte)"]
+        direction TB
+        P6["06 · ops.sp_prueba_asignacion<br/>actualización y asignación reales"]
+        P6 --> V1{{"ops.sp_corrida_iniciar<br/>¿modo de prueba encendido?"}}
+        V1 -- sí --> V2["anota la corrida en ops.PRUEBA_CORRIDA<br/>al empezar (26/11)"]
+        V2 --> V3{"¿El paso 6 terminó?"}
+        V3 -- "sí" --> P7
+        V3 -- "no (se cortó)" --> V4["revisa: corridas del día, bitácora,<br/>EN_PROCESO → ops.sp_corrida_finalizar 'ERROR'"]
+        V4 --> P7
+        P7["07 · ops.sp_prueba_revertir<br/>@confirmar = 0 → lista: anotadas + ACT/ASIG que<br/>arrancaron con el modo encendido + @anotar_corrida<br/>@confirmar = 1 → ops.sp_revertir_corrida de cada una"]
+    end
+    P5 --> P6
+    P7 --> P8["08 · ops.sp_prueba_modo @activar = 0<br/>repone parámetros y jobs"]
+    P8 --> P9["Borrar C:\BANBAJ\486\PRUEBA\"]
+    P9 --> P10(["Ya en producción:<br/>sql/instalacion/06_limpiar_pruebas.sql"])

@@ -11,10 +11,11 @@ flowchart LR
     subgraph F2["2 · Devoluciones y altas"]
         direction TB
         A5["ops.sp_asig_devolucion<br/>DAT que no vino → ops.DEVOLUCION"] --> A6["ops.sp_retiro_decidir<br/>tope 50 % por segmento"]
-        A6 --> A7["ops.sp_asig_existentes"]
+        A6 --> A7["ops.sp_asig_existentes<br/>ETIQUETA6 sin leyenda → blanqueo BASE"]
         A7 --> A8["ops.sp_telefonos_refrescar_cyber<br/>ops.sp_asig_normalizar_telefonos"]
         A8 --> A9["ops.sp_validar PRE_ALTA<br/>ops.sp_asig_alta: NVA y REA"]
-        A9 --> A10["ops.sp_retiro<br/>(si se decidió)"]
+        A9 --> A9b["ops.sp_etiqueta6_blanqueo<br/>tramo (SEG) no elegible → REE fuera"]
+        A9b --> A10["ops.sp_retiro<br/>(si se decidió)"]
     end
     subgraph F3["3 · Salidas"]
         direction TB

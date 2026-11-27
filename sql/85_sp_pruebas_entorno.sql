@@ -466,18 +466,43 @@ GO
    @confirmar = 0 solo muestra qué revertiría.
    --------------------------------------------------------------------- */
 CREATE OR ALTER PROCEDURE ops.sp_prueba_revertir
-    @confirmar BIT = 0
+    @confirmar      BIT = 0,
+    @anotar_corrida INT = NULL      -- 26/11: una corrida de la prueba que no quedó anotada (ej. el paso 6 se cortó)
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @id INT, @est VARCHAR(15), @auto BIT;
-    SELECT p.ID_CORRIDA, p.PROCESO, c.FECHA_PROCESO, c.ESTATUS, c.REVERTIDA_AUTO
-    FROM ops.PRUEBA_CORRIDA p JOIN ops.CORRIDA c ON c.ID_CORRIDA = p.ID_CORRIDA ORDER BY p.ID_CORRIDA DESC;
+    DECLARE @id INT, @est VARCHAR(15), @auto BIT, @desde DATETIME2(0) = (SELECT MIN(FECHA) FROM ops.PRUEBA_PARAM WHERE CLIENTE = '486');
+
+    /* Corridas de la prueba: las anotadas, las ACT/ASIG que arrancaron con el modo de prueba encendido
+       y no se anotaron (versiones anteriores al 26/11 o un corte del paso 6) y la que se indique a mano */
+    SELECT c.ID_CORRIDA, c.PROCESO, c.FECHA_PROCESO, c.INICIO, c.ESTATUS, c.REVERTIDA_AUTO,
+           CASE WHEN p.ID_CORRIDA IS NOT NULL THEN N'anotada'
+                WHEN c.ID_CORRIDA = @anotar_corrida THEN N'se agrega (@anotar_corrida)'
+                ELSE N'se agrega (arrancó con el modo de prueba encendido)' END AS ORIGEN
+    INTO #pc
+    FROM ops.CORRIDA c
+    LEFT JOIN ops.PRUEBA_CORRIDA p ON p.ID_CORRIDA = c.ID_CORRIDA
+    WHERE c.CLIENTE = '486'
+      AND (p.ID_CORRIDA IS NOT NULL
+           OR c.ID_CORRIDA = @anotar_corrida
+           OR (@desde IS NOT NULL AND c.PROCESO IN ('ACT', 'ASIG') AND c.INICIO >= @desde));
+    IF @anotar_corrida IS NOT NULL AND NOT EXISTS (SELECT 1 FROM #pc WHERE ID_CORRIDA = @anotar_corrida AND PROCESO IN ('ACT', 'ASIG'))
+        THROW 50856, '@anotar_corrida no es una actualización ni una asignación del 486.', 1;
+
+    SELECT ID_CORRIDA, PROCESO, FECHA_PROCESO, INICIO, ESTATUS, REVERTIDA_AUTO, ORIGEN FROM #pc ORDER BY ID_CORRIDA DESC;
+    IF EXISTS (SELECT 1 FROM #pc WHERE ESTATUS = 'EN_PROCESO')
+        SELECT N'AVISO' AS RESULTADO, N'Hay corridas EN_PROCESO (se cortaron): ciérralas con EXEC ops.sp_corrida_finalizar <corrida>, ''ERROR''; antes de revertir.' AS NOTA;
     IF @confirmar = 0
     BEGIN
         PRINT 'Vista previa: ejecuta con @confirmar = 1 para revertir estas corridas.';
         RETURN;
     END;
+    IF EXISTS (SELECT 1 FROM #pc WHERE ESTATUS = 'EN_PROCESO')
+        THROW 50857, 'Hay corridas de la prueba EN_PROCESO: ciérralas con ops.sp_corrida_finalizar antes de revertir. No se revirtió nada.', 1;
+
+    INSERT INTO ops.PRUEBA_CORRIDA (ID_CORRIDA, PROCESO)
+    SELECT ID_CORRIDA, PROCESO FROM #pc x WHERE NOT EXISTS (SELECT 1 FROM ops.PRUEBA_CORRIDA p WHERE p.ID_CORRIDA = x.ID_CORRIDA);
+
     DECLARE cr CURSOR LOCAL FAST_FORWARD FOR
         SELECT p.ID_CORRIDA, c.ESTATUS, c.REVERTIDA_AUTO FROM ops.PRUEBA_CORRIDA p JOIN ops.CORRIDA c ON c.ID_CORRIDA = p.ID_CORRIDA ORDER BY p.ID_CORRIDA DESC;
     OPEN cr; FETCH NEXT FROM cr INTO @id, @est, @auto;

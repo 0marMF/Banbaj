@@ -192,7 +192,9 @@ Qué revisar: si algo dice "DETENDRÍA LA CORRIDA", corrígelo antes del paso 6:
 
 Corre la actualización (si ese día no hay una OK) y la asignación de la fecha con los archivos reales. CYBER no se toca, los correos llegan solo a ti y los archivos quedan en la carpeta de prueba. Muestra un resumen por corrida (solo conteos).
 
-Qué revisar: estatus OK, altas NVA y REA, retiros, líneas de cada archivo, scripts de CYBER armados y correos recibidos.
+Qué revisar: estatus OK, altas NVA y REA, retiros, líneas de cada archivo, scripts de CYBER armados, correos recibidos y que todas las corridas digan `SI` en `ANOTADA_PARA_REVERTIR`.
+
+Si el script se corta (por ejemplo con "A severe error occurred"), el mismo script trae, comentadas, las consultas para guardar qué pasó: corridas del día, bitácora, correos y el log de errores de SQL Server. No apagues el modo de prueba: sigue con el paso 7.
 
 Si llegó solo un segmento, puedes probar el segundo: deja su base en la carpeta y vuelve a correr `EXEC ops.sp_prueba_asignacion @fecha = @fecha;` (hace otra asignación solo con ese segmento).
 
@@ -216,7 +218,11 @@ EXEC ops.sp_prueba_revertir @confirmar = 0;
 -- EXEC ops.sp_prueba_revertir @confirmar = 1;
 ```
 
-Con el modo de prueba encendido, cada actualización o asignación queda anotada desde que empieza. Así el paso 7 la revierte aunque el paso 6 se haya cortado con un error.
+**Validación (26/11):** con el modo de prueba encendido, cada actualización o asignación queda anotada desde que empieza. Al final del paso 6 sale la lista de corridas del día con la columna `ANOTADA_PARA_REVERTIR`. La lista del paso 7 trae también las que arrancaron con el modo encendido aunque no estén anotadas (columna `ORIGEN`). Antes de confirmar, revisa que estén todas las del paso 6. Si falta una, agrégala con `@anotar_corrida = <corrida>`. Si una quedó `EN_PROCESO` porque el paso 6 se cortó, ciérrala primero:
+
+```sql
+EXEC ops.sp_corrida_finalizar <corrida>, 'ERROR', N'Se cortó en la prueba de entorno';
+```
 
 Si ese día ya había una actualización OK antes de la prueba, el paso 6 la usó y esta no se revierte.
 
