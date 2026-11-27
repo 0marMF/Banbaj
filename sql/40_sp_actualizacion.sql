@@ -245,6 +245,7 @@ GO
    arribar el SCBSDOS completo cada día:
      PVS (días de mora; en la actualización cambia fuera de TDC) -> U1ARCOD1
      REE (estructura.prg)                                         -> U1ARCOD3
+     ETIQUETA6 blanqueada por tramo (23/11, ops.sp_etiqueta6_blanqueo) -> U1EXT2 = ''
    Mismo formato que el SCBSDOS: ALLTRIM del valor. Va para todas las cuentas
    que quedan en el DAT después del retiro (el REE se recalcula para todas).
    Confirmado (30/10): U1ARCOD1 y U1ARCOD3 son columnas de RCVRY.uda1.
@@ -264,9 +265,19 @@ BEGIN
     FROM dat.DAT_486 d
     WHERE d.CLIENTE = @cliente AND d.CUENTA2 IS NOT NULL;
     SET @n = @@ROWCOUNT;
+    /* Blanqueo de ETIQUETA6 por tramo (23/11): solo las cuentas que lo perdieron en esta corrida y siguen en el DAT */
+    DECLARE @b INT;
+    INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
+    SELECT @id_corrida, 'ACT_PVS_REE', @n + ROW_NUMBER() OVER (ORDER BY d.CUENTA2),
+           CONCAT(N'update RCVRY.uda1 set u1ext2='''' Where u1acct=''', d.CUENTA2, N''';')
+    FROM dat.DAT_486 d
+    WHERE d.CLIENTE = @cliente AND d.CUENTA2 IS NOT NULL
+      AND EXISTS (SELECT 1 FROM ops.ETIQUETA6_BLANQUEO b WHERE b.ID_CORRIDA = @id_corrida AND b.TIPO = 'TRAMO' AND b.CUENTA = d.CUENTA);
+    SET @b = @@ROWCOUNT;
+    SET @n += @b;
     INSERT INTO ops.CYBER_SCRIPT (ID_CORRIDA, SCRIPT, NUM, SENTENCIA)
     VALUES (@id_corrida, 'ACT_PVS_REE', @n + 1, N'commit;'), (@id_corrida, 'ACT_PVS_REE', @n + 2, N'exit;');
-    SET @msg = CONCAT(N'ACT_PVS_REE: ', @n, N' cuentas (PVS -> U1ARCOD1, REE -> U1ARCOD3)');
+    SET @msg = CONCAT(N'ACT_PVS_REE: ', @n - @b, N' cuentas (PVS -> U1ARCOD1, REE -> U1ARCOD3); ', @b, N' blanqueos de ETIQUETA6 (U1EXT2)');
     EXEC ops.sp_log @id_corrida, 'SCRIPT PVS REE', 'OK', @n, @msg;
 END;
 GO

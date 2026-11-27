@@ -24,9 +24,19 @@ GO
    solo conteos, nombres de archivo y mensajes de la bitácora (que ya vienen
    enmascarados).
 
+   Ya en producción: sql/instalacion/06_limpiar_pruebas.sql borra todo lo de aquí.
+
    Errores 50850-50869
    ===================================================================== */
 SET NOCOUNT ON;
+GO
+/* Si las pruebas de entorno ya se limpiaron (sql/instalacion/06_limpiar_pruebas.sql deja PRUEBAS_LIMPIAS = 1),
+   este script no vuelve a crear nada: se puede seguir corriendo sql/*.sql completo al actualizar el servidor. */
+IF EXISTS (SELECT 1 FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'PRUEBAS_LIMPIAS' AND VALOR = '1')
+BEGIN
+    PRINT '85_sp_pruebas_entorno: las pruebas ya se limpiaron (PRUEBAS_LIMPIAS = 1); no se crea nada.';
+    SET NOEXEC ON;
+END;
 GO
 
 IF OBJECT_ID('ops.PRUEBA_PARAM') IS NULL
@@ -482,4 +492,7 @@ BEGIN
     DELETE FROM ops.PRUEBA_CORRIDA;
     SELECT N'PRUEBA REVERTIDA' AS RESULTADO, N'Lo que se escribió en la carpeta de prueba no se borra solo: bórralo (trae datos de clientes).' AS NOTA;
 END;
+GO
+
+SET NOEXEC OFF;
 GO

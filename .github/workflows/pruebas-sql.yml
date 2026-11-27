@@ -110,6 +110,35 @@ jobs:
           echo "ACCESOS: $ok de $tot OK" | tee -a resultado.txt
           [ "$ok" = "$tot" ]
 
+      - name: Limpieza de migración y pruebas (sql/instalacion/05 y 06)
+        if: always()
+        run: |
+          set -o pipefail
+          s() { docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d Banbaj -I -b -f 65001 -W -s " | " "$@" 2>&1 | tee -a resultado.txt; }
+          for f in 05_limpiar_migracion 06_limpiar_pruebas; do
+            sed "s/^USE \[BNABAJ_486\];/USE [Banbaj];/" "sql/instalacion/$f.sql" > "/tmp/${f}_0.sql"
+            sed "s/^DECLARE @confirmar \(BIT\| \)*= 0;/DECLARE @confirmar BIT = 1;/" "/tmp/${f}_0.sql" > "/tmp/${f}_1.sql"
+            grep -q "^DECLARE @confirmar BIT = 1;" "/tmp/${f}_1.sql" || { echo "FALLA  $f: no se pudo poner @confirmar = 1" | tee -a resultado.txt; exit 1; }
+            docker cp "/tmp/${f}_0.sql" sql:/tmp/; docker cp "/tmp/${f}_1.sql" sql:/tmp/
+            echo "== sql/instalacion/$f.sql (vista previa y borrado)" | tee -a resultado.txt
+            s -i "/tmp/${f}_0.sql"
+            s -i "/tmp/${f}_1.sql"
+          done
+          # Reinstalar 80 y 85 ya limpios: no deben volver a crear nada ni fallar
+          echo "== reinstalación de 80 y 85 después de limpiar" | tee -a resultado.txt
+          s -i /tmp/ci_sql/Banbaj/80_sp_migracion.sql
+          s -i /tmp/ci_sql/Banbaj/85_sp_pruebas_entorno.sql
+          out=$(docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA" -d Banbaj -I -b -h -1 -W -Q "SET NOCOUNT ON;
+            SELECT CONCAT(
+              (SELECT COUNT(*) FROM sys.objects WHERE SCHEMA_NAME(schema_id) = 'ops' AND name IN ('sp_migrar_486','sp_llave_riesgo_migrar','fn_mig_faltan')), '|',
+              (SELECT COUNT(*) FROM sys.objects WHERE SCHEMA_NAME(schema_id) = 'ops' AND (name LIKE 'sp[_]prueba[_]%' OR name IN ('PRUEBA_PARAM','PRUEBA_CORRIDA'))), '|',
+              (SELECT COUNT(*) FROM sys.objects WHERE SCHEMA_NAME(schema_id) = 'ops' AND name IN ('sp_mig_leer','sp_mig_diagnostico')), '|',
+              (SELECT COUNT(*) FROM ops.CORRIDA WHERE PROCESO = 'PRUEBA'), '|',
+              (SELECT STRING_AGG(CONCAT(CLAVE, '=', VALOR), ',') WITHIN GROUP (ORDER BY CLAVE) FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE IN ('MIGRACION_LIMPIA','PRUEBAS_LIMPIAS')));" 2>&1 | tr -d '\r' | tail -1)
+          esperado="0|0|2|0|MIGRACION_LIMPIA=1,PRUEBAS_LIMPIAS=1"
+          if [ "$out" = "$esperado" ]; then echo "OK  LIMPIEZA: sin objetos de migración ni de pruebas; quedan sp_mig_leer y sp_mig_diagnostico" | tee -a resultado.txt
+          else echo "FALLA  LIMPIEZA: esperado=[$esperado] obtenido=[$out]" | tee -a resultado.txt; exit 1; fi
+
       - name: Publicar resultado en la rama ci-resultados
         if: always()
         run: |

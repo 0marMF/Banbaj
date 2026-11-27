@@ -261,6 +261,27 @@ BEGIN
         RETURN;
     END;
 
+    /* Blanqueo de ETIQUETA6 por la base (correo 23/11): la cuenta etiquetada llega sin la leyenda de REE.
+       El UPDATE de abajo deja el valor vacío; aquí queda el registro (ops.ETIQUETA6_BLANQUEO, tipo BASE). */
+    DELETE FROM ops.ETIQUETA6_BLANQUEO WHERE ID_CORRIDA = @id_corrida AND TIPO = 'BASE';
+    IF EXISTS (SELECT 1 FROM STRING_SPLIT(@campos, ',') WHERE LTRIM(RTRIM(value)) = 'ETIQUETA6')
+    BEGIN
+        INSERT INTO ops.ETIQUETA6_BLANQUEO (ID_CORRIDA, TIPO, CUENTA, CUENTA2, SEGMENTO2, ETIQUETA_ANT, SEG)
+        SELECT @id_corrida, 'BASE', d.CUENTA, d.CUENTA2, d.SEGMENTO2, d.ETIQUETA6, d.SEG
+        FROM dat.DAT_486 d JOIN stg.LAYOUT_486 l ON l.CUENTA = d.CUENTA
+        WHERE l.ID_CORRIDA = @id_corrida AND l.ES_EXISTENTE = 1
+          AND NULLIF(LTRIM(RTRIM(d.ETIQUETA6)), '') IS NOT NULL
+          AND NULLIF(LTRIM(RTRIM(l.ETIQUETA6)), '') IS NULL;
+        IF @@ROWCOUNT > 0
+        BEGIN
+            SET @sql = CONCAT((SELECT COUNT(*) FROM ops.ETIQUETA6_BLANQUEO WHERE ID_CORRIDA = @id_corrida AND TIPO = 'BASE'),
+                              N' cuentas pierden el REE: llegaron en la base maestra sin la leyenda (',
+                              (SELECT STRING_AGG(CAST(CONCAT(SEGMENTO2, N' ', N) AS NVARCHAR(MAX)), N', ')
+                               FROM (SELECT SEGMENTO2, COUNT(*) AS N FROM ops.ETIQUETA6_BLANQUEO WHERE ID_CORRIDA = @id_corrida AND TIPO = 'BASE' GROUP BY SEGMENTO2) x), N').');
+            EXEC ops.sp_log @id_corrida, 'ETIQUETA6 BLANQUEO', 'OK', NULL, @sql;
+        END;
+    END;
+
     /* EXISTS (SELECT … EXCEPT SELECT …) compara también NULL contra valor */
     SET @sql = N'UPDATE d SET ' + @set + N', d.ID_CORRIDA_ULT = @id_corrida, d.FE_ULT_ACT = SYSDATETIME() '
              + N'FROM dat.DAT_486 d JOIN stg.LAYOUT_486 l ON l.CUENTA = d.CUENTA '

@@ -164,6 +164,10 @@ SELECT @para = PARA, @cco = CCO, @cuerpo = CUERPO_HTML FROM @r;
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Correo: TO armado desde la tabla', ISNULL(CASE WHEN @para LIKE N'%erika.ramos@sertec.com.mx%' THEN 1 ELSE 0 END, 0), CAST(@para AS NVARCHAR(4000));
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Correo: BCC armado desde la tabla', ISNULL(CASE WHEN @cco LIKE N'%asig.cdmx@sertec.com.mx%' THEN 1 ELSE 0 END, 0), CAST(@cco AS NVARCHAR(4000));
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Correo: firma y aviso insertados', ISNULL(CASE WHEN @cuerpo NOT LIKE N'%{{%' AND @cuerpo LIKE N'%SERTEC%' THEN 1 ELSE 0 END, 0), CAST(LEFT(@cuerpo, 300) AS NVARCHAR(4000));
+INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT N'Correo: diseño del 26/11 (encabezado morado BanBajío, título, firma con el buzón del 486, sin Book Antiqua)',
+       ISNULL(CASE WHEN @cuerpo LIKE N'%background-color:#a54686%' AND @cuerpo LIKE N'%Asignación realizada%'
+                    AND @cuerpo LIKE N'%mailto:asig.486.cdmx@sertec.com.mx%' AND @cuerpo NOT LIKE N'%Book Antiqua%'
+                    AND @cuerpo LIKE N'%CONFIDENCIALIDAD%' THEN 1 ELSE 0 END, 0), CAST(LEFT(@cuerpo, 300) AS NVARCHAR(4000));
 
 EXEC mail.sp_destinatario_alta 'OPERACION_ASIG_486', 'Nuevo.Correo@Sertec.com.mx', 'CC';
 INSERT INTO pru.RESULTADO (PRUEBA, OK, DETALLE) SELECT x.p, CASE WHEN x.e = x.o OR (x.e IS NULL AND x.o IS NULL) THEN 1 ELSE 0 END, CONCAT(N'esperado=[', x.e, N'] obtenido=[', x.o, N']')
@@ -1930,6 +1934,42 @@ DELETE FROM dat.DAT_486 WHERE CUENTA2 IN ('486-900001', '486-900002');
 DELETE FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'LLAVE_RIESGO_MIGRADA';
 EXEC pru.sp_igual N'LLAVE: ops.sp_llave_riesgo_migrar pasa TDC a riesgo (DAT e histórico), deja la que no tiene riesgo y marca hasta dónde no se revierte',
      N'1000009001:9001XAXX010101000|9002XAXX010101000:9002XAXX010101000|1000009001:9001XAXX010101000|0|MARCA|NO REVIERTE', @rs;
+GO
+
+/* ---------------------------------------------------------------------
+   Blanqueo de ETIQUETA6 (correo 'RE: Etiquetado REE', 23/11): por tramo (SEG del archivo de saldos)
+   --------------------------------------------------------------------- */
+DECLARE @cb INT, @rs NVARCHAR(4000);
+INSERT INTO ops.CORRIDA (CLIENTE, PROCESO, FECHA_PROCESO) VALUES ('486', 'ACT', '2026-11-26');
+SET @cb = SCOPE_IDENTITY();
+INSERT INTO dat.DAT_486 (FOLIO, CLIENTE, CUENTA, CUENTA2, RIESGO, SEGMENTO2, SUB_CTE, SEG, ETIQUETA6)
+VALUES ('910001', '486', 'B6TDCVEN4', '486-910001', 'B6TDCVEN4', 'TDC', 'NVA', 'VEN4', 'REE'),
+       ('910002', '486', 'B6TDCVEN2', '486-910002', 'B6TDCVEN2', 'TDC', 'NVA', 'VEN2', 'REE'),
+       ('910003', '486', 'B6CONCAST', '486-910003', 'B6CONCAST', 'CONSUMO', 'NVA', 'CASTIGADA', 'REE'),
+       ('910004', '486', 'B6CON6089', '486-910004', 'B6CON6089', 'CONSUMO', 'NVA', '60-89', 'REE'),
+       ('910005', '486', 'B6TDCSINT', '486-910005', 'B6TDCSINT', 'TDC', 'NVA', NULL, 'REE'),
+       ('910006', '486', 'B6TDCNUEV', '486-910006', 'B6TDCNUEV', 'TDC', 'NVA', 'VEN9', 'REE'),
+       ('910007', '486', 'B6HIPVEN4', '486-910007', 'B6HIPVEN4', 'HIPOTECARIO', 'NVA', 'VEN4', 'REE');
+EXEC ops.sp_etiqueta6_blanqueo @cb;
+EXEC ops.sp_act_script_pvs_ree @cb;
+SET @rs = CONCAT((SELECT STRING_AGG(CONCAT(RIGHT(CUENTA2, 1), '=', ISNULL(NULLIF(ETIQUETA6, ''), '-')), ',') WITHIN GROUP (ORDER BY CUENTA2)
+                  FROM dat.DAT_486 WHERE CUENTA2 LIKE '486-91000_'), '|',
+                 (SELECT COUNT(*) FROM ops.ETIQUETA6_BLANQUEO WHERE ID_CORRIDA = @cb AND TIPO = 'TRAMO'), '|',
+                 (SELECT COUNT(*) FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @cb AND SCRIPT = 'ACT_PVS_REE' AND SENTENCIA LIKE N'%u1ext2=''''%'), '|',
+                 (SELECT COUNT(*) FROM ops.BITACORA WHERE ID_CORRIDA = @cb AND PASO = 'ETIQUETA6 BLANQUEO' AND ESTATUS = 'AVISO' AND MENSAJE LIKE N'%TDC VEN9 (1)%'), '|',
+                 (SELECT TOP (1) SENTENCIA FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @cb AND SCRIPT = 'ACT_PVS_REE' ORDER BY NUM DESC));
+/* Apagado: no toca nada */
+UPDATE dat.DAT_486 SET ETIQUETA6 = 'REE' WHERE CUENTA2 = '486-910001';
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'ETIQUETA6_BLANQUEO';
+EXEC ops.sp_etiqueta6_blanqueo @cb;
+SET @rs = CONCAT(@rs, '|', (SELECT ETIQUETA6 FROM dat.DAT_486 WHERE CUENTA2 = '486-910001'));
+UPDATE cfg.PARAMETRO SET VALOR = '1' WHERE CLIENTE = '486' AND CLAVE = 'ETIQUETA6_BLANQUEO';
+DELETE FROM ops.CYBER_SCRIPT WHERE ID_CORRIDA = @cb;
+DELETE FROM ops.ETIQUETA6_BLANQUEO WHERE ID_CORRIDA = @cb;
+DELETE FROM dat.DAT_486 WHERE CUENTA2 LIKE '486-91000_';
+UPDATE ops.CORRIDA SET ESTATUS = 'CANCELADA', FIN = SYSDATETIME() WHERE ID_CORRIDA = @cb;
+EXEC pru.sp_igual N'ETIQUETA6: blanqueo por tramo (TDC solo VEN2/VEN3, Consumo 1-29 a 90+; sin tramo o sin catálogo no se toca; tramo nuevo blanquea con aviso; u1ext2 en ACT_PVS_REE; apagado no toca)',
+     N'1=-,2=REE,3=-,4=REE,5=REE,6=-,7=REE|3|3|1|exit;|REE', @rs;
 GO
 
 /* ---------------------------------------------------------------------

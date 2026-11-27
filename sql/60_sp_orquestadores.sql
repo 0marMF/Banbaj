@@ -83,6 +83,7 @@ BEGIN
         EXEC ops.sp_asig_normalizar_telefonos @id_corrida;             -- nuevas y reasignadas: op9.prg (AREA + TELEFONO)
         EXEC ops.sp_validar            @id_corrida, 'PRE_ALTA';
         EXEC ops.sp_asig_alta          @id_corrida;
+        EXEC ops.sp_etiqueta6_blanqueo @id_corrida;                    -- 23/11: REE fuera si el tramo (SEG) ya no es elegible (va en el SCBSDOS)
         IF @aplicar_retiro = 1
             EXEC ops.sp_retiro         @id_corrida;                    -- genera también los archivos del retiro
         EXEC ops.sp_telefonos          @id_corrida;                    -- solo en asignación: CYBER purga y agrega
@@ -173,6 +174,7 @@ BEGIN
         EXEC ops.sp_act_aplicar        @id_corrida;
         EXEC ops.sp_act_pagos          @id_corrida;
         EXEC ops.sp_homologar          @id_corrida, 'dat.DAT_486';     -- estructura.prg: REE por segmento, tramo y tipo
+        EXEC ops.sp_etiqueta6_blanqueo @id_corrida;                    -- 23/11: REE (ETIQUETA6) fuera si el tramo (SEG) ya no es elegible
         IF @aplicar_retiro = 1
             EXEC ops.sp_retiro         @id_corrida;
         EXEC ops.sp_act_script_pvs_ree @id_corrida;                    -- PVS y REE a CYBER por script (ya no se arriba SCBSDOS en la actualización)

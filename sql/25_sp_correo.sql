@@ -175,24 +175,25 @@ END;
 GO
 
 /* Tabla HTML a partir de un arreglo JSON de objetos (una columna por llave), con los valores escapados.
-   La usan el correo de hallazgos y el de archivos listos. */
+   La usan el correo de hallazgos y el de archivos listos. Colores del diseño de correos (26/11): encabezado
+   morado BanBajío #a54686, bordes grises #e2e8f0. */
 CREATE OR ALTER FUNCTION mail.fn_tabla_html (@tabla_json NVARCHAR(MAX))
 RETURNS NVARCHAR(MAX)
 AS
 BEGIN
     DECLARE @th NVARCHAR(MAX), @tr NVARCHAR(MAX);
     IF ISJSON(@tabla_json) = 0 OR LEFT(LTRIM(@tabla_json), 1) <> N'[' RETURN N'';
-    SELECT @th = STRING_AGG(CAST(N'<th style="border:1px solid #999;padding:4px 8px;background:#e8eef7;text-align:left">'
+    SELECT @th = STRING_AGG(CAST(N'<th style="padding:10px 12px;background-color:#a54686;color:#ffffff;text-align:left;font-size:13px;font-weight:600;border:1px solid #a54686">'
                  + REPLACE(REPLACE(REPLACE([key], N'&', N'&amp;'), N'<', N'&lt;'), N'>', N'&gt;') + N'</th>' AS NVARCHAR(MAX)), N'')
     FROM OPENJSON(JSON_QUERY(@tabla_json, '$[0]'));
     SELECT @tr = STRING_AGG(CAST(N'<tr>' + c.TD + N'</tr>' AS NVARCHAR(MAX)), N'') WITHIN GROUP (ORDER BY CAST(r.[key] AS INT))
     FROM OPENJSON(@tabla_json) r
-    CROSS APPLY (SELECT STRING_AGG(CAST(N'<td style="border:1px solid #999;padding:4px 8px">'
+    CROSS APPLY (SELECT STRING_AGG(CAST(N'<td style="padding:10px 12px;color:#334155;font-size:13px;border:1px solid #e2e8f0">'
                      + REPLACE(REPLACE(REPLACE(ISNULL(v.[value], N''), N'&', N'&amp;'), N'<', N'&lt;'), N'>', N'&gt;') + N'</td>' AS NVARCHAR(MAX)), N'') AS TD
                  FROM OPENJSON(r.[value]) v) c
     WHERE r.[type] = 5;
     IF @th IS NULL RETURN N'';
-    RETURN N'<table style="border-collapse:collapse;font-family:Arial;font-size:12px;margin:8px 0"><tr>' + @th + N'</tr>' + ISNULL(@tr, N'') + N'</table>';
+    RETURN N'<table class="datos" border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background-color:#ffffff;font-family:Segoe UI, Arial, sans-serif;font-size:13px;margin:10px 0"><tr>' + @th + N'</tr>' + ISNULL(@tr, N'') + N'</table>';
 END;
 GO
 

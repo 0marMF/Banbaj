@@ -399,6 +399,15 @@ CATALOGOS = [
     ("ETIQUETA6_CONSUMO", "Elegible a REE en Consumo (correo 'Etiquetado REE', 19/11). Cualquier otro valor deja ETIQUETA6 vacía",
      "MAESTRA_CONSUMO · ENFOQUE_REESTRUCTURA", "ETIQUETA6 (U1EXT2 del SCBSDOS)",
      [("APLICA RESTRUCTURA", "REE", 100), ("APLICA REESTRUCTURA", "REE", 100)]),
+    # Blanqueo de ETIQUETA6 por tramo (correo 'RE: Etiquetado REE', 23/11): SEG del archivo de saldos (ETIQUETA3 en el DAT de Operación)
+    ("ETIQUETA6_SEG_TDC", "Tramo de TDC (SEG del archivo de saldos; ETIQUETA3 de Operación) y si conserva el REE. Solo VEN2 y VEN3 son elegibles; "
+     "un tramo que no está aquí también blanquea (ops.sp_etiqueta6_blanqueo)",
+     "SALDOS_TDC · ESTATUS -> DAT.SEG", "SI = conserva ETIQUETA6; NO = se blanquea",
+     [("VEN2", "SI", 100), ("VEN3", "SI", 100), ("VEN4", "NO", 100), ("CCAS", "NO", 100)]),
+    ("ETIQUETA6_SEG_CONSUMO", "Tramo de Consumo (SEG del archivo de saldos; ETIQUETA3 de Operación) y si conserva el REE. Elegibles de 1-29 a 90+; "
+     "un tramo que no está aquí también blanquea (ops.sp_etiqueta6_blanqueo)",
+     "SALDOS_CONS · TRAMO -> DAT.SEG", "SI = conserva ETIQUETA6; NO = se blanquea",
+     [("1-29", "SI", 100), ("30-59", "SI", 100), ("60-89", "SI", 100), ("90+", "SI", 100), ("CASTIGADA", "NO", 100)]),
 ]
 
 # ---------------------------------------------------------------- reglas
@@ -620,6 +629,7 @@ PARAMETROS = [
     ("AVISO_ARCHIVOS", "1", "1 = en cuanto se escriben los planos que se suben a CYBER se manda ARCHIVOS_LISTOS_486 al equipo de asignaciones (ops.sp_aviso_archivos)"),
     ("ARCHIVOS_ARRIBO", "SCBSDOS,SCBSDOS_ETI,SCBTEL,GESCAR_NVA,GESCAR_REA,GESCAR_SINTEL,GESCAR_RETIRO,SCBPAG", "Archivos planos que el equipo de asignaciones sube con el cargador de CYBER (van en el aviso de archivos listos)"),
     ("EXPORTAR_AUTOMATICO", "1", "1 = cada corrida escribe sus archivos y scripts al terminar OK (ops.sp_exportar_salidas); 0 = a mano"),
+    ("ETIQUETA6_BLANQUEO", "1", "1 (23/11) = la actualización y la asignación quitan el REE (ETIQUETA6) a las cuentas cuyo tramo (SEG) ya no es elegible (catálogos ETIQUETA6_SEG_TDC y ETIQUETA6_SEG_CONSUMO); 0 = apagado"),
     ("ACT_CYBER_AUTOMATICO", "1", "1 (07/11) = al terminar la actualización el job ejecuta en CYBER ACT_SALDOS, ACT_VENCIDO, ACT_PAGMIN y ACT_PVS_REE (ops.sp_act_cyber); 0 = a mano"),
     ("BLANQUEO_AUTOMATICO", "1", "1 (07/11) = el blanqueo de status (días DIAS_BLANQUEO_STATUS) se baja, se arma y se ejecuta en CYBER en cuanto subió el SCBSDOS (ops.sp_blanqueo_automatico); 0 = a mano"),
     ("CONFIRMACION_AUTOMATICA", "1", "1 (07/11) = al terminar OK las depuraciones de correos y teléfonos se marca el fin del arribo y se manda CONFIRMACION_ASIG_486 (ops.sp_confirmar_asignacion); 0 = a mano"),
@@ -802,14 +812,69 @@ CAMPOS_SALIDA = {
 ANCHOS_ESPERADOS = {"GESCAR_SINTEL": 119, "SCBTEL": 137, "GESCAR_NVA": 119, "GESCAR_REA": 119, "GESCAR_RETIRO": 119, "SCBPAG": 104, "DEVOL_CYBER": 28}
 
 # ---------------------------------------------------------------- correo
-FIRMA = ("<p><font face='Book Antiqua' color='#1C3D7B'><b>Asignaciones</b></font> | "
-         "<font face='Book Antiqua' color='#255BBF' size='2'>Especialista</font> | "
-         "<font face='Book Antiqua' color='#1C3D5B'><b>SERTEC</b></font> | "
-         "<font face='Book Antiqua' color='#255BBF' size='2'>CDMX | Tel. (55) 5276 8513 Ext. 1416 | asig.486.cdmx@sertec.com.mx</font></p>")
-AVISO = ("<p><font size='1' color='#255BBF'>Este correo, así como los archivos adjuntos que pueda contener, es confidencial y "
-         "únicamente para la persona o entidad a la que fue dirigido. Si usted lo recibe por error, destrúyalo de inmediato. "
-         "Consulte nuestro sitio de internet en www.sertec.com.mx para conocer nuestro Aviso de Privacidad.</font></p>")
-CUERPO = "<html><body><font face='Book Antiqua'><p><b>{texto}</b></p>{extra}<p>Saludos.</p></font>{{{{FRAG:FIRMA_ASIG_486}}}}{{{{FRAG:AVISO_CONFIDENCIALIDAD}}}}</body></html>"
+# Diseño de los correos (26/11): formato HTML que compartió el equipo (Documento1.txt de Banbaj_banc), con el buzón del 486
+# y la paleta de BanBajío: morado #a54686 y rojo #ed1c24 del logotipo; grises neutros del formato de ejemplo.
+# Todo con estilos en línea y tablas (Outlook no respeta CSS externo). El cuerpo de las plantillas lo arma el código:
+# la semilla lo actualiza en cada instalación (el asunto, la lista y la importancia los puede cambiar el equipo).
+COLOR = {"morado": "#a54686", "morado_osc": "#7d3466", "rojo": "#ed1c24", "fondo": "#f0f2f5", "texto": "#475569",
+         "texto_fuerte": "#1e293b", "tenue": "#64748b", "borde": "#e2e8f0", "tarjeta": "#f8fafc", "pie": "#f1f5f9"}
+FUENTE = "Segoe UI, Arial, sans-serif"   # sin comillas: va dentro de style='…'
+FIRMA = (
+    f"<table border='0' cellpadding='0' cellspacing='0' width='100%' style='margin-top:28px;border-top:1px solid {COLOR['pie']};'>"
+    f"<tr><td style='padding-top:24px;'><table border='0' cellpadding='0' cellspacing='0'><tr>"
+    f"<td style='border-left:3px solid {COLOR['rojo']};padding-left:18px;font-family:{FUENTE};'>"
+    f"<div style='color:{COLOR['texto_fuerte']};font-size:17px;font-weight:700;'>Especialista Asignaciones</div>"
+    f"<div style='color:{COLOR['morado']};font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-top:2px;'>TI SERTEC | CDMX</div>"
+    f"<div style='font-size:13px;color:{COLOR['tenue']};margin-top:12px;line-height:1.5;'>"
+    f"<strong>Tel:</strong> (0155) 7099 0104 | <strong>Ext:</strong> 1416<br>"
+    f"<strong>Email:</strong> <a href='mailto:asig.486.cdmx@sertec.com.mx' style='color:{COLOR['morado']};text-decoration:none;'>asig.486.cdmx@sertec.com.mx</a><br>"
+    f"<a href='http://www.sertec.com.mx' style='color:{COLOR['morado_osc']};text-decoration:none;font-weight:700;font-size:11px;'>WWW.SERTEC.COM.MX</a>"
+    f"</div></td></tr></table></td></tr></table>")
+AVISO = (
+    f"<div style='color:#94a3b8;font-size:10px;line-height:1.5;text-align:justify;font-family:{FUENTE};'>"
+    f"<p style='margin:0 0 10px 0;'><strong>CONFIDENCIALIDAD:</strong> Este mensaje es exclusivamente para el destinatario. "
+    f"Si lo recibe por error, por favor elimínelo de inmediato. Consulte nuestro Aviso de Privacidad en www.sertec.com.mx.</p>"
+    f"<p style='margin:0;'><strong>CONFIDENTIALITY:</strong> This email is intended solely for the addressee. If received in error, please destroy immediately.</p></div>")
+
+
+def cuerpo_correo(titulo, texto, extra, importancia):
+    """Cuerpo HTML de una plantilla con el diseño del equipo. Los marcadores {{…}} los reemplaza mail.sp_enviar."""
+    alerta = importancia == "High"
+    icono = "!" if alerta else "&#x2713;"
+    franja = (f"<tr><td style='background-color:{COLOR['rojo']};height:6px;line-height:6px;font-size:0;'>&nbsp;</td></tr>" if alerta else "")
+    tarjeta = (f"<table border='0' cellpadding='0' cellspacing='0' width='100%' style='background-color:{COLOR['tarjeta']};"
+               f"border:1px solid {COLOR['borde']};border-radius:16px;margin:4px 0 8px 0;'>"
+               f"<tr><td style='padding:22px 24px;color:#334155;font-size:14px;line-height:1.6;font-family:{FUENTE};'>{extra}</td></tr></table>"
+               if extra else "")
+    return (
+        "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd\">"
+        "<html><head><meta http-equiv='Content-Type' content='text/html; charset=UTF-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+        f"<title>{titulo}</title><style>p{{margin:0 0 10px 0;}} table.datos td, table.datos th{{font-family:{FUENTE};}}</style></head>"
+        f"<body style='margin:0;padding:0;background-color:{COLOR['fondo']};font-family:{FUENTE};'>"
+        f"<table border='0' cellpadding='0' cellspacing='0' width='100%' style='background-color:{COLOR['fondo']};'>"
+        "<tr><td align='center' style='padding:32px 10px;'>"
+        "<table border='0' cellpadding='0' cellspacing='0' width='600' style='width:600px;max-width:100%;background-color:#ffffff;"
+        "border-radius:20px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,0.05);'>"
+        f"{franja}"
+        f"<tr><td align='center' style='background-color:{COLOR['morado']};padding:36px 40px;'>"
+        "<table border='0' cellpadding='0' cellspacing='0'>"
+        "<tr><td align='center' style='font-size:36px;color:#ffffff;line-height:1;'>"
+        f"<div style='background-color:rgba(255,255,255,0.18);width:64px;height:64px;line-height:64px;border-radius:50%;text-align:center;font-weight:700;'>{icono}</div></td></tr>"
+        f"<tr><td align='center' style='padding-top:18px;'><h1 style='margin:0;color:#ffffff;font-size:22px;font-weight:600;letter-spacing:0.5px;font-family:{FUENTE};'>{titulo}</h1>"
+        f"<div style='color:#f6e6f1;font-size:13px;margin-top:6px;font-family:{FUENTE};'>Banco del Bajío · cliente 486</div></td></tr>"
+        "</table></td></tr>"
+        f"<tr><td style='padding:36px 44px;color:{COLOR['texto']};font-size:15px;line-height:1.6;font-family:{FUENTE};'>"
+        "<p style='margin:0 0 15px 0;'>Buen día,</p>"
+        f"<p style='margin:0 0 22px 0;color:{COLOR['texto_fuerte']};'><strong>{texto}</strong></p>"
+        f"{tarjeta}"
+        f"<p style='margin:14px 0 0 0;color:#94a3b8;font-size:12px;'>Banbaj 486 · {{{{FECHA}}}}</p>"
+        "<p style='margin:20px 0 0 0;'>Saludos.</p>"
+        "{{FRAG:FIRMA_ASIG_486}}"
+        "</td></tr>"
+        f"<tr><td style='background-color:{COLOR['pie']};padding:26px 44px;'>{{{{FRAG:AVISO_CONFIDENCIALIDAD}}}}</td></tr>"
+        "</table></td></tr></table></body></html>")
+
 
 BUZON = "asig.486.cdmx@sertec.com.mx"
 INTERNOS_BCC = ["asignaciones.cdmx1@sertec.com.mx", "asignaciones3@sertec.com.mx", "asig.cdmx@sertec.com.mx"]
@@ -834,6 +899,7 @@ LISTAS = {
 }
 TEXTO_DEVOLUCION = "Archivo de devolución actualizado ({{ORIGEN}}), favor de verificar."
 EXTRA_DEVOLUCION = "<p>Cuentas devueltas: {{CUENTAS}} · corrida {{CORRIDA}}</p>"
+# (CODIGO, LISTA, ASUNTO, TEXTO, EXTRA, IMPORTANCIA); el título del encabezado está en TITULOS
 PLANTILLAS = [
     # Asignación
     ("INICIO_ASIG_486", "OPERACION_ASIG_486", "Inicia asignación BANCO BAJIO del día {{FECHA_PROCESO}}",
@@ -874,6 +940,20 @@ PLANTILLAS = [
      "La base maestra se guardó como CSV con cuentas en notación científica (ej. 1.23457E+15). Formatea esas columnas como Texto en Excel, vuelve a guardar el CSV y corre de nuevo.",
      "<p>Registros: {{REGISTROS}}</p>", "High"),
 ]
+TITULOS = {'INICIO_ASIG_486': 'Inicio de asignación',
+           'CONFIRMACION_ASIG_486': 'Asignación realizada',
+           'ALERTA_NUEVAS_486': 'Asignación grande',
+           'DEVOLUCION_486': 'Devolución',
+           'DEVOLUCION_486_AEM': 'Devolución',
+           'ALERTA_SDO_ACT_CONS_486': 'Consumo con saldo menor o igual a cero',
+           'PAGOS_NEGATIVOS_486': 'Pagos negativos',
+           'HALLAZGO_486': '{{TIPO}}',
+           'ARCHIVOS_LISTOS_486': 'Archivos listos para arribar',
+           'VALIDACION_ENTRADA_486': 'Validación de la entrada',
+           'MAESTRA_NUMEROS_EXCEL_486': 'Base maestra con números cortados'}
+# Parámetros que escribe el proceso, no la semilla: cuándo se pasó a la llave por riesgo (no se revierte antes de esa corrida)
+# y si ya se limpió la migración o las pruebas de entorno (sql/80 y sql/85 ya no vuelven a crear nada)
+PARAMETROS_ESTADO = ["LLAVE_RIESGO_MIGRADA", "MIGRACION_LIMPIA", "PRUEBAS_LIMPIAS"]
 # Retirados (decisión 30/10): se borran de bases que ya los tengan
 PLANTILLAS_RETIRADAS = ["ASIG_EXPRESS_486", "PAGOS_NO_ACTUALIZADOS_486", "RETIROS_ACT_486", "AVISO_DEVOLUCION_486", "NOTIFICACION_RETIRO_486",
                         "CONFIRMACION_ACT_486", "ERROR_PROCESO_486", "DEVOLUCION_MASIVA_486",
@@ -906,7 +986,8 @@ def sql_semilla(scb, dat):
           f"DELETE FROM cfg.REGLA WHERE CLIENTE = {cli};",
           f"DELETE FROM cfg.SALIDA WHERE CLIENTE = {cli};",
           f"DELETE FROM cfg.SALIDA_ARCHIVO WHERE CLIENTE = {cli};",
-          f"DELETE FROM cfg.PARAMETRO WHERE CLIENTE = {cli};",
+          # Marcas de estado que deja el propio proceso (no son configuración): la semilla no las borra (26/11)
+          f"DELETE FROM cfg.PARAMETRO WHERE CLIENTE = {cli} AND CLAVE NOT IN (" + ", ".join(q(x) for x in PARAMETROS_ESTADO) + ");",
           "DELETE FROM cfg.CP_ESTADO;",
           "-- Correos retirados (decisiones 29 y 30/10)",
           "DELETE FROM mail.PLANTILLA WHERE CODIGO IN (" + ", ".join(q(x) for x in PLANTILLAS_RETIRADAS) + ");",
@@ -1054,20 +1135,24 @@ def sql_semilla(scb, dat):
     L.append("")
 
     L.append("/* Correo: fragmentos, listas, destinatarios y plantillas */")
+    # Firma y aviso: diseño del 26/11; se actualizan también en servidores que ya los tenían
     for cod, html in (("FIRMA_ASIG_486", FIRMA), ("AVISO_CONFIDENCIALIDAD", AVISO)):
         L.append(f"IF NOT EXISTS (SELECT 1 FROM mail.FRAGMENTO WHERE CODIGO = {q(cod)}) "
-                 f"INSERT INTO mail.FRAGMENTO (CODIGO, HTML) VALUES ({q(cod)}, {q(html)});")
+                 f"BEGIN INSERT INTO mail.FRAGMENTO (CODIGO, HTML) VALUES ({q(cod)}, {q(html)}); END "
+                 f"ELSE BEGIN UPDATE mail.FRAGMENTO SET HTML = {q(html)} WHERE CODIGO = {q(cod)}; END;")
     for lista, (desc, dests) in LISTAS.items():
         L.append(f"IF NOT EXISTS (SELECT 1 FROM mail.LISTA WHERE CODIGO = {q(lista)}) "
                  f"INSERT INTO mail.LISTA (CODIGO, CLIENTE, DESCRIPCION) VALUES ({q(lista)}, {cli}, {q(desc)});")
         for email, tipo in dests:
             L.append(f"IF NOT EXISTS (SELECT 1 FROM mail.DESTINATARIO WHERE LISTA = {q(lista)} AND EMAIL = {q(email)} AND TIPO = '{tipo}') "
                      f"INSERT INTO mail.DESTINATARIO (LISTA, EMAIL, TIPO) VALUES ({q(lista)}, {q(email)}, '{tipo}');")
+    # El cuerpo (diseño) lo arma el código: se actualiza en cada instalación; asunto, lista e importancia no se tocan si ya existe
     for cod, lista, asunto, texto, extra, imp in PLANTILLAS:
-        cuerpo = CUERPO.format(texto=texto, extra=extra)
+        cuerpo = cuerpo_correo(TITULOS[cod], texto, extra, imp)
         L.append(f"IF NOT EXISTS (SELECT 1 FROM mail.PLANTILLA WHERE CODIGO = {q(cod)}) "
-                 f"INSERT INTO mail.PLANTILLA (CODIGO, LISTA, PERFIL_DBMAIL, ASUNTO, CUERPO_HTML, IMPORTANCIA) "
-                 f"VALUES ({q(cod)}, {q(lista)}, {q(PERFIL_DBMAIL)}, {q(asunto)}, {q(cuerpo)}, '{imp}');")
+                 f"BEGIN INSERT INTO mail.PLANTILLA (CODIGO, LISTA, PERFIL_DBMAIL, ASUNTO, CUERPO_HTML, IMPORTANCIA) "
+                 f"VALUES ({q(cod)}, {q(lista)}, {q(PERFIL_DBMAIL)}, {q(asunto)}, {q(cuerpo)}, '{imp}'); END "
+                 f"ELSE BEGIN UPDATE mail.PLANTILLA SET CUERPO_HTML = {q(cuerpo)} WHERE CODIGO = {q(cod)}; END;")
     L += ["", "EXEC sp_set_session_context @key = N'SEMILLA', @value = NULL;", "COMMIT TRANSACTION;", "GO", ""]
     return "\n".join(L)
 
