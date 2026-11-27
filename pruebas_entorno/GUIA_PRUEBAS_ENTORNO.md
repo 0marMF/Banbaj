@@ -86,6 +86,44 @@ SELECT CODIGO, PROCESO, RUTA, PATRON_NOMBRE, ACTIVO FROM cfg.ARCHIVO WHERE CLIEN
 
 En `PATRON_NOMBRE`, `[_]` significa un guion bajo y `%` significa "cualquier cosa".
 
+# Todas las rutas de entrada y salida
+
+Las rutas `C:\` son del servidor de SQL Server. En las pruebas, las de salida (`RUTA_SALIDA`, `RUTA_MIS` y `CARPETA_ZIP`) apuntan a la carpeta de prueba mientras el modo de prueba está encendido; las de entrada no cambian.
+
+| Qué | Ruta | Parámetro o dónde se cambia |
+|---|---|---|
+| **Entrada.** Bases maestras y archivos de actualización del banco | `\\192.168.50.13\q\CYBER\C_486\<año>\<mes>\<día>\` (= `Q:\CYBER\C_486\2026\noviembre\26\`). Mes en español y minúsculas, día con dos dígitos. Asignación: `BASE MAESTRA_TARJETA*.csv`, `BASE MAESTRA_CONSUMO*.csv`, `BASE MAESTRA_HIPOTECARIO*.csv`. Actualización: `SERTEC_Saldos_tdc*.txt`, `SERTEC_Saldos_Cons*.txt`, `SERTEC_Saldos_Hip*.txt` (apagado), `SERTEC_Pagos*.txt` | `cfg.ARCHIVO.RUTA` y `PATRON_NOMBRE` |
+| **Entrada.** Tablas de CYBER (DELQMST, PHONE, PHONE_G1, ADDRESS, UDA1, RPT_DAT_486_1, PHNVAL, remesas, bitácora de banderas) | Servidor vinculado `[CYBER]` (Oracle), no es carpeta | `CYBER_LINKED_SERVER`, `cfg.sp_cyber_conectar` |
+| **Entrada.** CSV de la migración desde FoxPro (una sola vez) | `C:\MIGRA486\<FUENTE>.csv` en el servidor de SQL Server | `@carpeta` de `ops.sp_migrar_486` |
+| **Entrada.** CSV de exclusiones y etiquetas (cargas a mano) | La que indiques, visible para el servicio de SQL Server (ej. `C:\BANBAJ\486\CARGAS\`) | `@archivo` de `cfg.sp_exclusion_cargar` y `cfg.sp_etiqueta_cargar` |
+| **Salida.** Archivos planos de cada corrida | `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\` (ej. `C:\BANBAJ\486\SALIDA\20261126_corrida125\`) | `RUTA_SALIDA` |
+| **Salida.** Scripts de Oracle de esa corrida (ACT_SALDOS, ACT_PVS_REE, retiro, depuraciones) | `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\cyber\` | `RUTA_SALIDA` |
+| **Salida.** Copia del DAT para MIS | `\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\DAT486_<aaaammdd>.csv` | `RUTA_MIS` |
+| **Salida.** ZIP de retiros con contraseña | `C:\RETIROS_PAG_486_<mmddaaaahhmmss>.zip` | `CARPETA_ZIP` (contraseña: credencial `ZIP_RETIROS`) |
+| **Salida.** Devolución para CYBER (`MX_G1MCT_DVBJIG_<aaaammdd>_<hhmmss>`) | Se escribe en la carpeta de la corrida; se copia a `\\192.168.50.1\Cyber_00\dev\` (a mano mientras el parámetro esté vacío) | `RUTA_DEVOLUCION_CYBER` |
+| Programa para el ZIP | `C:\Program Files\7-Zip\7z.exe` | `RUTA_7ZIP` |
+| Carpeta de las pruebas de entorno | `C:\BANBAJ\486\PRUEBA\` (se borra al terminar) | `@carpeta` de `ops.sp_prueba_modo` |
+| Respaldo de la base antes de actualizar | `C:\BANBAJ\respaldo_BNABAJ_486_<aaaammdd>.bak` | Comando `BACKUP` del paso 0 |
+
+Archivos que deja cada proceso en la carpeta de su corrida:
+
+| Proceso | Archivos |
+|---|---|
+| Asignación | `SCBSDOS.TXT`, `SCBTEL.TXT`, `sub_mst.TXT`, `sub_mail.TXT`, `SCBACTH_486NU.TXT`, `SCBACTH_486REA.TXT`, `SCBACTH_SINTEL.TXT` (al subir los saldos), `DAT486_<aaaammdd>.csv` |
+| Actualización | `SCBPAG.TXT`, `DAT486_<aaaammdd>.csv` y en `cyber\` los scripts `ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN` y `ACT_PVS_REE` (este último lleva también el blanqueo de ETIQUETA6) |
+| Retiro | `SCBACTH_486.TXT`, `RETIROS_486_<aaaammdd>.csv`, `MX_G1MCT_DVBJIG_<aaaammdd>_<hhmmss>`, `DAT486_<aaaammdd>.csv` y el ZIP en `CARPETA_ZIP` |
+| Etiquetado | `SCBSDOS.TXT`, `DAT486_<aaaammdd>.csv` |
+| Blanqueo de status | `BLANQUEA_486_<aaaammdd>.csv` |
+
+Para ver las rutas que tiene el servidor:
+
+```sql
+USE [BNABAJ_486];
+SELECT CODIGO, PROCESO, RUTA, PATRON_NOMBRE, ACTIVO FROM cfg.ARCHIVO WHERE CLIENTE = '486' ORDER BY PROCESO, ORDEN;
+SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486'
+  AND CLAVE IN ('RUTA_SALIDA', 'RUTA_MIS', 'CARPETA_ZIP', 'RUTA_DEVOLUCION_CYBER', 'RUTA_7ZIP', 'CYBER_LINKED_SERVER');
+```
+
 # Pruebas de entorno antes de producción
 
 Son 8 scripts en la carpeta `pruebas_entorno` del repositorio. Se abren en SSMS y se corren **en orden** sobre `BNABAJ_486`, con todos los scripts de `sql/` ya instalados (incluido `sql/85_sp_pruebas_entorno.sql`).
@@ -192,3 +230,14 @@ Qué revisar: en la comprobación del script, `CORREO_PRUEBA_PARA` vacío, `CYBE
 - La reversión del paso 7 solo funciona si después de la prueba no corrió otra asignación o actualización. No prendas el job entre el paso 6 y el 7.
 - Ninguna prueba imprime cuentas, nombres, teléfonos ni correos: solo conteos, nombres de archivo y mensajes de la bitácora enmascarados.
 - Al terminar **borra la carpeta de prueba** (`C:\BANBAJ\486\PRUEBA\`): trae datos de clientes. Si copiaste archivos del banco a una carpeta de fecha pasada solo para la prueba, bórralos también.
+
+# Al pasar a producción: limpiar
+
+Cuando las pruebas salgan bien y ya no se vayan a repetir, sistemas borra lo que se instaló para probar con `sql/instalacion/06_limpiar_pruebas.sql`. Borra los stores `ops.sp_prueba_*`, las tablas `ops.PRUEBA_PARAM` y `ops.PRUEBA_CORRIDA` y las corridas de lectura de prueba del paso 5.
+
+1. Córrelo como viene (`@confirmar = 0`): solo muestra lo que borraría.
+2. Cambia `@confirmar` a `1` y córrelo otra vez.
+
+No borra nada si el modo de prueba sigue encendido (falta el paso 8) o si quedó una asignación de prueba sin revertir (falta el paso 7). Después ya no se instalan otra vez al actualizar el servidor. Para volver a probar, borra el parámetro `PRUEBAS_LIMPIAS` y corre `sql/85_sp_pruebas_entorno.sql`.
+
+Lo de la migración desde FoxPro se limpia igual con `sql/instalacion/05_limpiar_migracion.sql`.

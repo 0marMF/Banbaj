@@ -407,6 +407,8 @@ EXEC ops.sp_llave_riesgo_migrar;        -- después de migrar: todo en "SIN CAMB
 
 Borrar `C:\MIGRA486\` en la PC de FoxPro y en el servidor, y vaciar la papelera. Los CSV traen datos de clientes.
 
+Cuando ya no se vaya a migrar otra vez (ya en producción), borra también los stores y tablas de la migración con `sql/instalacion/05_limpiar_migracion.sql`: primero con `@confirmar = 0` para ver qué borra y después con `1`. Deja `ops.sp_mig_leer` y `ops.sp_mig_diagnostico`, que siguen usando las cargas de exclusiones.
+
 ## Operación diaria
 
 ### Lo que hace el job solo
@@ -742,6 +744,8 @@ Antes del paralelo, corre en SSMS, en orden, los scripts de `pruebas_entorno/` (
 7. `07_revertir_prueba.sql`: deja el DAT como estaba.
 8. `08_modo_prueba_apagar.sql`: repone parámetros y jobs. **No lo olvides:** con el modo de prueba encendido no sale ningún correo real ni se escribe nada en CYBER.
 
+Ya en producción, `sql/instalacion/06_limpiar_pruebas.sql` borra los stores y tablas de las pruebas y las corridas de lectura de prueba (primero con `@confirmar = 0`). Después borra `C:\BANBAJ\486\PRUEBA\`.
+
 ### Corrida en paralelo con FoxPro
 
 Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre los mismos archivos. Solo FoxPro arriba a CYBER; Banbaj solo genera.
@@ -798,6 +802,8 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 | 50850 | No se pudo crear la carpeta o escribir un archivo (OLE) | Revisar que la ruta exista para el servidor (UNC, no Q:), los permisos de la cuenta del servicio y que *Ole Automation Procedures* esté activo |
 | 50852 | La contraseña del ZIP trae un carácter prohibido | Quitar `" % & \| < > ^` |
 | 50853 | 7-Zip no terminó bien | Revisar `RUTA_7ZIP`, que xp\_cmdshell esté activo y que se pueda escribir en `CARPETA_ZIP` |
+| 50940 a 50942 | `05_limpiar_migracion.sql` no borró nada: corrida en proceso, DAT vacío o falta el cambio de llave por riesgo | Esperar la corrida, migrar primero o correr `EXEC ops.sp_llave_riesgo_migrar @confirmar = 1;` |
+| 50950 a 50953 | `06_limpiar_pruebas.sql` no borró nada: corrida en proceso, modo de prueba encendido, parámetros de prueba puestos o asignación de prueba sin revertir | Correr `pruebas_entorno/08` o `07`, o dejar `CORREO_PRUEBA_PARA` vacío y `CYBER_SOLO_LECTURA = 0` |
 | 50110 | Falta la actualización OK del día, o no hay consecutivo de folios | Correr primero la ACT. Si falta el consecutivo, migrar CONSECUTIVO |
 | 50040 | Una validación canceló la corrida | El mensaje dice cuál. Corregir el archivo y correr el proceso a mano |
 | 50025 (llega `VALIDACION_ENTRADA_486`) | La entrada no pasó la validación: falta un encabezado, un valor no está en el catálogo o una regla de datos superó su tolerancia. La corrida queda CANCELADA y el DAT no cambió | Seguir el correo: `cfg.sp_layout_cambiar`, `cfg.sp_catalogo_alta`, ajustar `cfg.VALIDACION_DATO` o pedir el archivo corregido; luego `EXEC ops.sp_asignacion_486 @fecha = '…';` o `ops.sp_actualizacion_486`. Detalle: *Flujo y diagramas*, 09 |

@@ -46,10 +46,11 @@ Este manual explica el proceso en ese orden. No hace falta saber programar: todo
 2. **Respaldo** del DAT: si algo falla después, se regresa solo a como estaba.
 3. **Saldos y pagos:** actualiza saldo actual, vencido, pago mínimo y PVS de cada cuenta. Los pagos negativos se excluyen y se avisan con `PAGOS_NEGATIVOS_486`.
 4. **Retiros:** las cuentas que cumplen un criterio de retiro (saldo cero o negativo, etc.) se retiran solas, salvo que en un segmento pasen del 50 % de sus cuentas. En ese caso llega un hallazgo y el retiro espera la revisión del equipo.
-5. **CYBER:** ejecuta solo los scripts de saldos, vencido, pago mínimo y PVS/REE. **Ya no se sube SCBSDOS en la actualización.**
-6. **SCBPAG:** se escribe en la carpeta de la corrida y llega `ARCHIVOS_LISTOS_486` para subirlo.
-7. **Usuarios AEM y MIS:** se bajan de CYBER sus datos (ESTATUS y ABAN_SR) y se actualizan sus tablas.
-8. **Cuadre de pagos:** en cada vuelta del job revisa que los pagos del SCBPAG ya estén en CYBER. A las 17:00 avisa los que falten.
+5. **Blanqueo de ETIQUETA6 por tramo (26/11):** con el tramo nuevo de los saldos (`SEG`, la ETIQUETA3 de Operación) se quita el REE a las cuentas que ya no son elegibles: TDC fuera de `VEN2` y `VEN3` (por ejemplo `VEN4` o `CCAS`), Consumo en `CASTIGADA`. Queda en `ops.ETIQUETA6_BLANQUEO`.
+6. **CYBER:** ejecuta solo los scripts de saldos, vencido, pago mínimo y PVS/REE; este último lleva también el blanqueo de ETIQUETA6 (`u1ext2`). **Ya no se sube SCBSDOS en la actualización.**
+7. **SCBPAG:** se escribe en la carpeta de la corrida y llega `ARCHIVOS_LISTOS_486` para subirlo.
+8. **Usuarios AEM y MIS:** se bajan de CYBER sus datos (ESTATUS y ABAN_SR) y se actualizan sus tablas.
+9. **Cuadre de pagos:** en cada vuelta del job revisa que los pagos del SCBPAG ya estén en CYBER. A las 17:00 avisa los que falten.
 
 ## 2. Asignación (cuando el banco manda bases maestras)
 
@@ -61,7 +62,7 @@ Este manual explica el proceso en ese orden. No hace falta saber programar: todo
 
 1. **Aviso de inicio** a Operación (`INICIO_ASIG_486`).
 2. **Validación de las bases** (layout y datos). Si no pasan, la corrida se cancela y llega `VALIDACION_ENTRADA_486`. Desde el 20/11 también para si el riesgo viene repetido (en la base o entre TDC y Consumo), si trae letras o pasa de 20 dígitos, o si la base es idéntica a la de un día anterior. Avisa, sin parar, si un riesgo llega con otro RFC o cambia de segmento.
-3. **Homologación:** etiqueta cada cuenta (segmento, estatus, tramo, tipo…) con los **catálogos** que mantiene el equipo. La **ETIQUETA6** vale `REE` cuando la base dice "APLICA PLAN DE PAGOS" (TDC) o "APLICA RESTRUCTURA" (Consumo); sale en U1EXT2 del SCBSDOS y sustituye a la lista TOP, que ya no se carga.
+3. **Homologación:** etiqueta cada cuenta (segmento, estatus, tramo, tipo…) con los **catálogos** que mantiene el equipo. La **ETIQUETA6** vale `REE` cuando la base dice "APLICA PLAN DE PAGOS" (TDC) o "APLICA RESTRUCTURA" (Consumo); sale en U1EXT2 del SCBSDOS y sustituye a la lista TOP, que ya no se carga. Si una cuenta que ya tenía REE llega sin la leyenda, se blanquea (correo del 23/11). También se blanquea si su tramo de los saldos ya no es elegible (ver el paso 5 de la actualización).
 4. **Cuentas nuevas y reasignadas:** asigna folio (`486-<folio>`) y guarda el histórico. Con más de 100 nuevas avisa a AEM (`ALERTA_NUEVAS_486`).
 5. **Devoluciones:** las cuentas que ya no vienen se retiran solas, con el mismo tope de 50 % por segmento. Al cerrar el retiro sale el ZIP con el correo de devolución (Operación con el ZIP y AEM en copia oculta).
 6. **Teléfonos y correos:** arma los teléfonos y los correos que se van a mandar a CYBER. Quita los de queja, los inválidos y, desde el 19/11, los que tienen una lada o longitud que el cargador no admite (`cfg.PHNVAL`, la copia de PHNVAL de CYBER que se renueva sola el día 1 de cada mes).
@@ -165,6 +166,8 @@ Las etiquetas (segmento, estatus, tramo, tipo, enfoque…) salen de `cfg.CATALOG
 | `ENFOQUE_HIPO` | Enfoque de liquidación de Hipotecario | `ETIQUETA5` |
 | `ETIQUETA6_TDC` | ENFOQUE\_PLAN DE PAGOS: APLICA PLAN DE PAGOS = REE | `ETIQUETA6` (U1EXT2) |
 | `ETIQUETA6_CONSUMO` | ENFOQUE\_REESTRUCTURA: APLICA RESTRUCTURA = REE | `ETIQUETA6` (U1EXT2) |
+| `ETIQUETA6_SEG_TDC` | Tramo de los saldos (SEG): VEN2 y VEN3 = SI (conserva el REE); VEN4 y CCAS = NO | Blanqueo de `ETIQUETA6` |
+| `ETIQUETA6_SEG_CONSUMO` | Tramo de los saldos (SEG): 1-29, 30-59, 60-89 y 90+ = SI; CASTIGADA = NO | Blanqueo de `ETIQUETA6` |
 | `COSECHA_MORA` | COSECHA 1-3 | `ETIQUETA1` |
 
 ```sql
@@ -348,6 +351,44 @@ Revertir regresa el DAT, el histórico, los folios y la base maestra a como esta
 Para probar en el servidor sin tocar CYBER ni mandar correos reales (antes de producción, o después de un cambio grande), corre en orden los scripts de `pruebas_entorno/` (su `LEEME.md` explica cada uno): modo prueba, bajada de CYBER, correos, detección y lectura de archivos, asignación de prueba, reversión y apagar el modo prueba. Todo lo que muestran son conteos; nunca datos de clientes.
 
 **Siempre termina con `08_modo_prueba_apagar.sql`.** Mientras el modo de prueba está encendido, los correos solo llegan a quien hizo la prueba y nada se escribe en CYBER.
+
+Ya en producción, sistemas puede borrar lo de las pruebas y lo de la migración con `sql/instalacion/06_limpiar_pruebas.sql` y `05_limpiar_migracion.sql`.
+
+## Rutas de entrada y salida
+
+| Qué | Ruta | Parámetro o dónde se cambia |
+|---|---|---|
+| **Entrada.** Bases maestras y archivos de actualización del banco | `\\192.168.50.13\q\CYBER\C_486\<año>\<mes>\<día>\` (= `Q:\CYBER\C_486\2026\noviembre\26\`). Mes en español y minúsculas, día con dos dígitos. Asignación: `BASE MAESTRA_TARJETA*.csv`, `BASE MAESTRA_CONSUMO*.csv`, `BASE MAESTRA_HIPOTECARIO*.csv`. Actualización: `SERTEC_Saldos_tdc*.txt`, `SERTEC_Saldos_Cons*.txt`, `SERTEC_Saldos_Hip*.txt` (apagado), `SERTEC_Pagos*.txt` | `cfg.ARCHIVO.RUTA` y `PATRON_NOMBRE` |
+| **Entrada.** Tablas de CYBER (DELQMST, PHONE, PHONE_G1, ADDRESS, UDA1, RPT_DAT_486_1, PHNVAL, remesas, bitácora de banderas) | Servidor vinculado `[CYBER]` (Oracle), no es carpeta | `CYBER_LINKED_SERVER`, `cfg.sp_cyber_conectar` |
+| **Entrada.** CSV de la migración desde FoxPro (una sola vez) | `C:\MIGRA486\<FUENTE>.csv` en el servidor de SQL Server | `@carpeta` de `ops.sp_migrar_486` |
+| **Entrada.** CSV de exclusiones y etiquetas (cargas a mano) | La que indiques, visible para el servicio de SQL Server (ej. `C:\BANBAJ\486\CARGAS\`) | `@archivo` de `cfg.sp_exclusion_cargar` y `cfg.sp_etiqueta_cargar` |
+| **Salida.** Archivos planos de cada corrida | `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\` (ej. `C:\BANBAJ\486\SALIDA\20261126_corrida125\`) | `RUTA_SALIDA` |
+| **Salida.** Scripts de Oracle de esa corrida (ACT_SALDOS, ACT_PVS_REE, retiro, depuraciones) | `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\cyber\` | `RUTA_SALIDA` |
+| **Salida.** Copia del DAT para MIS | `\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\DAT486_<aaaammdd>.csv` | `RUTA_MIS` |
+| **Salida.** ZIP de retiros con contraseña | `C:\RETIROS_PAG_486_<mmddaaaahhmmss>.zip` | `CARPETA_ZIP` (contraseña: credencial `ZIP_RETIROS`) |
+| **Salida.** Devolución para CYBER (`MX_G1MCT_DVBJIG_<aaaammdd>_<hhmmss>`) | Se escribe en la carpeta de la corrida; se copia a `\\192.168.50.1\Cyber_00\dev\` (a mano mientras el parámetro esté vacío) | `RUTA_DEVOLUCION_CYBER` |
+| Programa para el ZIP | `C:\Program Files\7-Zip\7z.exe` | `RUTA_7ZIP` |
+| Carpeta de las pruebas de entorno | `C:\BANBAJ\486\PRUEBA\` (se borra al terminar) | `@carpeta` de `ops.sp_prueba_modo` |
+| Respaldo de la base antes de actualizar | `C:\BANBAJ\respaldo_BNABAJ_486_<aaaammdd>.bak` | Comando `BACKUP` del paso 0 |
+
+Archivos que deja cada proceso en la carpeta de su corrida:
+
+| Proceso | Archivos |
+|---|---|
+| Asignación | `SCBSDOS.TXT`, `SCBTEL.TXT`, `sub_mst.TXT`, `sub_mail.TXT`, `SCBACTH_486NU.TXT`, `SCBACTH_486REA.TXT`, `SCBACTH_SINTEL.TXT` (al subir los saldos), `DAT486_<aaaammdd>.csv` |
+| Actualización | `SCBPAG.TXT`, `DAT486_<aaaammdd>.csv` y en `cyber\` los scripts `ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN` y `ACT_PVS_REE` (este último lleva también el blanqueo de ETIQUETA6) |
+| Retiro | `SCBACTH_486.TXT`, `RETIROS_486_<aaaammdd>.csv`, `MX_G1MCT_DVBJIG_<aaaammdd>_<hhmmss>`, `DAT486_<aaaammdd>.csv` y el ZIP en `CARPETA_ZIP` |
+| Etiquetado | `SCBSDOS.TXT`, `DAT486_<aaaammdd>.csv` |
+| Blanqueo de status | `BLANQUEA_486_<aaaammdd>.csv` |
+
+Para ver las rutas que tiene el servidor:
+
+```sql
+USE [BNABAJ_486];
+SELECT CODIGO, PROCESO, RUTA, PATRON_NOMBRE, ACTIVO FROM cfg.ARCHIVO WHERE CLIENTE = '486' ORDER BY PROCESO, ORDEN;
+SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486'
+  AND CLAVE IN ('RUTA_SALIDA', 'RUTA_MIS', 'CARPETA_ZIP', 'RUTA_DEVOLUCION_CYBER', 'RUTA_7ZIP', 'CYBER_LINKED_SERVER');
+```
 
 ## Procesos a mano
 

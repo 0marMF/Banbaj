@@ -4,6 +4,17 @@ Decisiones del 29 y 30/10. Cada correo es una plantilla (`mail.PLANTILLA`) con s
 
 Todos llevan la firma de Asignaciones y el aviso de confidencialidad.
 
+**Formato (26/11):** el del ejemplo que compartió el equipo (`Documento1.txt` en Banbaj_banc), con el buzón del 486 en la firma (`asig.486.cdmx@sertec.com.mx`, Tel. (0155) 7099 0104, Ext. 1416). Usa los colores de BanBajío:
+
+| Uso | Color |
+|---|---|
+| Encabezado del correo y de las tablas | Morado del logotipo `#a54686` |
+| Franja de los correos de alerta (importancia alta) y línea de la firma | Rojo del logotipo `#ed1c24` |
+| Enlaces secundarios | Morado oscuro `#7d3466` |
+| Fondo, tarjeta, texto y bordes | Grises del formato de ejemplo (`#f0f2f5`, `#f8fafc`, `#475569`, `#e2e8f0`) |
+
+Cada correo tiene un título en el encabezado (por ejemplo "Asignación realizada" o el tipo de hallazgo), el texto principal y una tarjeta con el detalle. El cuerpo lo arma el código (`tools/generar_sql_486.py`, función `cuerpo_correo`) y la semilla lo actualiza en cada instalación. El asunto, la lista y la importancia los puede cambiar el equipo sin que la semilla los pise.
+
 ## Los que se quedan
 
 ### Asignación

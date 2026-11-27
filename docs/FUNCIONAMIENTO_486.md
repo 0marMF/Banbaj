@@ -275,6 +275,7 @@ Todas viven en `cfg.EXCLUSION`, con tipo, valor, requerimiento (OS), fecha, si e
 - **Etiquetado del DAT:** `ops.sp_etiquetar_campo` cambia cualquier campo de etiqueta del DAT con un CSV FOLIO,ETIQUETA (o por cuenta). Acepta el nombre de columna de Operación. Genera su propio SCBSDOS.
 - **Etiquetas por cuenta** (`cfg.ETIQUETA`): ETI, DM1 y STATUS, que salen en campos del SCBSDOS (DMP2, DMP1, U1USO4).
 - **ETIQUETA6 (19/11):** sale de la base maestra y va en U1EXT2 del SCBSDOS. Vale `REE` si en TDC `ENFOQUE_PLAN DE PAGOS` dice "APLICA PLAN DE PAGOS" (catálogo `ETIQUETA6_TDC`) o si en Consumo `ENFOQUE_REESTRUCTURA` dice "APLICA RESTRUCTURA" (catálogo `ETIQUETA6_CONSUMO`); si no, queda vacía. Se recalcula en cada asignación, también en las cuentas que ya estaban. Sustituye a la lista TOP, que ya no se usa. Hipotecario no tiene regla todavía.
+- **Blanqueo de ETIQUETA6 (26/11, correo del 23/11):** el REE se quita si la cuenta llega en la base maestra sin la leyenda (tipo `BASE`) o si el tramo de los saldos (`SEG`, la ETIQUETA3 de Operación) ya no es elegible (tipo `TRAMO`; catálogos `ETIQUETA6_SEG_TDC`: VEN2 y VEN3, y `ETIQUETA6_SEG_CONSUMO`: 1-29 a 90+). Lo hace `ops.sp_etiqueta6_blanqueo` en la actualización (sube a CYBER en `ACT_PVS_REE`) y en la asignación (va en el SCBSDOS); el registro queda en `ops.ETIQUETA6_BLANQUEO`. Parámetro `ETIQUETA6_BLANQUEO`.
 
 ## Usuarios externos: AEM y MIS (18/11)
 

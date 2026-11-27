@@ -24,4 +24,8 @@ pandoc docs/flujo/README.md docs/flujo/[0-9]*.md -f markdown --resource-path=doc
 pandoc pruebas_entorno/GUIA_PRUEBAS_ENTORNO.md -f markdown --reference-doc=tools/plantilla_word.docx \
   --toc --toc-depth=2 -M toc-title=Contenido -M lang=es-MX -s \
   -o "pruebas_entorno/Guia de pruebas de entorno Banbaj 486.docx"
+# Qué correr en el servidor (ACTUALIZAR_SERVIDOR.md), con las rutas de entrada y salida
+pandoc ACTUALIZAR_SERVIDOR.md -f gfm --reference-doc=tools/plantilla_word.docx \
+  --shift-heading-level-by=-1 --toc --toc-depth=2 -M toc-title=Contenido -M lang=es-MX -s \
+  -o "docs/Actualizar servidor Banbaj 486.docx"
 echo "Listo: docs/*.docx"

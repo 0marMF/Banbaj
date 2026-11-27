@@ -533,12 +533,14 @@ DECLARE @id INT = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE PROCESO = 'ASIG
 EXEC ops.sp_generar_salida @id, 'SCBSDOS';
 SET @o6 = CONCAT(
     (SELECT STRING_AGG(CONCAT(SEGMENTO2, ':', RIESGO), ',') WITHIN GROUP (ORDER BY SEGMENTO2, RIESGO) FROM dat.DAT_486 WHERE ETIQUETA6 = 'REE'), '|',
-    (SELECT COUNT(*) FROM dat.DAT_486 WHERE ETIQUETA6 IS NOT NULL AND ETIQUETA6 <> 'REE'), '|',
+    (SELECT COUNT(*) FROM dat.DAT_486 WHERE NULLIF(ETIQUETA6, '') IS NOT NULL AND ETIQUETA6 <> 'REE'), '|',
     (SELECT COUNT(*) FROM ops.SALIDA_LINEA s JOIN dat.DAT_486 d ON s.LINEA LIKE N'____' + d.CUENTA2 + N' %'
      WHERE s.ID_CORRIDA = @id AND s.ARCHIVO = 'SCBSDOS' AND d.ETIQUETA6 = 'REE' AND pru.fn_campo(s.LINEA, 'U1EXT2') = 'REE'), '|',
-    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS' AND ISNULL(pru.fn_campo(LINEA, 'U1EXT2'), '') NOT IN ('', 'REE')));
-SET @e6 = N'CONSUMO:20000001,TDC:1000000001|0|2|0';
-EXEC pru.sp_igual N'ETIQUETA6: REE por la base maestra (APLICA PLAN DE PAGOS / APLICA RESTRUCTURA, sin acentos ni mayúsculas) y en U1EXT2; la lista TOP ya no entra', @e6, @o6;
+    (SELECT COUNT(*) FROM ops.SALIDA_LINEA WHERE ID_CORRIDA = @id AND ARCHIVO = 'SCBSDOS' AND ISNULL(pru.fn_campo(LINEA, 'U1EXT2'), '') NOT IN ('', 'REE')), '|',
+    (SELECT STRING_AGG(CONCAT(b.TIPO, ':', d.RIESGO, ':', b.SEG), ',') FROM ops.ETIQUETA6_BLANQUEO b JOIN dat.DAT_486 d ON d.CUENTA = b.CUENTA WHERE b.ID_CORRIDA = @id));
+/* TDC 1000000001 llega elegible en la base, pero su tramo de los saldos (NORM) no es VEN2 ni VEN3: el blanqueo por tramo (26/11) le quita el REE */
+SET @e6 = N'CONSUMO:20000001|0|1|0|TRAMO:1000000001:NORM';
+EXEC pru.sp_igual N'ETIQUETA6: REE por la base maestra (APLICA PLAN DE PAGOS / APLICA RESTRUCTURA, sin acentos ni mayúsculas) y en U1EXT2; la lista TOP ya no entra; blanqueo por tramo en la asignación', @e6, @o6;
 
 EXEC cfg.sp_etiqueta_baja '486', 'TOP', '100003';
 EXEC cfg.sp_etiqueta_alta '486', 'TOP', '486-100002', 'REE';

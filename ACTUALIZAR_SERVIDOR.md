@@ -1,8 +1,87 @@
-# Qué volver a ejecutar en el servidor (actualización del 20/11/2026)
+# Qué volver a ejecutar en el servidor (actualización del 26/11/2026)
 
 Esta guía lleva tu base (`BNABAJ_486` en `STCSVASIGNAC044\MULTISQLSERVER`) a la versión actual de `main`. Vale para una base instalada en cualquier fecha a partir del 03/11. Todos los scripts de `sql/` se pueden volver a correr sobre una base con datos: crean solo lo que falta y reemplazan los procedimientos.
 
 Tiempo aproximado: 20 minutos, sin contar la migración.
+
+## Blanqueo de ETIQUETA6, correos nuevos y limpieza (26/11)
+
+Si ya tienes la versión del 20/11, esto es lo que cambia:
+
+- **Blanqueo de ETIQUETA6 (REE)**, con las reglas del correo "RE: Etiquetado REE" (23/11). El etiquetado sigue saliendo de la base maestra (TDC: `ENFOQUE_PLAN DE PAGOS`; Consumo: `ENFOQUE_REESTRUCTURA`). El REE se quita en dos casos:
+  - **Por la base:** la cuenta llega en la base maestra sin la leyenda y ya estaba etiquetada. Se blanquea al actualizar las existentes, queda el registro como `BASE` y la etiqueta vacía sube a CYBER en el SCBSDOS.
+  - **Por tramo:** el tramo que manda el banco en el archivo de saldos (`SEG` del DAT, que en el DAT de Operación es `ETIQUETA3`) ya no es elegible. En TDC solo son elegibles `VEN2` y `VEN3` (`VEN4` y `CCAS` lo pierden). En Consumo, de `1-29` a `90+` (`CASTIGADA` lo pierde). Corre en la actualización (el blanqueo sube a CYBER en el script `ACT_PVS_REE` como `u1ext2 = ''`) y en la asignación (va en el SCBSDOS). Una cuenta sin tramo, por ejemplo una nueva que todavía no trae saldos, no se toca. Hipotecario no se revisa.
+  - Los tramos elegibles están en los catálogos `ETIQUETA6_SEG_TDC` y `ETIQUETA6_SEG_CONSUMO` (`SI` conserva, `NO` blanquea). Un tramo que no está en el catálogo también blanquea, y queda un AVISO en la bitácora con el valor y cuántas cuentas lo traen. Si el banco manda un tramo nuevo que sí es elegible:
+
+```sql
+USE [BNABAJ_486];
+EXEC cfg.sp_catalogo_alta @catalogo = 'ETIQUETA6_SEG_TDC', @origen = N'VEN1', @destino = N'SI';
+SELECT * FROM ops.ETIQUETA6_BLANQUEO WHERE ID_CORRIDA = <corrida>;          -- qué se blanqueó (TIPO = BASE o TRAMO)
+UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CLIENTE = '486' AND CLAVE = 'ETIQUETA6_BLANQUEO';   -- solo si hay que apagarlo
+```
+
+- **Correos con el formato del equipo** (`Documento1.txt` de Banbaj_banc), con la firma del buzón del 486 (`asig.486.cdmx@sertec.com.mx`) y los colores de BanBajío: encabezado morado `#a54686` y acento rojo `#ed1c24` (los dos colores del logotipo), con los grises del formato de ejemplo. Los correos de alerta (importancia alta) llevan una franja roja y el ícono "!". Las tablas de los correos (hallazgos, archivos listos, validación) usan los mismos colores. La semilla **reemplaza el cuerpo** de las plantillas y la firma. El asunto, la lista y la importancia que hayas cambiado se respetan.
+- **Limpieza para dejar la base solo con lo de producción** (scripts nuevos en `sql/instalacion/`, se corren una vez y a mano):
+  - `05_limpiar_migracion.sql`: borra `ops.sp_migrar_486`, `ops.sp_llave_riesgo_migrar`, `ops.fn_mig_faltan` y las tablas y vistas de paso `stg.MIG_*` que hayan quedado. No borra `ops.sp_mig_leer` ni `ops.sp_mig_diagnostico`, que se pasaron a `sql/18_sp_lectura_csv.sql` porque las cargas de exclusiones los siguen usando. Se detiene si el DAT está vacío o si falta el cambio de llave por riesgo.
+  - `06_limpiar_pruebas.sql`: borra los `ops.sp_prueba_*`, `ops.PRUEBA_PARAM`, `ops.PRUEBA_CORRIDA` y las corridas de lectura de prueba (`PROCESO = 'PRUEBA'`) con lo que dejaron. Se detiene si el modo de prueba sigue encendido o si quedó una asignación de prueba sin revertir.
+  - Los dos vienen con `@confirmar = 0` (solo muestran lo que borrarían). Se cambia a `1` y se corren otra vez. Dejan `MIGRACION_LIMPIA = 1` y `PRUEBAS_LIMPIAS = 1`, y con eso `80_sp_migracion.sql` y `85_sp_pruebas_entorno.sql` ya no vuelven a crear nada, así que se sigue pudiendo correr todo `sql/` al actualizar.
+- **La semilla ya no borra `LLAVE_RIESGO_MIGRADA`** (ni las dos marcas de limpieza). Antes, cada vez que se corría la semilla se perdía, y con ella el freno que impide revertir corridas de antes del cambio de llave. Si ya corriste `ops.sp_llave_riesgo_migrar` y después la semilla, vuelve a poner la marca con la última corrida de antes del cambio:
+
+```sql
+USE [BNABAJ_486];
+SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'LLAVE_RIESGO_MIGRADA';   -- si no sale nada:
+INSERT INTO cfg.PARAMETRO (CLIENTE, CLAVE, VALOR, DESCRIPCION)
+VALUES ('486', 'LLAVE_RIESGO_MIGRADA', '<última corrida antes del cambio>', N'Corridas hasta esta no se revierten (llave vieja)');
+```
+
+- **`sql/instalacion/01_configurar_servidor.sql`** tenía en su comentario de arriba un `/*` de más, y SSMS marcaba `Missing end comment mark`. Ya está corregido. Si lo corriste sin error, no hay que hacer nada.
+
+Qué correr:
+
+1. **Apaga el job, respalda la base** (paso 0) y **guarda tus parámetros** (paso 1).
+2. **Corre todos los scripts de `sql/` en orden** (paso 2). Incluye el nuevo `18_sp_lectura_csv.sql`.
+3. **Repón tus parámetros** (paso 3). El parámetro nuevo es `ETIQUETA6_BLANQUEO = 1`.
+4. **Manda un correo de prueba** para ver el formato nuevo: `EXEC ops.sp_prueba_correo;` (o el paso 3 de las pruebas de entorno).
+5. Cuando ya estés en producción y no vayas a migrar ni probar otra vez: `sql/instalacion/05_limpiar_migracion.sql` y `06_limpiar_pruebas.sql`, primero con `@confirmar = 0` y después con `1`. Al terminar, borra `C:\MIGRA486\` y `C:\BANBAJ\486\PRUEBA\`.
+6. **Prende el job.**
+
+## Rutas de entrada y salida
+
+Las rutas `C:\` son del **servidor de SQL Server**, no de la PC de quien ejecuta. La cuenta del servicio de SQL Server debe poder leer las de entrada y escribir en las de salida.
+
+| Qué | Ruta | Parámetro o dónde se cambia |
+|---|---|---|
+| **Entrada.** Bases maestras y archivos de actualización del banco | `\\192.168.50.13\q\CYBER\C_486\<año>\<mes>\<día>\` (= `Q:\CYBER\C_486\2026\noviembre\26\`). Mes en español y minúsculas, día con dos dígitos. Asignación: `BASE MAESTRA_TARJETA*.csv`, `BASE MAESTRA_CONSUMO*.csv`, `BASE MAESTRA_HIPOTECARIO*.csv`. Actualización: `SERTEC_Saldos_tdc*.txt`, `SERTEC_Saldos_Cons*.txt`, `SERTEC_Saldos_Hip*.txt` (apagado), `SERTEC_Pagos*.txt` | `cfg.ARCHIVO.RUTA` y `PATRON_NOMBRE` |
+| **Entrada.** Tablas de CYBER (DELQMST, PHONE, PHONE_G1, ADDRESS, UDA1, RPT_DAT_486_1, PHNVAL, remesas, bitácora de banderas) | Servidor vinculado `[CYBER]` (Oracle), no es carpeta | `CYBER_LINKED_SERVER`, `cfg.sp_cyber_conectar` |
+| **Entrada.** CSV de la migración desde FoxPro (una sola vez) | `C:\MIGRA486\<FUENTE>.csv` en el servidor de SQL Server | `@carpeta` de `ops.sp_migrar_486` |
+| **Entrada.** CSV de exclusiones y etiquetas (cargas a mano) | La que indiques, visible para el servicio de SQL Server (ej. `C:\BANBAJ\486\CARGAS\`) | `@archivo` de `cfg.sp_exclusion_cargar` y `cfg.sp_etiqueta_cargar` |
+| **Salida.** Archivos planos de cada corrida | `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\` (ej. `C:\BANBAJ\486\SALIDA\20261126_corrida125\`) | `RUTA_SALIDA` |
+| **Salida.** Scripts de Oracle de esa corrida (ACT_SALDOS, ACT_PVS_REE, retiro, depuraciones) | `C:\BANBAJ\486\SALIDA\<aaaammdd>_corrida<id>\cyber\` | `RUTA_SALIDA` |
+| **Salida.** Copia del DAT para MIS | `\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\DAT486_<aaaammdd>.csv` | `RUTA_MIS` |
+| **Salida.** ZIP de retiros con contraseña | `C:\RETIROS_PAG_486_<mmddaaaahhmmss>.zip` | `CARPETA_ZIP` (contraseña: credencial `ZIP_RETIROS`) |
+| **Salida.** Devolución para CYBER (`MX_G1MCT_DVBJIG_<aaaammdd>_<hhmmss>`) | Se escribe en la carpeta de la corrida; se copia a `\\192.168.50.1\Cyber_00\dev\` (a mano mientras el parámetro esté vacío) | `RUTA_DEVOLUCION_CYBER` |
+| Programa para el ZIP | `C:\Program Files\7-Zip\7z.exe` | `RUTA_7ZIP` |
+| Carpeta de las pruebas de entorno | `C:\BANBAJ\486\PRUEBA\` (se borra al terminar) | `@carpeta` de `ops.sp_prueba_modo` |
+| Respaldo de la base antes de actualizar | `C:\BANBAJ\respaldo_BNABAJ_486_<aaaammdd>.bak` | Comando `BACKUP` del paso 0 |
+
+Archivos que deja cada proceso en la carpeta de su corrida:
+
+| Proceso | Archivos |
+|---|---|
+| Asignación | `SCBSDOS.TXT`, `SCBTEL.TXT`, `sub_mst.TXT`, `sub_mail.TXT`, `SCBACTH_486NU.TXT`, `SCBACTH_486REA.TXT`, `SCBACTH_SINTEL.TXT` (al subir los saldos), `DAT486_<aaaammdd>.csv` |
+| Actualización | `SCBPAG.TXT`, `DAT486_<aaaammdd>.csv` y en `cyber\` los scripts `ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN` y `ACT_PVS_REE` (este último lleva también el blanqueo de ETIQUETA6) |
+| Retiro | `SCBACTH_486.TXT`, `RETIROS_486_<aaaammdd>.csv`, `MX_G1MCT_DVBJIG_<aaaammdd>_<hhmmss>`, `DAT486_<aaaammdd>.csv` y el ZIP en `CARPETA_ZIP` |
+| Etiquetado | `SCBSDOS.TXT`, `DAT486_<aaaammdd>.csv` |
+| Blanqueo de status | `BLANQUEA_486_<aaaammdd>.csv` |
+
+Para ver las rutas que tiene el servidor:
+
+```sql
+USE [BNABAJ_486];
+SELECT CODIGO, PROCESO, RUTA, PATRON_NOMBRE, ACTIVO FROM cfg.ARCHIVO WHERE CLIENTE = '486' ORDER BY PROCESO, ORDEN;
+SELECT CLAVE, VALOR FROM cfg.PARAMETRO WHERE CLIENTE = '486'
+  AND CLAVE IN ('RUTA_SALIDA', 'RUTA_MIS', 'CARPETA_ZIP', 'RUTA_DEVOLUCION_CYBER', 'RUTA_7ZIP', 'CYBER_LINKED_SERVER');
+```
 
 ## Qué cambió desde el 03/11
 

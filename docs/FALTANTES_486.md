@@ -242,3 +242,13 @@ Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
 - [ ] **Segundo segmento el mismo día:** su SCBSDOS, teléfonos y correos llevan todo el DAT; el operador sube los dos SCBSDOS. Confirmar con el equipo que no estorba.
 - [ ] **Saldos del segundo segmento:** el arribo da los saldos por subidos cuando las cuentas con `DMHOSTUP` del día igualan las del SCBSDOS. Si el primer SCBSDOS ya marcó casi todo y en la segunda asignación las nuevas igualan a las retiradas, podría darlos por subidos antes de tiempo. Vigilar los primeros días con dos asignaciones.
 - [ ] **Pruebas de entorno** en el servidor antes de producción (`pruebas_entorno/`).
+
+## 19. Blanqueo de ETIQUETA6, correos y limpieza (26/11)
+
+- [x] **Reglas de etiquetado y blanqueo de ETIQUETA6** (correo "RE: Etiquetado REE", 23/11): etiquetado por la base maestra; blanqueo si llega sin la leyenda o si el tramo de los saldos (`SEG` = ETIQUETA3 de Operación) ya no es elegible (TDC: VEN2 y VEN3; Consumo: 1-29 a 90+).
+- [ ] **Primer blanqueo real:** el primer día puede blanquear muchas cuentas que ya traían el REE puesto a mano con un tramo que ya no es elegible. Revisar el renglón `ETIQUETA6 BLANQUEO` de la bitácora y `ops.ETIQUETA6_BLANQUEO` con Jesús Vargas antes de subir el `ACT_PVS_REE`.
+- [ ] **Tramos nuevos del banco:** un tramo que no está en `ETIQUETA6_SEG_*` blanquea y deja un AVISO. Si es elegible, darlo de alta con destino `SI`.
+- [ ] **Teléfono de la firma:** se tomó el del formato del equipo, (0155) 7099 0104 Ext. 1416; la firma anterior tenía (55) 5276 8513. Confirmar cuál va.
+- [ ] **Colores:** morado `#a54686` y rojo `#ed1c24` salen de fuentes públicas del logotipo de BanBajío; si el banco o SERTEC tienen un manual de marca, ajustar `COLOR` en `tools/generar_sql_486.py`.
+- [ ] **Limpieza:** correr `sql/instalacion/05_limpiar_migracion.sql` y `06_limpiar_pruebas.sql` cuando ya no se vaya a migrar ni probar.
+

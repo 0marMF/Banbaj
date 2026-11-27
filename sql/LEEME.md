@@ -17,7 +17,8 @@ Para instalar en el servidor, migrar desde FoxPro y operar día a día, sigue el
 | `10_funciones.sql` | Limpieza de importes y fechas, formato de ancho fijo, CP → estado |
 | `20_sp_comunes.sql` | Corrida, bitácora, carga dinámica de archivos, homologación, validación |
 | `25_sp_correo.sql` | Envío de correo dinámico y alta / baja de destinatarios |
-| `27_sp_etiquetas.sql` | Carga de etiquetas externas (TOP: folio + etiqueta de Operación) |
+| `18_sp_lectura_csv.sql` | Lectura de CSV a tablas de paso (`ops.sp_mig_leer`, `ops.sp_mig_diagnostico`): la usan la migración y las cargas de exclusiones |
+| `27_sp_etiquetas.sql` | Carga de etiquetas externas (TOP: folio + etiqueta de Operación) y blanqueo de ETIQUETA6 por tramo (`ops.sp_etiqueta6_blanqueo`, 26/11) |
 | `30_sp_asignacion.sql` | Unión de bases (llave = riesgo; repetido entre segmentos detiene), avisos de llave, devolución, existentes, folios y alta, retiro |
 | `32_sp_retiro_solicitud.sql` | Retiro por solicitud con folio o riesgo (`ops.sp_retiro_solicitud`) |
 | `35_sp_respaldo.sql` | Respaldo del DAT por corrida y retroceso (`ops.sp_revertir_corrida`) |
@@ -27,9 +28,11 @@ Para instalar en el servidor, migrar desde FoxPro y operar día a día, sigue el
 | `50_sp_salidas.sql` | Archivos planos de `cfg.SALIDA_ARCHIVO` + `cfg.SALIDA` (ancho fijo o delimitados) |
 | `60_sp_orquestadores.sql` | `ops.sp_asignacion_486` y `ops.sp_actualizacion_486` |
 | `70_sp_procesos_manuales.sql` | Etiquetado del DAT, SCBSDOS fuera de proceso, blanqueo de status, exclusiones, avisos a Operación |
-| `80_sp_migracion.sql` | Migración desde FoxPro (`ops.sp_migrar_486`) y cambio de llave por riesgo (`ops.sp_llave_riesgo_migrar`, 20/11) |
-| `85_sp_pruebas_entorno.sql` | Pruebas de entorno: modo prueba, CYBER, correo, archivos, lectura y asignación de prueba (los llaman los scripts de `pruebas_entorno/`) |
+| `80_sp_migracion.sql` | Migración desde FoxPro (`ops.sp_migrar_486`) y cambio de llave por riesgo (`ops.sp_llave_riesgo_migrar`, 20/11). Con `MIGRACION_LIMPIA = 1` no crea nada |
+| `85_sp_pruebas_entorno.sql` | Pruebas de entorno: modo prueba, CYBER, correo, archivos, lectura y asignación de prueba (los llaman los scripts de `pruebas_entorno/`). Con `PRUEBAS_LIMPIAS = 1` no crea nada |
 | `90_semilla_486.sql` | Configuración del 486 (generada con `tools/generar_sql_486.py`) |
+
+En `instalacion/` (a mano, no van en el ciclo de `sql/`): `01` configuración del servidor, `02` job, `03` parámetros y credenciales, `04` accesos, y ya en producción `05_limpiar_migracion.sql` y `06_limpiar_pruebas.sql` (borran lo de la migración y lo de las pruebas de entorno; primero con `@confirmar = 0`).
 
 Con `sqlcmd` usar siempre `-I` (QUOTED_IDENTIFIER ON) y `-f 65001` (los scripts están en UTF-8; sin esto los acentos de la semilla se dañan). SSMS ya maneja ambos.
 
