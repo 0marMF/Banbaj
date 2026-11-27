@@ -25,6 +25,7 @@ Scripts para probar en el servidor que todo lo de afuera responde antes de prend
 **Cuidado:**
 
 - No dejes el modo de prueba encendido: el paso 8 lo apaga. Si lo olvidas, en producción no saldría ningún correo a asignaciones ni se escribiría nada en CYBER.
+- Con el modo de prueba encendido, cada actualización o asignación queda anotada al empezar (`ops.PRUEBA_CORRIDA`). Así el paso 7 la revierte aunque el paso 6 se corte.
 - La reversión del paso 7 solo funciona si después de la prueba no corrió otra asignación o actualización.
 - Ninguna prueba imprime cuentas, nombres, teléfonos ni correos: solo conteos, nombres de archivo y mensajes de la bitácora (enmascarados). Al terminar borra la carpeta de prueba.
 - El paso 6 hace la asignación de esa fecha. Si ya hay una actualización OK de ese día, la usa y no la revierte.

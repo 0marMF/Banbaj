@@ -46,6 +46,14 @@ BEGIN
     VALUES (@cliente, @proceso, ISNULL(@fecha, CAST(GETDATE() AS DATE)), @hora_llegada);
     SET @id_corrida = SCOPE_IDENTITY();
     EXEC ops.sp_log @id_corrida, 'CORRIDA', 'INICIO';
+    /* Pruebas de entorno (26/11): con el modo de prueba encendido la corrida queda anotada en ops.PRUEBA_CORRIDA
+       desde que empieza, para que pruebas_entorno/07 la revierta aunque el script se corte a la mitad.
+       Dinámico: las tablas son de sql/85 y pueden no existir (antes de instalarlo o ya limpias). */
+    IF @proceso IN ('ACT', 'ASIG') AND OBJECT_ID('ops.PRUEBA_CORRIDA') IS NOT NULL AND OBJECT_ID('ops.PRUEBA_PARAM') IS NOT NULL
+        EXEC sp_executesql N'IF EXISTS (SELECT 1 FROM ops.PRUEBA_PARAM WHERE CLIENTE = @c)
+                               AND NOT EXISTS (SELECT 1 FROM ops.PRUEBA_CORRIDA WHERE ID_CORRIDA = @id)
+                                INSERT INTO ops.PRUEBA_CORRIDA (ID_CORRIDA, PROCESO) VALUES (@id, @p);',
+             N'@c VARCHAR(10), @id INT, @p VARCHAR(10)', @c = @cliente, @id = @id_corrida, @p = @proceso;
 END;
 GO
 

@@ -386,6 +386,8 @@ EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;
 - Las tablas temporales `stg.MIG_*` se borran al terminar, salga bien o mal.
 - Al final pasa lo cargado a la **llave por riesgo** (20/11; `ops.sp_llave_riesgo_migrar`): en TDC la llave deja de ser la cuenta armada (últimos 4 dígitos de PRIME+4DIG + RFC) y pasa a ser el ACC_NUM; la armada queda en `CTA_BANCO`, que es lo que sigue yendo a CYBER. Muestra cuántas cuentas cambiaron y cuántas se quedaron con la llave de antes (TDC sin RIESGO, con RIESGO de más de 20 caracteres o repetido). Esas no se van a reconocer en la siguiente base: revísalas.
 
+La ETIQUETA6 (REE) no viene de FoxPro: al cargar se toma de CYBER (`U1EXT2`) con `ops.sp_etiqueta6_desde_cyber`. Si el servidor vinculado todavía no está, sale un aviso; córrelo a mano antes de la primera asignación (`EXEC ops.sp_etiqueta6_desde_cyber @confirmar = 1;`).
+
 ### Paso 4. Verificar
 
 ```sql

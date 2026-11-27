@@ -216,6 +216,8 @@ EXEC ops.sp_prueba_revertir @confirmar = 0;
 -- EXEC ops.sp_prueba_revertir @confirmar = 1;
 ```
 
+Con el modo de prueba encendido, cada actualización o asignación queda anotada desde que empieza. Así el paso 7 la revierte aunque el paso 6 se haya cortado con un error.
+
 Si ese día ya había una actualización OK antes de la prueba, el paso 6 la usó y esta no se revierte.
 
 ## Paso 8 · Apagar el modo de prueba

@@ -249,3 +249,95 @@ BEGIN
     END;
 END;
 GO
+
+/* =====================================================================
+   ETIQUETA6 inicial desde CYBER (26/11)
+   ---------------------------------------------------------------------
+   La migración desde FoxPro no trae ETIQUETA6: el REE lo tiene hoy CYBER
+   (U1EXT2 de RCVRY.UDA1, puesto a mano por Operación). Como hay una
+   asignación por segmento y el SCBSDOS lleva todo el DAT, sin este paso la
+   primera base de un segmento le borraría en CYBER el REE al otro.
+
+   Toma U1EXT2 de las cuentas del 486 y lo pone en DAT.ETIQUETA6:
+     - solo valores que son destino de los catálogos ETIQUETA6_TDC y
+       ETIQUETA6_CONSUMO (hoy REE); otro valor se reporta y no se toma;
+     - @solo_vacias = 1 (default): solo cuentas sin ETIQUETA6, para no pisar
+       lo que ya calculó una asignación.
+   Después cada base maestra la recalcula y la actualización la blanquea
+   por tramo (ops.sp_etiqueta6_blanqueo).
+
+   La llama ops.sp_migrar_486 al cargar. A mano:
+     EXEC ops.sp_etiqueta6_desde_cyber;                    -- qué tomaría (conteos)
+     EXEC ops.sp_etiqueta6_desde_cyber @confirmar = 1;     -- lo pone en el DAT
+   @desde_tabla: solo para pruebas (tabla local con U1ACCT y U1EXT2 en lugar de CYBER).
+   Errores 50410-50411
+   ===================================================================== */
+CREATE OR ALTER PROCEDURE ops.sp_etiqueta6_desde_cyber
+    @confirmar   BIT            = 0,
+    @solo_vacias BIT            = 1,
+    @mostrar     BIT            = 1,
+    @resumen     NVARCHAR(2000) = NULL OUTPUT,
+    @desde_tabla NVARCHAR(300)  = NULL,
+    @cliente     VARCHAR(10)    = '486'
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @srv SYSNAME = ISNULL(NULLIF(LTRIM(RTRIM(cfg.fn_param(@cliente, 'CYBER_LINKED_SERVER'))), N''), N'CYBER'),
+            @q NVARCHAR(MAX), @sql NVARCHAR(MAX), @msg NVARCHAR(400), @n INT;
+    CREATE TABLE #u (CUENTA2 NVARCHAR(100) NULL, EXT2 NVARCHAR(100) NULL);
+
+    IF @desde_tabla IS NOT NULL
+    BEGIN
+        IF OBJECT_ID(@desde_tabla) IS NULL THROW 50411, '@desde_tabla no existe.', 1;
+        SET @sql = N'INSERT INTO #u (CUENTA2, EXT2) SELECT U1ACCT, U1EXT2 FROM ' + @desde_tabla + N';';
+        EXEC (@sql);
+    END
+    ELSE
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM sys.servers WHERE name = @srv)
+        BEGIN
+            SET @msg = CONCAT(N'No existe el servidor vinculado ', @srv, N': captura la credencial CYBER_ORACLE y corre EXEC cfg.sp_cyber_conectar;');
+            THROW 50410, @msg, 1;
+        END;
+        SET @q = N'select u1acct, u1ext2 from RCVRY.uda1 where u1acct like ''' + @cliente + N'-%'' and u1ext2 is not null';
+        SET @sql = N'INSERT INTO #u (CUENTA2, EXT2) EXEC (N''' + REPLACE(@q, N'''', N'''''') + N''') AT ' + QUOTENAME(@srv) + N';';
+        EXEC (@sql);
+    END;
+
+    /* Valores válidos: los que ponen los catálogos de etiquetado (hoy REE) */
+    SELECT DISTINCT UPPER(LTRIM(RTRIM(VALOR_DESTINO))) AS VALOR INTO #validos
+    FROM cfg.CATALOGO
+    WHERE CLIENTE = @cliente AND ACTIVO = 1 AND CATALOGO IN ('ETIQUETA6_TDC', 'ETIQUETA6_CONSUMO') AND NULLIF(LTRIM(RTRIM(VALOR_DESTINO)), N'') IS NOT NULL;
+
+    SELECT d.CUENTA, d.SEGMENTO2, x.VALOR,
+           CASE WHEN d.CUENTA IS NULL THEN 'NO ESTA EN EL DAT'
+                WHEN NOT EXISTS (SELECT 1 FROM #validos v WHERE v.VALOR = x.VALOR) THEN 'VALOR NO RECONOCIDO'
+                WHEN @solo_vacias = 1 AND NULLIF(LTRIM(RTRIM(d.ETIQUETA6)), '') IS NOT NULL THEN 'YA TENIA ETIQUETA6'
+                ELSE 'SE TOMA' END AS ACCION
+    INTO #c
+    FROM (SELECT DISTINCT LTRIM(RTRIM(CUENTA2)) AS CUENTA2, UPPER(LTRIM(RTRIM(EXT2))) AS VALOR FROM #u
+          WHERE NULLIF(LTRIM(RTRIM(EXT2)), N'') IS NOT NULL) x
+    LEFT JOIN dat.DAT_486 d ON d.CLIENTE = @cliente AND d.CUENTA2 = x.CUENTA2;
+
+    SET @resumen = CONCAT((SELECT COUNT(*) FROM #c WHERE ACCION = 'SE TOMA'), N' cuentas toman su etiqueta de CYBER (U1EXT2)',
+                          N'; ya tenían ETIQUETA6: ', (SELECT COUNT(*) FROM #c WHERE ACCION = 'YA TENIA ETIQUETA6'),
+                          N'; valor no reconocido: ', (SELECT COUNT(*) FROM #c WHERE ACCION = 'VALOR NO RECONOCIDO'),
+                          N'; no están en el DAT: ', (SELECT COUNT(*) FROM #c WHERE ACCION = 'NO ESTA EN EL DAT'), N'.');
+
+    IF @confirmar = 1
+    BEGIN
+        UPDATE d SET d.ETIQUETA6 = LEFT(c.VALOR, 15)
+        FROM dat.DAT_486 d JOIN #c c ON c.CUENTA = d.CUENTA AND c.ACCION = 'SE TOMA';
+        SET @n = @@ROWCOUNT;
+        SET @resumen = CONCAT(N'Aplicado: ', @resumen);
+    END;
+
+    IF @mostrar = 1
+    BEGIN
+        /* Solo conteos por acción, segmento y valor (U1EXT2 es una etiqueta, no un dato del cliente) */
+        SELECT ACCION, ISNULL(SEGMENTO2, '-') AS SEGMENTO2, VALOR, COUNT(*) AS CUENTAS
+        FROM #c GROUP BY ACCION, SEGMENTO2, VALOR ORDER BY ACCION, SEGMENTO2, VALOR;
+        SELECT CASE WHEN @confirmar = 1 THEN N'APLICADO' ELSE N'VISTA PREVIA' END AS RESULTADO, @resumen AS RESUMEN;
+    END;
+END;
+GO

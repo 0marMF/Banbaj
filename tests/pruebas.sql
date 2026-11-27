@@ -1975,6 +1975,46 @@ EXEC pru.sp_igual N'ETIQUETA6: blanqueo por tramo (TDC solo VEN2/VEN3, Consumo 1
 GO
 
 /* ---------------------------------------------------------------------
+   ETIQUETA6 inicial desde CYBER (U1EXT2) al migrar (26/11) y corridas del modo de prueba anotadas al empezar
+   --------------------------------------------------------------------- */
+DECLARE @rs NVARCHAR(4000), @res NVARCHAR(2000);
+INSERT INTO dat.DAT_486 (FOLIO, CLIENTE, CUENTA, CUENTA2, RIESGO, SEGMENTO2, SUB_CTE, ETIQUETA6)
+VALUES ('920001', '486', 'C6TDCREE', '486-920001', 'C6TDCREE', 'TDC', 'NVA', NULL),
+       ('920002', '486', 'C6CONREE', '486-920002', 'C6CONREE', 'CONSUMO', 'NVA', ''),
+       ('920003', '486', 'C6YATIENE', '486-920003', 'C6YATIENE', 'TDC', 'NVA', 'REE'),
+       ('920004', '486', 'C6OTRO', '486-920004', 'C6OTRO', 'TDC', 'NVA', NULL),
+       ('920005', '486', 'C6SINCYB', '486-920005', 'C6SINCYB', 'TDC', 'NVA', NULL);
+DROP TABLE IF EXISTS pru.UDA1;
+CREATE TABLE pru.UDA1 (U1ACCT VARCHAR(28), U1EXT2 VARCHAR(5));
+INSERT INTO pru.UDA1 VALUES ('486-920001', 'REE  '), ('486-920002', 'ree'), ('486-920003', 'REE'), ('486-920004', 'TOP1'), ('486-999999', 'REE'), ('486-920005', ' ');
+EXEC ops.sp_etiqueta6_desde_cyber @mostrar = 0, @resumen = @res OUTPUT, @desde_tabla = N'pru.UDA1';
+SET @rs = CONCAT((SELECT COUNT(*) FROM dat.DAT_486 WHERE CUENTA2 LIKE '486-92000_' AND ETIQUETA6 = 'REE'), '|');
+EXEC ops.sp_etiqueta6_desde_cyber @confirmar = 1, @mostrar = 0, @resumen = @res OUTPUT, @desde_tabla = N'pru.UDA1';
+SET @rs = CONCAT(@rs, (SELECT STRING_AGG(CONCAT(RIGHT(CUENTA2, 1), '=', ISNULL(NULLIF(ETIQUETA6, ''), '-')), ',') WITHIN GROUP (ORDER BY CUENTA2)
+                       FROM dat.DAT_486 WHERE CUENTA2 LIKE '486-92000_'), '|', @res);
+SET @res = NULL;
+BEGIN TRY EXEC ops.sp_etiqueta6_desde_cyber @mostrar = 0; END TRY BEGIN CATCH SET @res = CAST(ERROR_NUMBER() AS NVARCHAR(10)); END CATCH;
+SET @rs = CONCAT(@rs, '|', @res);
+DELETE FROM dat.DAT_486 WHERE CUENTA2 LIKE '486-92000_';
+DROP TABLE pru.UDA1;
+EXEC pru.sp_igual N'ETIQUETA6 DESDE CYBER: toma REE de U1EXT2 en las cuentas sin etiqueta (sin espacios ni mayúsculas), no pisa la que ya tiene, no toma valores fuera del catálogo; sin servidor vinculado 50410',
+     N'1|1=REE,2=REE,3=REE,4=-,5=-|Aplicado: 2 cuentas toman su etiqueta de CYBER (U1EXT2); ya tenían ETIQUETA6: 1; valor no reconocido: 1; no están en el DAT: 1.|50410', @rs;
+
+/* Modo de prueba: la corrida que arranca con el modo encendido queda en ops.PRUEBA_CORRIDA desde el inicio (el paso 7 la revierte aunque se corte) */
+DECLARE @cp INT, @cn INT;
+EXEC ops.sp_prueba_modo @activar = 1, @correo = N'prueba@ejemplo.com', @carpeta = N'/tmp/prueba/';
+EXEC ops.sp_corrida_iniciar '486', 'ACT', '2026-11-27', NULL, @cp OUTPUT;
+UPDATE ops.CORRIDA SET ESTATUS = 'CANCELADA', FIN = SYSDATETIME() WHERE ID_CORRIDA = @cp;
+SET @rs = CONCAT((SELECT PROCESO FROM ops.PRUEBA_CORRIDA WHERE ID_CORRIDA = @cp), '|');
+DELETE FROM ops.PRUEBA_CORRIDA WHERE ID_CORRIDA = @cp;
+EXEC ops.sp_prueba_modo @activar = 0;
+EXEC ops.sp_corrida_iniciar '486', 'ACT', '2026-11-27', NULL, @cn OUTPUT;
+UPDATE ops.CORRIDA SET ESTATUS = 'CANCELADA', FIN = SYSDATETIME() WHERE ID_CORRIDA = @cn;
+SET @rs = CONCAT(@rs, (SELECT COUNT(*) FROM ops.PRUEBA_CORRIDA WHERE ID_CORRIDA = @cn));
+EXEC pru.sp_igual N'PRUEBA ENTORNO: con el modo de prueba encendido la corrida queda anotada al iniciar; con el modo apagado no', N'ACT|0', @rs;
+GO
+
+/* ---------------------------------------------------------------------
    Resultado
    --------------------------------------------------------------------- */
 SELECT CASE OK WHEN 1 THEN 'OK   ' ELSE 'FALLA' END AS R, PRUEBA, DETALLE FROM pru.RESULTADO ORDER BY ID;

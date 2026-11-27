@@ -5,6 +5,7 @@ GO
    ---------------------------------------------------------------------
    Sustituye a tools/migrar_dbf.py: todo corre en SQL Server.
    Lee los CSV con ops.sp_mig_leer (sql/18_sp_lectura_csv.sql).
+   Al cargar toma la ETIQUETA6 de CYBER (ops.sp_etiqueta6_desde_cyber, sql/27; 26/11).
    Terminada la migración: sql/instalacion/05_limpiar_migracion.sql borra lo de aquí.
 
    1. En FoxPro, exportar cada DBF a CSV con cyber/486/EXPORTAR_MIGRACION.prg
@@ -341,6 +342,8 @@ BEGIN
     WHERE d IN (SELECT D FROM @dest);
     INSERT INTO #aviso (TEXTO) SELECT CONCAT(FUENTE, N'.csv no se encontró en ', @carpeta) FROM #fuente WHERE FILAS < 0;
 
+    IF EXISTS (SELECT 1 FROM @dest WHERE D = 'DAT') AND EXISTS (SELECT 1 FROM @hay WHERE F = 'DAT')
+        INSERT INTO #aviso (TEXTO) VALUES (N'ETIQUETA6: al cargar se toma de CYBER (U1EXT2 de RCVRY.UDA1) para las cuentas del DAT; FoxPro no la trae (ops.sp_etiqueta6_desde_cyber)');
     IF @confirmar = 0
     BEGIN
         SELECT f.FUENTE, CASE WHEN f.FILAS < 0 THEN NULL ELSE f.FILAS END AS FILAS_LEIDAS FROM #fuente f ORDER BY f.FUENTE;
@@ -391,6 +394,19 @@ BEGIN
         /* 20/11: lo migrado trae la llave de FoxPro (en TDC la cuenta armada); pasa a la llave por riesgo */
         IF EXISTS (SELECT 1 FROM @dest WHERE D IN ('DAT', 'HISTORIA'))
             EXEC ops.sp_llave_riesgo_migrar @cliente = @cliente, @confirmar = 1;
+        /* 26/11: ETIQUETA6 arranca con lo que hoy tiene CYBER (U1EXT2): la primera asignación de un segmento no le quita el REE al otro */
+        IF EXISTS (SELECT 1 FROM @dest WHERE D = 'DAT') AND EXISTS (SELECT 1 FROM @hay WHERE F = 'DAT')
+        BEGIN
+            DECLARE @eti6 NVARCHAR(2000);
+            BEGIN TRY
+                EXEC ops.sp_etiqueta6_desde_cyber @confirmar = 1, @mostrar = 0, @resumen = @eti6 OUTPUT, @cliente = @cliente;
+                INSERT INTO #aviso (TEXTO) VALUES (CONCAT(N'ETIQUETA6: ', @eti6));
+            END TRY
+            BEGIN CATCH
+                INSERT INTO #aviso (TEXTO) VALUES (LEFT(CONCAT(N'ETIQUETA6: no se pudo tomar de CYBER (', ERROR_MESSAGE(),
+                    N'). Córrelo antes de la primera asignación: EXEC ops.sp_etiqueta6_desde_cyber @confirmar = 1;'), 1000));
+            END CATCH;
+        END;
         SELECT DESTINO, TABLA, FILAS AS FILAS_CARGADAS FROM #res ORDER BY ORDEN;
         SELECT TEXTO AS AVISO FROM #aviso ORDER BY ID;
         PRINT 'Listo: carga confirmada. Borra los CSV de la carpeta (traen datos de clientes).';
