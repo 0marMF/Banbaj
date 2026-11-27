@@ -38,7 +38,7 @@ GO
 SET NOCOUNT ON;
 GO
 /* Si la migración ya se limpió (sql/instalacion/05_limpiar_migracion.sql deja MIGRACION_LIMPIA = 1), este
-   script no vuelve a crear nada: se puede seguir corriendo sql/*.sql completo al actualizar el servidor. */
+   script no vuelve a crear nada: se puede seguir corriendo todos los scripts de sql/ al actualizar el servidor. */
 IF EXISTS (SELECT 1 FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'MIGRACION_LIMPIA' AND VALOR = '1')
 BEGIN
     PRINT '80_sp_migracion: la migración ya se limpió (MIGRACION_LIMPIA = 1); no se crea nada.';

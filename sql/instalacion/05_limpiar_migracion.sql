@@ -15,7 +15,7 @@ USE [BNABAJ_486];
    histórico, los pagos, las etiquetas ni las exclusiones que se migraron.
 
    Deja MIGRACION_LIMPIA = 1: sql/80_sp_migracion.sql ya no vuelve a crear
-   nada, así que se puede seguir corriendo sql/*.sql completo al actualizar.
+   nada, así que se puede seguir corriendo todos los scripts de sql/ al actualizar.
 
    Cómo se corre:
      1. Con @confirmar = 0 (como viene): solo muestra lo que borraría.

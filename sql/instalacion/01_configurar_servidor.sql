@@ -5,7 +5,7 @@
    - xp_cmdshell: armar el ZIP de retiros con 7-Zip
    - Database Mail: perfil asig.486.cdmx para las plantillas del 486
    Revisa el servidor SMTP antes de correrlo (hoy los .prg usan 192.168.50.7:25).
-   No está en sql/*.sql: se corre a mano en master, una sola vez.
+   No está entre los scripts de sql/: se corre a mano en master, una sola vez.
    ===================================================================== */
 USE master;
 GO

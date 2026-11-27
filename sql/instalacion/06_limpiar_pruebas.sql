@@ -19,7 +19,7 @@ USE [BNABAJ_486];
    el envío de correos y CYBER los leen.
 
    Deja PRUEBAS_LIMPIAS = 1: sql/85_sp_pruebas_entorno.sql ya no vuelve a crear
-   nada, así que se puede seguir corriendo sql/*.sql completo al actualizar.
+   nada, así que se puede seguir corriendo todos los scripts de sql/ al actualizar.
    Para volver a probar: borra ese parámetro y corre sql/85_sp_pruebas_entorno.sql.
 
    Cómo se corre:

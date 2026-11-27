@@ -31,7 +31,7 @@ GO
 SET NOCOUNT ON;
 GO
 /* Si las pruebas de entorno ya se limpiaron (sql/instalacion/06_limpiar_pruebas.sql deja PRUEBAS_LIMPIAS = 1),
-   este script no vuelve a crear nada: se puede seguir corriendo sql/*.sql completo al actualizar el servidor. */
+   este script no vuelve a crear nada: se puede seguir corriendo todos los scripts de sql/ al actualizar el servidor. */
 IF EXISTS (SELECT 1 FROM cfg.PARAMETRO WHERE CLIENTE = '486' AND CLAVE = 'PRUEBAS_LIMPIAS' AND VALOR = '1')
 BEGIN
     PRINT '85_sp_pruebas_entorno: las pruebas ya se limpiaron (PRUEBAS_LIMPIAS = 1); no se crea nada.';
