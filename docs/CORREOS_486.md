@@ -1,10 +1,10 @@
 # Correos del cliente 486
 
-Decisiones del 29 y 30/10. Cada correo es una plantilla (`mail.PLANTILLA`) con su lista de destinatarios (`mail.LISTA` / `mail.DESTINATARIO`). Para cambiar a quién le llega un correo se edita la lista; no hay que tocar código.
+Cada correo es una plantilla (`mail.PLANTILLA`) con su lista de destinatarios (`mail.LISTA` / `mail.DESTINATARIO`). Para cambiar a quién le llega un correo se edita la lista; no hay que tocar código.
 
 Todos llevan la firma de Asignaciones y el aviso de confidencialidad.
 
-**Formato (26/11):** el del ejemplo que compartió el equipo (`Documento1.txt` en Banbaj_banc), con el buzón del 486 en la firma (`asig.486.cdmx@sertec.com.mx`, Tel. (0155) 7099 0104, Ext. 1416). Usa los colores de BanBajío:
+**Formato:** el del ejemplo que compartió el equipo (`Documento1.txt` en Banbaj_banc), con el buzón del 486 en la firma (`asig.486.cdmx@sertec.com.mx`, Tel. (0155) 7099 0104, Ext. 1416). Usa los colores de BanBajío:
 
 | Uso | Color |
 |---|---|
@@ -15,19 +15,17 @@ Todos llevan la firma de Asignaciones y el aviso de confidencialidad.
 
 Cada correo tiene un título en el encabezado (por ejemplo "Asignación realizada" o el tipo de hallazgo), el texto principal y una tarjeta con el detalle. El cuerpo lo arma el código (`tools/generar_sql_486.py`, función `cuerpo_correo`) y la semilla lo actualiza en cada instalación. El asunto, la lista y la importancia los puede cambiar el equipo sin que la semilla los pise.
 
-## Los que se quedan
-
-### Asignación
+## Asignación
 
 | Correo | Plantilla | Cuándo | Para | Copia oculta |
 |---|---|---|---|---|
-| **Inicio de asignación** (nuevo) | `INICIO_ASIG_486` | Solo, al arrancar la asignación. Dice la hora en que llegó la base | erika.ramos, administrativo.mc4, administrativo.mc5, supervisor.mc4, supervisorbackoffice.mc | asignaciones.cdmx1, asignaciones3, asig.cdmx |
-| **Fin de asignación** (antes MAIL.prg) | `CONFIRMACION_ASIG_486` | Solo, al terminar OK la depuración de correos y teléfonos en CYBER (`ops.sp_confirmar_asignacion`). A mano: `EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486'` | Los mismos del inicio | Los mismos del inicio |
-| **Asignación grande** (antes aem_alerta.prg) | `ALERTA_NUEVAS_486` | Solo, si llegan más de 100 cuentas nuevas (parámetro) | supervisor.aem.cdmx4, aem.control1, aem.proyectos1, aem.consultoria1, supervisor.aem.cdmx2 | asig.cdmx |
+| **Inicio de asignación** | `INICIO_ASIG_486` | Solo, al arrancar la asignación. Dice la hora en que llegó la base | erika.ramos, administrativo.mc4, administrativo.mc5, supervisor.mc4, supervisorbackoffice.mc | asignaciones.cdmx1, asignaciones3, asig.cdmx |
+| **Fin de asignación** | `CONFIRMACION_ASIG_486` | Solo, al terminar OK la depuración de correos y teléfonos en CYBER (`ops.sp_confirmar_asignacion`). A mano: `EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486'` | Los mismos del inicio | Los mismos del inicio |
+| **Asignación grande** | `ALERTA_NUEVAS_486` | Solo, si llegan más de 100 cuentas nuevas (parámetro) | supervisor.aem.cdmx4, aem.control1, aem.proyectos1, aem.consultoria1, supervisor.aem.cdmx2 | asig.cdmx |
 
-### Devolución (un solo correo)
+## Devolución (un solo correo)
 
-Uno para cualquier retiro: asignación, actualización o retiro por solicitud. Sustituye a devfianey.prg, a "Retiros actualizacion" de saldos.prg y a la notificación de devolución en la actualización.
+Uno para cualquier retiro: asignación, actualización o retiro por solicitud.
 
 | Copia | Plantilla | Para | Copia oculta | Adjunto |
 |---|---|---|---|---|
@@ -39,34 +37,20 @@ Uno para cualquier retiro: asignación, actualización o retiro por solicitud. S
 - **Por qué son dos envíos:** el correo de SQL Server (Database Mail) manda el mismo adjunto a todos los destinatarios de un correo. Para que AEM no reciba el ZIP, sale una copia igual sin adjunto y con AEM solo en copia oculta.
 - **Cómo se manda:** solo, al cerrar el retiro (`ops.sp_retiro_cerrar`). A mano: `EXEC ops.sp_exportar_salidas @id, @zip = 'RETIROS', @enviar_zip = 1`. O suelto: `EXEC ops.sp_aviso_devolucion @id, N'C:\RETIROS_PAG_486_….zip'`.
 
-### Al equipo de asignaciones (salen solos, 02 y 03/11)
+## Al equipo de asignaciones (salen solos)
 
 | Correo | Plantilla | Cuándo |
 |---|---|---|
 | Archivos listos para arribar | `ARCHIVOS_LISTOS_486` | En cuanto se escriben los planos que se suben a CYBER: carpeta, archivos con sus líneas y qué sigue. Otro aviso cuando aparece `SCBACTH_SINTEL.TXT` |
 | Hallazgos | `HALLAZGO_486` | Lo que el proceso no resolvió solo: retiro sobre el tope de 50 %, pagos que no subieron a las 17:00, cualquier paso automático con error. Trae una tabla con el detalle y el comando para resolverlo |
-| Validación de la entrada (17/11) | `VALIDACION_ENTRADA_486` | La actualización o la asignación se detuvo antes de tocar el DAT: falta un encabezado (cambió el layout), un valor no está en el catálogo o una regla de datos superó su tolerancia. Trae los encabezados que faltan, los encabezados nuevos del archivo, las anomalías con ejemplos enmascarados, qué hacer y el comando para volver a correr |
+| Validación de la entrada | `VALIDACION_ENTRADA_486` | La actualización o la asignación se detuvo antes de tocar el DAT: falta un encabezado (cambió el layout), un valor no está en el catálogo o una regla de datos superó su tolerancia. Trae los encabezados que faltan, los encabezados nuevos del archivo, las anomalías con ejemplos enmascarados, qué hacer y el comando para volver a correr |
 
 Diagrama de todos los correos: `docs/flujo/07_correos.md`.
 
-### Validaciones (salen solas)
+## Validaciones (salen solas)
 
 | Correo | Plantilla | Cuándo | Para |
 |---|---|---|---|
-| Consumo con saldo actual ≤ 0 (antes mail_sdo_act_cons.prg) | `ALERTA_SDO_ACT_CONS_486` | La base maestra de Consumo trae cuentas con SDO_ACT ≤ 0. El proceso sigue | Lista de Operación (la del inicio) |
+| Consumo con saldo actual ≤ 0 | `ALERTA_SDO_ACT_CONS_486` | La base maestra de Consumo trae cuentas con SDO_ACT ≤ 0. El proceso sigue | Lista de Operación (la del inicio) |
 | Pagos negativos | `PAGOS_NEGATIVOS_486` | Llegan pagos negativos: no se arriban, se manda la lista y el proceso sigue | Equipo de asignaciones: buzón asig.486.cdmx, con copia oculta a asignaciones.cdmx1, asignaciones3 y asig.cdmx |
 | Base maestra con números cortados por Excel | `MAESTRA_NUMEROS_EXCEL_486` | La base se guardó con cuentas en notación científica (1.23457E+15). La asignación se detiene | Buzón asig.486.cdmx + equipo de asignaciones |
-
-## Retirados
-
-| Correo | Motivo |
-|---|---|
-| Asignación Express (correo_486.prg) | Decisión 30/10 |
-| Pagos no actualizados a T-1 (mail_pagos.prg) | Decisión 29/10. La revisión sigue y queda en la bitácora, sin correo |
-| Retiros por actualización (saldos.prg) | Se junta en el correo único de devolución |
-| Devolución del cliente (devfianey.prg), en asignación y en actualización | Se junta en el correo único de devolución |
-| Notificación de actualización a Operación (correo_486noti.prg) | Decisión 30/10 |
-| Actualización terminada (correo.prg) | Decisión 30/10 |
-| Error del proceso | Decisión 29/10. El error queda en `ops.CORRIDA` y `ops.BITACORA` |
-| Devolución masiva (tope de devolución) | Decisión 29/10. Si se pone un tope, la asignación se detiene sin correo |
-| Saldos no actualizados, saldos iguales al último DAT, pagos que no subieron | Decisión 29/10: los saldos siempre se actualizan y los pagos siempre suben |

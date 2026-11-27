@@ -4,9 +4,9 @@
 
 Fuente: [`mmd/03_asignacion.mmd`](mmd/03_asignacion.mmd) · Código: `ops.sp_asignacion_486` en `sql/60_sp_orquestadores.sql`
 
-**Llave única por riesgo (20/11).** La llave del DAT y del histórico (`CUENTA`) es el riesgo en todos los segmentos: en TDC el ACC_NUM, en Consumo e Hipotecario el crédito. Con ella se reparten folios, se reconocen reasignadas y se decide la devolución. La cuenta que va a CYBER como cuenta del banco (DMSSNUM del SCBSDOS, SCBPAG, listas de etiquetas) queda en `CTA_BANCO`: en TDC la armada (últimos 4 dígitos de PRIME+4DIG + RFC), en los demás el crédito. Lo cargado antes del cambio se pasa con `ops.sp_llave_riesgo_migrar` (también al final de la migración).
+**Llave única por riesgo.** La llave del DAT y del histórico (`CUENTA`) es el riesgo en todos los segmentos: en TDC el ACC_NUM, en Consumo e Hipotecario el crédito. Con ella se reparten folios, se reconocen reasignadas y se decide la devolución. La cuenta que va a CYBER como cuenta del banco (DMSSNUM del SCBSDOS, SCBPAG, listas de etiquetas) queda en `CTA_BANCO`: en TDC la armada (últimos 4 dígitos de PRIME+4DIG + RFC), en los demás el crédito. Los datos cargados con la llave anterior se pasan con `ops.sp_llave_riesgo_migrar` (también al final de la migración).
 
-**Una asignación por segmento (20/11).** El job corre la asignación en cuanto llega una base maestra. Si después llega la de otro segmento, corre otra asignación solo con ese segmento (`ops.sp_cargar_proceso` no vuelve a tomar la base de un segmento que ya se asignó ese día). Cada asignación tiene sus propios archivos, su retiro y su arribo a CYBER; el SCBSDOS, los teléfonos y los correos de cada una llevan todo el DAT.
+**Una asignación por segmento.** El job corre la asignación en cuanto llega una base maestra. Si después llega la de otro segmento, corre otra asignación solo con ese segmento (`ops.sp_cargar_proceso` no vuelve a tomar la base de un segmento que ya se asignó ese día). Cada asignación tiene sus propios archivos, su retiro y su arribo a CYBER; el SCBSDOS, los teléfonos y los correos de cada una llevan todo el DAT.
 
 **Dentro de la corrida** (si cualquier paso falla, la corrida queda en ERROR y `ops.sp_retroceso_automatico` restaura el DAT):
 

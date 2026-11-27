@@ -12,7 +12,7 @@ flowchart LR
         direction TB
         P6["06 · ops.sp_prueba_asignacion<br/>actualización y asignación reales"]
         P6 --> V1{{"ops.sp_corrida_iniciar<br/>¿modo de prueba encendido?"}}
-        V1 -- sí --> V2["anota la corrida en ops.PRUEBA_CORRIDA<br/>al empezar (26/11)"]
+        V1 -- sí --> V2["anota la corrida en ops.PRUEBA_CORRIDA<br/>al empezar"]
         V2 --> V3{"¿El paso 6 terminó?"}
         V3 -- "sí" --> P7
         V3 -- "no (se cortó)" --> V4["revisa: corridas del día, bitácora,<br/>EN_PROCESO → ops.sp_corrida_finalizar 'ERROR'"]

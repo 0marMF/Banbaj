@@ -1,5 +1,5 @@
 flowchart TD
-    F(["Archivo del día en Q:<br/>cfg.ARCHIVO (nombre y carpeta)"]) --> H["ops.sp_cargar_archivo<br/>cuenta las columnas en el encabezado<br/>(ya no depende de NUM_COLUMNAS)"]
+    F(["Archivo del día en Q:<br/>cfg.ARCHIVO (nombre y carpeta)"]) --> H["ops.sp_cargar_archivo<br/>cuenta las columnas en el encabezado<br/>(no depende de NUM_COLUMNAS)"]
     H --> L{"Layout: ¿están todos los campos<br/>de cfg.ARCHIVO_COLUMNA?<br/>VALIDAR_LAYOUT = 1"}
     L -- "falta alguno" --> LX["ops.VALIDACION_ENTRADA tipo LAYOUT<br/>el archivo no se carga"]
     L -- "todos" --> D

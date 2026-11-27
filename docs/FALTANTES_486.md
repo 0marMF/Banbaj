@@ -1,254 +1,57 @@
-# 486 · Lo que falta para completar la lógica
+# 486 · Pendientes
 
-Inventario sacado de todos los `.prg` del 486 (`paso`, `asig_bases`, `asi486`, `telbnx`, `saldos`, `prog15`, `status`, `email`, `ges486`, `mail_pagos`): cada programa que se llama con `DO`, cada tabla que se abre y cada `.sql` que se ejecuta, contra lo que hay en el repo.
+Lo que falta para cerrar el 486. Lo que ya está hecho no se lista aquí; su detalle está en los demás documentos de `docs/`.
 
-Formato preferido para compartir:
-- **Programas:** el `.prg` tal cual.
-- **Tablas:** basta la estructura (lista de campos). No hace falta el contenido real; la carga la hace `ops.sp_migrar_486` en SQL Server.
+## Antes de migrar
 
-## 1. Programas que faltan
+- [ ] **Riesgos duplicados en el DAT de FoxPro:** se corrigen en FoxPro y después se hace la migración.
+- [ ] **Cuentas TDC sin RIESGO:** al migrar se quedan con la llave de antes y no se reconocen en la siguiente base (salen como devolución y entran como nuevas). Revisar el resumen de `ops.sp_llave_riesgo_migrar` antes de aplicarlo.
+- [ ] **Largo del ACC_NUM:** la llave mide 20. Si algún ACC_NUM real pasa de 20 dígitos o trae letras, la regla `DIGITOS` detiene la asignación; confirmar con una base real (prueba de lectura, `pruebas_entorno/05`).
 
-### Prioridad alta (cambian lo que se arriba a CYBER)
+## Instalación en CYBER (DBA)
 
-- [x] **`ACT_PHONE.prg`** — recibido. Carga `sub_mst.TXT` (CUENTA2|AREA|TELEFONO|TIPOTEL) en `RCVRY.JSP_TAB_TEL_REMESA_486` y ejecuta `RCVRY.JSP_TELEFONOS_REMESA_486`. **La lógica real está en ese procedimiento de Oracle** (ver sección 7).
-- [x] **`PAGOS.prg`** — recibido. SCBPAG de 104 posiciones: IDE '500', GRUPO '1', CUENTA (crédito del banco, 25), FE_PAG MMDDAAAA, MONT (15, con punto), SEGMENTO 'pbank', AGEN 'SERTEC', FE_REG, TRAN 'PAGO', MOREAL. Quita lo que ya está en PAGTOT (CUENTA + FE_PAG + monto).
-- [x] **`OP9.prg`** + `limpia.PRG` — recibidos. Normaliza los teléfonos de las cuentas que entran al DAT (`ops.sp_asig_normalizar_telefonos`).
-- [x] **`estructura.prg`** — recibido. REE por segmento/tramo/tipo en la actualización (reglas sobre `dat.DAT_486`).
-- [x] **`baj.sql`** — recibido (pagos del día en `RCVRY.pmtfil` de la compañía 486).
-- [x] **`STATUS.SQL`** + `status.prg` — recibidos. Blanqueo de status: `ops.sp_blanqueo_status`.
+- [ ] Instalar `cyber/486/oracle/JSP_CORREOS_486.sql`.
+- [ ] Instalar `cyber/486/oracle/JSP_TELEFONOS_REMESA_486.sql`.
+- [ ] Instalar `cyber/486/oracle/JSP_TELEFONOS_DEPURA_486.sql` (tabla `RCVRY.JSP_TAB_TEL_DEPURA_486` y store) y dar `SELECT` en `RCVRY.PHONE` al usuario de `CYBER_ORACLE`. Mientras tanto, `TEL_DEPURACION = ACTUAL`.
+- [ ] Confirmar que `RCVRY.PHNVAL` es el esquema que copia el job (`CYBER_TABLA_LADAS`) y que el usuario de `CYBER_ORACLE` tiene `SELECT`.
+- [ ] Confirmar que `RCVRY.JSP_VALIDADOR_TELEFONOS` no tiene más columnas obligatorias que CLIENTE, FECHA y TOTAL_TELS.
 
-### Prioridad media (gestiones y retiro)
+## Arribo a CYBER
 
-- [x] **`ges_nuevas_rea.prg`** — recibido. SCBACTH de 119 posiciones, RS/R1, origen 'aaxrh', "CUENTA NUEVA ASIGNADA." / "CUENTA REASIGNADA.".
-- [x] **`ges_retiro.prg`** — recibido. Mismo layout, "RETIRO DE CUENTA.", sale de `cybdev`.
-- [x] **`devfianey.prg`** — recibido. Solo manda el aviso "Devolucion del cliente BANCO BAJIO" a AEM: `AVISO_DEVOLUCION_486` (ver `docs/CORREOS_486.md`).
-- [x] **`RESPALDO2.prg`** y **`resdat.prg`** — recibidos. Respaldo por corrida; la copia a MIS queda como vista `ops.v_DAT_486_MIS`.
-- [x] **`ACT_MAIL.prg`** + `email.PRG` — recibidos. Correos a CYBER: `ops.sp_correos` → `sub_mail.TXT`.
-
-### Correos (solo hacen falta destinatarios y texto; la lógica ya está en `mail.*`)
-
-- [x] **`MAIL.prg`** — `CONFIRMACION_ASIG_486`.
-- [x] **`correo_486.prg`** — retirado (30/10).
-- [x] **`correo.prg`** — retirado (30/10).
-- [x] **`correo_486noti.prg`** — retirado (30/10). Correos finales en `docs/CORREOS_486.md`.
-- [x] **`mail_sdo_act_cons.prg`** — `ALERTA_SDO_ACT_CONS_486`.
-- [x] **`aem_alerta.prg`** — `ALERTA_NUEVAS_486`.
-- [x] **`devfianey.prg`** — `AVISO_DEVOLUCION_486`.
-- [x] **Correos:** decididos (30/10), ver `docs/CORREOS_486.md`.
-
-### Macro
-
-- [x] **`ASIG_486.xlsm` se elimina.** La base maestra se guarda directo como CSV (todas las columnas) desde Excel con "CSV (delimitado por comas)", que guarda en Windows-1252 (no "CSV UTF-8"). Lo que hacía la macro ya está en la homologación: cuenta TDC, NAME2→NAME1 y montos con `$` y comas. Si Excel deja cuentas en notación científica (1.23457E+15), la asignación se detiene (`*_NOTACION_CIENTIFICA`). La corrección fija D162 = C162 no se migró (era de un archivo).
-
-## 2. Tablas de referencia que pasan a SQL Server
-
-Se cargan con `ops.sp_migrar_486` desde CSV exportados con FoxPro (`cyber/486/EXPORTAR_MIGRACION.prg`). Para cada una necesito la **estructura** para confirmar que los campos se llamen como supuse.
-
-| Tabla DBF | Ruta en los .prg | Destino | Campos que supuse | Confirmar |
-| --- | --- | --- | --- | --- |
-| PURGA | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` (FE_BAJA) | Solo CUENTA, FOLIO y fecha de retiro (02/11) | [ ] nombre del campo de fecha |
-| historia | `O:\HISTORIA\GPO1\486\` | `dat.HISTORIA_FOLIO` | Estructura recibida (02/11): 1,804,213 renglones, una por asignación. Trae FE_ASIG, saldos (SDO_ACT, CAPITAL), TEL1-16 y DIRECC1-5; **no trae** SEGMENTO2, SUB_CTE, fecha de retiro ni correos. NVA/REA se deduce por orden de FE_ASIG | Lista |
-| DEVOL | `O:\HISTORIA\GPO1\486\` | — | **No se migra** (decisión) | — |
-| PAGTOT | `O:\PRG\GPO1\486\PAGOS\` | `dat.PAGO_ARRIBADO` (tabla fija) | Solo CUENTA, MONT, FE_PAG, FE_REG (01/11). 12,865 renglones viejos con FE_PAG incompleta se omiten | Lista |
-| TELSAN | `O:\PRG\MEXGPO1\ASI486\` | `ops.TELEFONO` (se arma en cada asignación) | Recibida: la regla nueva reproduce sus 15,353 teléfonos; no se migra | Lista |
-| TAB7 | `O:\DAT\GPO1\486\` | `dat.FOLIO_CONSECUTIVO` | Solo FOLIO | [ ] |
-| eti486 | `O:\PRG\MEXGPO1\ASI486\` | — | Ya no se usa | — |
-| eti | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (ETI) | CUENTA, ETIQUETA | [ ] |
-| dm1 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (DM1) | CUENTA, ETIQUETA | [ ] |
-| top | `O:\PRG\MEXGPO1\ASI486\` | Ya no se usa (19/11): ETIQUETA6 sale de la base maestra | — | [x] |
-| STATUS | `O:\PRG\MEXGPO1\ASI486\` | `cfg.ETIQUETA` (STATUS) | CUENTA, ESTATUS | [ ] |
-| exc486 | `O:\PRG\GPO1\486\` | `cfg.EXCLUSION` (CUENTA) | CUENTA | [ ] |
-| dirmal | `O:\ASIGNA\` | `cfg.EXCLUSION` (DIRECCION) | CUENTA, DIRECC1 | [ ] |
-| EMAILMALO | `O:\ASIGNA\` | `cfg.EXCLUSION` (CORREO) | CUENTA, EMAIL | [ ] |
-| blacklist_486 | `O:\PRG\MEXGPO1\ASI486\` | `cfg.EXCLUSION` (TELEFONO) | Estructura recibida (02/11): TEL, FE_AGRE, OS, SOLICITUD (7,820 registros). Sin STATUS: todo cuenta como X | Lista |
-| TELBAJ_G1 | `\\192.168.50.108\T\CYBER_SISTEMAS\CYBER\TELEFONOS\` | — | **Ya no se migra** (01/11): se lee de CYBER (telbaj grupo 1) en cada asignación | — |
-| LADA | `O:\PRG\MEXGPO1\ASI486\` | — | **Ya no se migra** (01/11): ningún proceso la usa | — |
-| PNC | `\\192.168.50.108\T\CYBER_SISTEMAS\CYBER\PNM\` | — | **Ya no se migra** (01/11): se lee de `CYBER.dbo.CAT_PNM` en cada asignación | — |
-| DAT | `O:\DAT\GPO1\486\` | `dat.DAT_486` | Ya revisada (repo): 70 campos, 6,800 cuentas | Lista |
-
-## 3. Tablas y archivos compartidos con otros procesos
-
-Las bitácoras que se subían a Oracle y a server (`RCVRY.JSP_VALIDADOR_TELEFONOS`, `RCVRY.asig`, `asignaciones..tiempos`, `cyberdti.flags_cyber*`) **se descartan**: la bitácora es `ops.CORRIDA` + `ops.BITACORA`.
-
-- [x] **`O:\asigna\asignaciones`** y **`O:\ASIGNA\NUEVAS`** — se descartan.
-- [x] **`Q:\MIS\SERTEC98\CLIENTES\486\`** — se sigue dejando (30/10): `ops.sp_exportar_salidas` escribe ahí también `DAT486_<fecha>.csv` (parámetro `RUTA_MIS`; poner la ruta UNC).
-- [x] **Devolución para CYBER** (`MX_G1MCT_DVBJIG_<fecha>_<hora>`) — se genera como archivo plano para arribo manual.
-- [x] **`cyber.reg_serv`** — ya no hace falta: el arribo es manual con los archivos y scripts que deja `ops.sp_exportar_salidas`.
-
-## 4. Formatos de archivos (ejemplo con datos ficticios)
-
-- [x] TXT de arribo de pagos (`SCBPAG.TXT`).
-- [x] `sub_mst.TXT` de `ACT_PHONE`: CUENTA2|AREA|TELEFONO|TIPOTEL (confirmado con TELSAN).
-- [x] `C:\STATUSBAJ.txt`: CLIENTE|FOLIO|CUENTA|STATUS|ACCION|FECHA|PESO|DMSSNUM.
-- [x] `BAJPAG.TXT`: cuenta|monto|fecha.
-- [ ] `SERTEC_Saldos_Hip`: todavía no se recibe del banco; la carga queda apagada hasta tener un ejemplo.
-- [x] Base maestra de Hipotecario recibida.
-
-## 5. No hacen falta
-
-Son tablas de trabajo o archivos que el SQL ya genera por su cuenta: `layout1`, `layout_tdc`, `layout_consumo`, `layout_hipo`, `saldos_486`, `tdc486_2*`, `consumo486_2*`, `hipotecario`, `GPO1`, `DATC`, `TEL`, `TELA`, `TELB`, `TELC`, `TELBNX`, `TELSAN`, `oTELSAN`, `nTELSAN`, `bitac`, `bitact`, `bitac_R`, `pagomi`, `pagos486`, `act_tdc`, `act_cons`, `act_hip`, `SALDOS`, `SALDOSINI`, `BSTAT`, `CYBSTATUS`, `mail486`, `ma346`, `TMAIL`, `email`, `DATO1`, `DATO2`, `lio`, `gestion3`, `CYBGES`, `telefonos486`, todos los `C:\…` y los `.sql` que se arman al vuelo (`act486`, `min486`, `pvs486`, `bitac486*`, `BLSTABAJIO`, `DEVCYB`, `LIO`, `email`).
-
-## 6. Preguntas abiertas
-
-- [x] **`U1ARCOD1` (PVS) y `U1ARCOD3` (REE)** son columnas de `RCVRY.uda1` (confirmado 30/10): el script `ACT_PVS_REE` queda listo.
-
-
-- [x] **Importes negativos:** suben en cero (`NEGATIVO_MODO = CERO`, decisión 30/10). Una cuenta con saldo <= 0 se retira, así que antes del retiro CYBER recibe 0 y no un negativo. Aplica a DMCURBAL, U1PAGMIN y DMAMTDLQ del SCBSDOS y a los scripts de saldos; SALDO1-3 conservan el signo.
-- [x] **Columnas de las bases maestras (30/10):** ENFOQUE se queda (regla de TDC 90+). COVID y Reestructura se quitan: ETIQUETA llega por etiquetado (mapeo de Operación) y REE por estructura.
-- [x] **Perfil de Database Mail:** `asig.486.cdmx`.
-- [x] **Acceso a CYBER:** servidor vinculado desde SQL Server. El usuario y la contraseña se depositan en `cfg.CAPTURA_CREDENCIAL` (se guardan cifrados) y `EXEC cfg.sp_cyber_conectar` arma el vínculo. Falta: parámetro `CYBER_ORACLE_ORIGEN` (host:puerto/servicio) y el cliente de Oracle (OraOLEDB) instalado en el servidor.
-- [x] **Ruta de red de `Q:`:** `\\192.168.50.13\q` (01/11), ya en la semilla (`cfg.ARCHIVO.RUTA` y `RUTA_MIS`).
-- [x] **Días festivos:** no se agrega calendario (decisión 29/10). Antes: el T-1 de pagos y el job solo distinguen fin de semana. ¿Se agrega un calendario de días inhábiles (ej. después de un festivo, T-1 sería el último día hábil)?
-- [x] **Estructura de las tablas de CYBER:** sin acceso; se mantienen los campos como se ven en los .prg (decisión).
-
-## Ya resuelto
-
-- Carpeta de retiros: el ZIP de retiros queda en `C:\` (`C:\RETIROS_PAG_486_<fecha><hora>.zip`), como hoy.
-- Macro `ASIG_486.xlsm` corregida en `mapeos/ASIG_486.xlsm`: se quitó la línea D162 = C162 (pegaba NAME2 en Tipo de TDC en la fila 162). Solo cambió esa línea; el código precompilado se invalida para que Excel recompile al abrir.
-
-- Revisión de los flujos actuales (29/10), pasos que **ya no** van: ZIP con contraseña de los originales en C:\ORIGINALES, covid.dbf, garantizada.dbf, O:\ASIGNA\NUEVAS, C:\dev486_completa, captura de "a quién se pide el DAT", verifica.xls.
-- Pasos que **se quedan**: horas de solicitud, autorización y fin del arribo (`ops.sp_marcar_arribo`, `ops.v_TIEMPOS_CORRIDA`); cuadre de pagos contra CYBER como revisión a mano, sin correo (`ops.sp_bajar_cyber 'PAGOS'` → `ops.sp_cuadrar_pagos`); retiros por actualización con ZIP y correo; correos 1, 2, 9 y 10.
-- Avisos retirados (29/10): saldos no actualizados (SALDOSMAL), pagos que no subieron y saldos iguales al último DAT (pestaña REGLAS). Los saldos siempre se actualizan y los pagos siempre suben.
-- Corrección D162 = C162 de la macro: en la hoja BASE original C es NAME1 y D es NAME2, así que es la regla "si NAME2 viene vacío se toma NAME1" grabada para una sola fila. Como la macro ya borró columnas antes de esa línea, hoy pega NAME2 en Tipo de TDC (ESTRA3) en la fila 162. No se migra: la regla general ya está en la homologación.
-
-- TAB7 (último folio 179,688) entra a la migración. PURGA y DEVOL se quedan fuera: el objetivo es dejar las bases viejas y generar los archivos planos (saldos, teléfonos, gescar) y reparar datos, en automático o a mano.
-- Base maestra de Hipotecario recibida: 118 columnas; las 40 del mapeo se encuentran.
-- Macro `ASIG_486.xlsm`: su regla NAME2 vacío o '-' → NAME1 ya está aplicada y la macro se elimina.
-- Etiquetado: `ops.sp_etiquetar_campo @campo, @archivo` (CSV FOLIO,ETIQUETA) actualiza un campo del DAT. Acepta nuestro nombre o el de Operación (ETIQUETAS486 → `ETIQUETADO_ALIAS`) y sustituye a eti486.prg.
-
-- Flujo diario: de lunes a viernes llega la actualización; la asignación puede o no llegar y siempre después. `ops.sp_diario_486` (job cada 30 min) corre la actualización y luego la asignación si llegó; la asignación no corre sin la actualización OK del día; T-1 de pagos = día hábil anterior.
-- Controles `O:\ASIGNA\NUEVAS` y `O:\ASIGNA\asignaciones` se descartan (queda `ops.CORRIDA` + `ops.BITACORA`).
-- GARAN y ETIQUETA de la base maestra se quedan.
-- Se arriban todos los pagos: DAT, histórico de cuentas retiradas o, si no aparece, el crédito tal como llegó.
-- Aviso de pagos negativos: queda en la lista actual hasta que se actualice `mail.DESTINATARIO`.
-- TELBAJ y plan de numeración: se leen de CYBER en cada asignación (servidor vinculado `[192.168.50.53]` y `CYBER.dbo.CAT_PNM`, como `G4_025_TELEFONOS`). Etiquetas: por ahora se usa lo migrado.
-- Scripts sin uso quedan fuera.
-- Base maestra completa: solo la última de cada segmento (se reemplaza al llegar otra); la historia por cuenta queda en `dat.HISTORIA_FOLIO`.
-
-- `eti486` (mora) ya no se usa: DMPHONE es la ETIQUETA1 que llega en la base.
-- Ruta de entrada: `Q:\CYBER\C_486\<año>\<mes en español>\<día>\` para asignación y actualización.
-- Remesa de teléfonos: se vacía antes de volver a insertar (`TEL_BORRA`).
-- Banderas de CYBER (`RPT_LOG_CYBER_REG`, id_proc 416) se mantienen alrededor de la depuración de correos.
-- Correos: se insertan los nuevos en `RCVRY.ADDRESS` (`ops.sp_correos_nuevos`) y la remesa + `JSP_CORREOS_486` purga lo que ya no llega. EMAILMALO se aplica a ambos.
-- Gescar de cuentas sin teléfono: contra los teléfonos activos en CYBER (`ops.sp_gescar_sin_telefono`).
-- Lo que se baja de CYBER para cruzar (status, correos, teléfonos) va directo a tablas de paso (`ops.sp_bajar_cyber` → `stg.CYBER_*`); no se guardan archivos en la máquina.
-- La copia del DAT para MIS sale en CSV (`DAT486_<fecha>.csv`, con encabezado).
-- Las bases maestras se guardan completas (`dat.BASE_RECIBIDA`); los procesos solo toman las columnas mapeadas.
-- `administrativo.mc6@` corregido.
-
-- Los archivos planos se siguen arribando a mano: `ops.sp_exportar_salidas` los escribe con su nombre, Windows-1252 y CRLF (ver `cyber/486/ARRIBO_MANUAL.md`).
-- Teléfonos: solo en la asignación, completos, para que CYBER purgue y agregue.
-- Pagos negativos: no salen en SCBPAG, quedan en rechazos y se avisa a Operación (ya no cancelan la actualización).
-- PAGTOT pasa a tabla fija con solo los campos de la validación.
-- Retiro por solicitud con folio o riesgo: `ops.sp_retiro_solicitud` (vista previa, retroceso).
-- TIPOTEL: 1 = TEL1, 2 = TEL2, 4 = otro fijo, 5 = celular (según telbnx.prg).
-- Formato de teléfonos confirmado con TELSAN: celular AREA 044/045 + 10 dígitos (TIPOTEL 5); fijo AREA 01+lada + 7 u 8 dígitos (TIPOTEL 4); TIPOTEL 1 y 2 para TEL1/TEL2.
-- CYBER sigue aceptando solo el formato actual de teléfonos (044/045 para celular, 01 + lada para fijo): se conserva.
-- Estatus de retiro en CYBER: `dmstatus = 'R'` (de `prog15.prg`).
-- `covid` y `garantizada` se eliminan; las bases comentadas en `asi486.prg` se omiten.
-- `top` la alimenta Asignaciones con folio + etiqueta de operación (`cfg.sp_etiqueta_cargar`).
-- La base maestra se trabaja como llega (sin tope de devolución); hay retroceso por corrida.
-
-## 7. Revisión de los procedimientos de CYBER (02/11)
-
-Copias en `cyber/486/oracle/` (`*_actual.sql` = lo que hay hoy en CYBER).
-
-- [x] `RCVRY.JSP_TELEFONOS_REMESA_486`: versión optimizada en `cyber/486/oracle/JSP_TELEFONOS_REMESA_486.sql` (misma lógica, menos lecturas, corrige el filtro de grupo en PHONE_G1, crea el renglón del validador si falta y deja los errores en la bitácora). [ ] Instalarla en CYBER. Inserta desde `PHONE_G1` (arribo del SCBTEL), inactiva lo que no viene en la remesa y activa lo que sí, sin tocar gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`). El SCBTEL se arriba antes de cargar la remesa.
-- [x] `RCVRY.JSP_VALIDADOR_TELEFONOS`: el script `TEL_BORRA` inserta el renglón del día con el total enviado y el procedimiento lo completa. [ ] Confirmar que la tabla no tiene otras columnas obligatorias además de CLIENTE, FECHA y TOTAL_TELS.
-- [x] `RCVRY.JSP_CORREOS_486`: regla acordada, solo queda activo el domicilio de la última base maestra. Nueva versión en `cyber/486/oracle/JSP_CORREOS_486.sql` (correos igual que hoy; domicilios contra `DELQMST.DMADDR1`). [ ] Instalarla en CYBER. [x] Confirmado (03/11): `DMADDR1` es la columna del domicilio en `DELQMST`.
-- [x] Los correos nuevos entran con `ops.sp_bajar_cyber 'CORREOS'` (`MAIL_INSERTA_NUEVOS.sql`), paso obligatorio del arribo; con el arribo automático lo hace el job.
-- [x] **Fecha de retiro en el histórico:** se migra de PURGA solo CUENTA, FOLIO y fecha (02/11). [x] (03/11) La purga no trae fecha de retiro: la migración avisa y la deja vacía (ya no se detiene).
-
-## 8. Arribo automático a CYBER (02/11)
-
-`sql/76_sp_arribo_cyber.sql`: el job arriba solo correos (al detectar el SCBSDOS en `DELQMST`) y teléfonos (al detectar el SCBTEL en `PHONE_G1`) por el servidor vinculado. El operador solo sube SCBSDOS, SCBTEL y los gescar.
-
-- [x] Correos y teléfonos de la asignación sin sqlldr ni scripts a mano (`ops.sp_arribo_automatico`, `ops.sp_arribar_cyber`).
-- [x] `SCBACTH_SINTEL.TXT` sale de nuestro archivo de teléfonos con la asignación y se escribe solo al subir los saldos (19/11).
-- [x] (Confirmado 02/11) El usuario de Oracle tiene los permisos: `TRUNCATE`/`INSERT` en las dos remesas, `INSERT` en `ADDRESS` y `JSP_VALIDADOR_TELEFONOS`, `UPDATE` en `RPT_LOG_CYBER_REG`, `EXECUTE` de `JSP_TELEFONOS_REMESA_486` y `JSP_CORREOS_486`, `SELECT` en `DELQMST`, `PHONE_G1` y `PHONE`.
 - [ ] Confirmar las columnas de las remesas contra `LOAD_TEL_REMESA.CTL` y `LOAD_MAIL_REMESA.CTL` (parámetros `CYBER_REMESA_TEL_COLUMNAS` y `CYBER_REMESA_MAIL_COLUMNAS`).
 - [ ] Probar en CYBER con `@solo_mostrar = 1` y luego una corrida real con el arribo automático encendido.
-- [ ] Opcional: estructura completa de `PHONE_G1` para insertar ahí directamente y dejar de subir el SCBTEL.
+- [ ] Primera corrida con `DIFERENCIA`: revisar el renglón `TEL DIFERENCIA` antes de dejar seguir al job. Si el freno de 30 % (`TEL_DEPURA_MAX_INACTIVAR_PCT`) detiene la primera corrida por lo acumulado de días anteriores, revisarlo y ajustarlo solo esa vez.
+- [ ] Vigilar `CRUCE_DAT` (30 %) con unas semanas de archivos reales; si el banco manda saldos de cuentas que no son nuestras, subir la tolerancia.
+- [ ] Vigilar los primeros días con dos asignaciones: el arribo da los saldos por subidos cuando las cuentas con `DMHOSTUP` del día igualan las del SCBSDOS, y en la segunda asignación eso podría pasar antes de tiempo.
+- [ ] Confirmar con el equipo de asignaciones que los dos SCBSDOS del mismo día no estorban.
+- [ ] Opcional: estructura de `PHONE_G1` para usar el sello de fecha y hora del SCBTEL (`FECHA_G`, `FECHA_A`) como señal, o insertar ahí directamente y dejar de subir el SCBTEL.
 
-## 9. Arribo por pendientes, retiro automático y correo de hallazgos (02/11)
+## Limitaciones conocidas
 
-- [x] El arribo detecta el SCBSDOS y el SCBTEL contra lo que le faltaba a CYBER al terminar la asignación (cuentas, domicilios y teléfonos), no contra las altas: funciona en días sin cuentas nuevas.
-- [x] Retiro automático en asignación y actualización con tope de 50 % por segmento; arriba del tope queda manual.
-- [x] Cierre del retiro sin intervención: archivos, ZIP y correo de devolución, `dmstatus = 'R'` en CYBER y copia de la devolución a `\\192.168.50.1\Cyber_00\dev\`.
-- [x] Correo de hallazgos (`HALLAZGO_486`) solo al equipo de asignaciones.
-- [x] Confirmado (03/11): el domicilio está en `DELQMST.DMADDR1` (parámetro `CYBER_COLUMNA_DOMICILIO`).
-- [x] (Confirmado 02/11) Permisos del usuario de Oracle.
-- [x] (03/11) Sin acceso a `\\192.168.50.1\Cyber_00\dev\`: la devolución se copia a mano (`RUTA_DEVOLUCION_CYBER` vacío).
-- [ ] Estructura de `PHONE_G1` para usar también el sello de fecha y hora del SCBTEL (`FECHA_G`, `FECHA_A`) como señal.
+- Un teléfono que un gestor agregue entre la foto y el store (minutos) se queda activo hasta la siguiente asignación.
+- `ABAN_SR` se lee de `RPT_DAT_486_1` como la deja la última corrida de `PROC_DAT_486` en CYBER; si nadie la corre, el dato se queda viejo.
+- Los archivos de ancho fijo (SCBSDOS, SCBTEL, SCBPAG, gescar) se suben a mano.
+- La copia de `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` se hace a mano: el servidor no tiene acceso.
 
-## 10. Más pasos automáticos (02/11)
+## Bases de entrada
 
-- [x] Los archivos se escriben solos al terminar cada corrida (`EXPORTAR_AUTOMATICO`).
-- [x] Los scripts `ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN` y `ACT_PVS_REE` se ejecutan solos en CYBER (`ACT_CYBER_AUTOMATICO`).
-- [x] Blanqueo de status automático en cuanto subió el SCBSDOS (`BLANQUEO_AUTOMATICO`).
-- [x] Hora de fin del arribo y `CONFIRMACION_ASIG_486` automáticos (`CONFIRMACION_AUTOMATICA`).
-- [x] Cuadre de pagos automático; solo avisa si algo no subió a la hora límite (`CUADRE_AUTOMATICO`, `CUADRE_PAGOS_HORA_LIMITE` = 17:00).
-- [x] Confirmado (03/11): hora límite del cuadre 17:00 (el SCBPAG llega temprano).
-- [ ] Sigue a mano subir los archivos de ancho fijo (SCBSDOS, SCBTEL, SCBPAG, gescar). Se puede quitar si el cargador de CYBER toma archivos de una carpeta o con la estructura de `PHONE_G1` y de las tablas que llena el SCBSDOS.
-- [x] (03/11) Correo ARCHIVOS_LISTOS_486 al equipo de asignaciones en cuanto están los planos para arribar.
-
-## 11. Solo archivos (03/11, reemplazado el 07/11)
-
-- [x] Banbaj genera los archivos planos y los scripts y hasta ahí; las depuraciones en CYBER (stores de correos y teléfonos, scripts de la actualización, retiro en CYBER, blanqueo) y la confirmación se corren a mano. Todo queda programado y se prende con `ARRIBO_AUTOMATICO`, `ACT_CYBER_AUTOMATICO`, `RETIRO_CYBER_AUTOMATICO`, `BLANQUEO_AUTOMATICO` y `CONFIRMACION_AUTOMATICA`.
-- [x] (03/11) Las fechas de asignación, reasignación y retiro de los periodos migrados del histórico quedan vacías; se llenan con las corridas de Banbaj. PURGA no se usa.
-
-## 12. Proceso autónomo con diagramas (07/11)
-
-- [x] De vuelta al proceso autónomo: depuraciones de correos y teléfonos, scripts de la actualización, retiro en CYBER, blanqueo y confirmación automáticos (parámetros en 1).
-- [x] La copia de `MX_G1MCT_DVBJIG_*` a `Cyber_00` sigue a mano (sin acceso).
-- [x] Diagramas de cada flujo (`docs/flujo/`, fuente Mermaid en `mmd/`, imágenes en `img/`), documento *Flujo y diagramas Banbaj 486*.
-
-## 13. Validación de saldos y formato de archivos (15/11)
-
-- [x] El arribo da por subidos los saldos con la validación del equipo (`val.txt`): cuentas activas del 486 con `DMHOSTUP` del día = cuentas del SCBSDOS.
-- [x] La actualización toma sus archivos en `.txt` y la asignación en `.csv`.
-- [x] (15/11) `DELQMST.DMHOSTUP` es fecha sin hora: `val.txt` da un solo renglón (`13/11/26`, 6,855 cuentas activas del 486). Queda `to_char(DMHOSTUP, 'YYYYMMDD')`; también se acepta `DD/MM/AA`.
-- [x] Columnas de PURGA (486.txt): no trae fecha de retiro; sigue sin usarse.
-
-## 14. Validación de la entrada, layout editable y catálogos (17/11)
-
-- [x] Layout editable por el equipo en `cfg.ARCHIVO` y `cfg.ARCHIVO_COLUMNA` (`cfg.sp_layout_cambiar`), con historial; la semilla conserva lo que el equipo cambia. El número de columnas se cuenta en el encabezado.
-- [x] Si falta cualquier campo que toma el proceso, la actualización o la asignación se detiene antes de tocar el DAT y se avisa al equipo (`VALIDACION_ENTRADA_486`); se vuelve a correr a mano.
-- [x] Validación de datos con tolerancia por regla (`cfg.VALIDACION_DATO`): importes, máximos, negativos, enteros, teléfonos, correos, catálogos, cuentas repetidas, columnas vacías y volumen. Calibrada con las bases reales del 11 y 13/11.
-- [x] Etiquetado por catálogos estáticos (`cfg.CATALOGO`, `cfg.sp_catalogo_alta`): estatus y tramo de TDC, estatus, cartera y tipo de crédito de Consumo, estatus y enfoque de Hipotecario, garantía, cosecha.
-- [x] Con el layout real de TDC (11/11): el saldo actualizado viene vacío en VEN2 y VEN3 y antes se rechazaba el renglón; ahora toma el saldo PRIME. El tramo llega como rango (`30-59`) y antes no daba estatus; ahora sale por el catálogo. El enfoque `LIQUIDACIÓN` con acento ya da CAS en 90+.
-- [ ] **Hipotecario:** sigue sin archivo de ejemplo. Como ahora falta cualquier encabezado detiene, el primer archivo de Hipotecario probablemente va a parar la asignación hasta que el equipo ajuste su matriz con `cfg.sp_layout_cambiar` (el correo dice qué falta y qué encabezados trae el archivo). Conviene pasar un ejemplo antes.
+- [ ] **Hipotecario:** no hay archivo de ejemplo. Como cualquier encabezado que falte detiene la corrida, el primer archivo probablemente va a parar la asignación hasta que el equipo ajuste la matriz con `cfg.sp_layout_cambiar`. Conviene pasar un ejemplo antes.
+- [ ] **Hipotecario, ETIQUETA6:** el banco dio solo la regla de TDC y Consumo. La base de Hipotecario trae `ENFOQUE_RESTRUCTURA` (sin la segunda E). Cuando la confirmen, se agrega el catálogo `ETIQUETA6_HIPO` y la columna en el layout.
+- [ ] **Saldos de Hipotecario** (`SERTEC_Saldos_Hip`): todavía no se recibe del banco; la carga queda apagada hasta tener un ejemplo.
 - [ ] **Catálogos de TDC:** solo se conocen los estatus CCAS, VEN2, VEN3, VEN4 (y BCOB, BOPE, FALL de reestructura). Si llega otro (por ejemplo VEN1), la asignación se detiene hasta agregarlo con `cfg.sp_catalogo_alta 'ESTATUS_TDC', N'VEN1', N''`.
-- [ ] **Tolerancias:** revisarlas con el equipo después de unas semanas (`SELECT * FROM ops.VALIDACION_ENTRADA ORDER BY ID DESC;`).
+- [ ] **Tolerancias de `cfg.VALIDACION_DATO`:** revisarlas con el equipo después de unas semanas (`SELECT * FROM ops.VALIDACION_ENTRADA ORDER BY ID DESC;`).
 
-## 16. Etiqueta 6 de Hipotecario y tabla de ladas (19/11)
+## ETIQUETA6
 
-- [ ] **Regla de ETIQUETA6 para Hipotecario:** el banco dio solo la de TDC y Consumo. La base de Hipotecario trae `ENFOQUE_RESTRUCTURA` (sin la segunda E). Cuando la confirmen, se agrega el catálogo `ETIQUETA6_HIPO` y la columna en el layout.
-- [ ] **Esquema de PHNVAL en CYBER:** el job copia `RCVRY.PHNVAL` (parámetro `CYBER_TABLA_LADAS`). Confirmar que es ese esquema y que el usuario de `CYBER_ORACLE` tiene `SELECT`.
-
-
-## 17. Teléfonos por diferencia y vistas sin stores (19/11)
-
-- [ ] **DBA de CYBER:** instalar `cyber/486/oracle/JSP_TELEFONOS_DEPURA_486.sql` (tabla `RCVRY.JSP_TAB_TEL_DEPURA_486` y store nuevo) y dar `SELECT` en `RCVRY.PHONE` al usuario de `CYBER_ORACLE`. Hasta entonces `TEL_DEPURACION = ACTUAL`.
-- [ ] **Primera corrida con `DIFERENCIA`:** revisar el renglón `TEL DIFERENCIA` antes de dejar seguir al job. Si el freno de 30 % (`TEL_DEPURA_MAX_INACTIVAR_PCT`) para la primera vez por acumulado de días anteriores, revisar y ajustarlo solo esa vez.
-- [ ] **Ventana:** un teléfono que un gestor agregue entre la foto y el store (minutos) se queda activo hasta la siguiente asignación. Se aceptó así (19/11).
-- [ ] **ABAN_SR** se lee de `RPT_DAT_486_1` como la dejó la última corrida de `PROC_DAT_486` en CYBER; si nadie la corre, el dato se queda viejo (decisión 19/11).
-
-## 18. Llave por riesgo, validaciones y asignación por segmento (20/11)
-
-- [ ] **Largo del ACC_NUM:** la llave mide 20. Si algún ACC_NUM real pasa de 20 dígitos o trae letras, la regla `DIGITOS` detiene la asignación; confirmar con una base real (prueba de lectura, `pruebas_entorno/05`).
-- [ ] **Cuentas TDC sin RIESGO en FoxPro:** al migrar se quedan con la llave de antes y no se reconocen en la siguiente base (salen como devolución y entran como nuevas). Revisar el resumen de `ops.sp_llave_riesgo_migrar`.
-- [ ] **CRUCE_DAT de saldos (30 %):** calibrar con unas semanas de archivos reales; si el banco manda saldos de cuentas que no son nuestras, subir la tolerancia.
-- [ ] **Segundo segmento el mismo día:** su SCBSDOS, teléfonos y correos llevan todo el DAT; el operador sube los dos SCBSDOS. Confirmar con el equipo que no estorba.
-- [ ] **Saldos del segundo segmento:** el arribo da los saldos por subidos cuando las cuentas con `DMHOSTUP` del día igualan las del SCBSDOS. Si el primer SCBSDOS ya marcó casi todo y en la segunda asignación las nuevas igualan a las retiradas, podría darlos por subidos antes de tiempo. Vigilar los primeros días con dos asignaciones.
-- [ ] **Pruebas de entorno** en el servidor antes de producción (`pruebas_entorno/`).
-
-## 19. Blanqueo de ETIQUETA6, correos y limpieza (26/11)
-
-- [x] **Reglas de etiquetado y blanqueo de ETIQUETA6** (correo "RE: Etiquetado REE", 23/11): etiquetado por la base maestra; blanqueo si llega sin la leyenda o si el tramo de los saldos (`SEG` = ETIQUETA3 de Operación) ya no es elegible (TDC: VEN2 y VEN3; Consumo: 1-29 a 90+).
 - [ ] **Primer blanqueo real:** el primer día puede blanquear muchas cuentas que ya traían el REE puesto a mano con un tramo que ya no es elegible. Revisar el renglón `ETIQUETA6 BLANQUEO` de la bitácora y `ops.ETIQUETA6_BLANQUEO` con Jesús Vargas antes de subir el `ACT_PVS_REE`.
 - [ ] **Tramos nuevos del banco:** un tramo que no está en `ETIQUETA6_SEG_*` blanquea y deja un AVISO. Si es elegible, darlo de alta con destino `SI`.
-- [ ] **Teléfono de la firma:** se tomó el del formato del equipo, (0155) 7099 0104 Ext. 1416; la firma anterior tenía (55) 5276 8513. Confirmar cuál va.
-- [ ] **Colores:** morado `#a54686` y rojo `#ed1c24` salen de fuentes públicas del logotipo de BanBajío; si el banco o SERTEC tienen un manual de marca, ajustar `COLOR` en `tools/generar_sql_486.py`.
-- [ ] **Limpieza:** correr `sql/instalacion/05_limpiar_migracion.sql` y `06_limpiar_pruebas.sql` cuando ya no se vaya a migrar ni probar.
 
+## Correos y formato
+
+- [ ] **Teléfono de la firma:** el formato del equipo trae (0155) 7099 0104 Ext. 1416; la firma anterior tenía (55) 5276 8513. Confirmar cuál va.
+- [ ] **Colores:** morado `#a54686` y rojo `#ed1c24` salen de fuentes públicas del logotipo de BanBajío; si el banco o SERTEC tienen un manual de marca, ajustar `COLOR` en `tools/generar_sql_486.py`.
+
+## Operación
+
+- [ ] **Días festivos:** el T-1 de pagos solo distingue fin de semana. ¿Se agrega un calendario de días inhábiles (después de un festivo, T-1 sería el último día hábil)?
+- [ ] **Limpieza:** correr `sql/instalacion/05_limpiar_migracion.sql` y `06_limpiar_pruebas.sql` cuando ya no se vaya a migrar ni probar.

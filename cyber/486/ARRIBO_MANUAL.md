@@ -9,7 +9,7 @@ EXEC ops.sp_exportar_salidas <ID>;
 
 Eso crea `RUTA_SALIDA\<AAAAMMDD>_corrida<ID>\` (de fábrica `C:\BANBAJ\486\SALIDA\`) con los archivos y la carpeta `cyber\` con los `.sql`.
 
-## Qué es automático y qué sigue a mano (proceso autónomo, 07/11)
+## Qué es automático y qué sigue a mano
 
 Diagrama: `docs/flujo/05_arribo_cyber.md` (y su imagen en `docs/flujo/img/`).
 
@@ -28,7 +28,7 @@ Diagrama: `docs/flujo/05_arribo_cyber.md` (y su imagen en `docs/flujo/img/`).
 | Copiar `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` | Asignaciones | A mano: el servidor no tiene acceso a esa carpeta |
 | Cuadre de pagos (solo lee y avisa) | **Job** | Hallazgo si a las 17:00 falta algún pago |
 
-**Cómo detecta que ya subieron los planos:** los saldos (SCBSDOS), con la validación que ya hace el equipo (`val.txt`): cada 30 minutos baja `select dmhostup, count(*) from rcvry.delqmst where dmacctg='1' and dmcompany='486' and dmstatus is null group by dmhostup` y, si las cuentas con `DMHOSTUP` del día son tantas como las del SCBSDOS (`ARRIBO_SDOS_MIN_PCT` = 100), da los saldos por subidos: escribe los gescar de nuevas, reasignadas y sin teléfono y corre la depuración de teléfonos; si lo que sube a CYBER cuadra con lo que mandamos, escribe el SCBTEL y corre la de correos. Los teléfonos (SCBTEL), con la foto que se toma al terminar la asignación (`ops.sp_arribo_base`, y con `DIFERENCIA` los nuevos): cuando ya están en `PHONE_G1` al menos el 95 % (`ARRIBO_MIN_PCT`), marca `ARRIBO SCBTEL` y manda la confirmación. Cada una corre una sola vez por corrida, y funciona aunque no haya cuentas nuevas.
+**Cómo detecta que ya subieron los planos:** los saldos (SCBSDOS), con la validación que hace el equipo (`val.txt`): cada 30 minutos baja `select dmhostup, count(*) from rcvry.delqmst where dmacctg='1' and dmcompany='486' and dmstatus is null group by dmhostup` y, si las cuentas con `DMHOSTUP` del día son tantas como las del SCBSDOS (`ARRIBO_SDOS_MIN_PCT` = 100), da los saldos por subidos: escribe los gescar de nuevas, reasignadas y sin teléfono y corre la depuración de teléfonos; si lo que sube a CYBER cuadra con lo que mandamos, escribe el SCBTEL y corre la de correos. Los teléfonos (SCBTEL), con la foto que se toma al terminar la asignación (`ops.sp_arribo_base`, y con `DIFERENCIA` los nuevos): cuando ya están en `PHONE_G1` al menos el 95 % (`ARRIBO_MIN_PCT`), marca `ARRIBO SCBTEL` y manda la confirmación. Cada una corre una sola vez por corrida, y funciona aunque no haya cuentas nuevas.
 
 Los procedimientos ejecutan en CYBER, por el servidor vinculado `[CYBER]`, las mismas sentencias que quedan en la carpeta `cyber\` (`sql/76_sp_arribo_cyber.sql`), sin sqlldr. Si algo falla queda `ERROR` en la bitácora, llega el correo de hallazgos y no se reintenta solo. Se corrige y se corre a mano:
 
@@ -46,7 +46,7 @@ Para volver a correr todo a mano: `UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CL
 
 
 
-**Permisos del usuario de Oracle** (el de la credencial `CYBER_ORACLE`): `TRUNCATE`/`INSERT`/`SELECT` en `RCVRY.JSP_TAB_TEL_REMESA_486` (el `SELECT` cuenta la remesa antes de la depuración, desde el 17/11) y `RCVRY.JSP_TAB_MAIL_REMESA_486`, `INSERT` en `RCVRY.ADDRESS` y `RCVRY.JSP_VALIDADOR_TELEFONOS`, `UPDATE` en `RCVRY.RPT_LOG_CYBER_REG` y `EXECUTE` de `RCVRY.JSP_TELEFONOS_REMESA_486` y `RCVRY.JSP_CORREOS_486`. Sin ellos el arribo queda en `ERROR` con el mensaje de Oracle.
+**Permisos del usuario de Oracle** (el de la credencial `CYBER_ORACLE`): `TRUNCATE`/`INSERT`/`SELECT` en `RCVRY.JSP_TAB_TEL_REMESA_486` (el `SELECT` cuenta la remesa antes de la depuración) y `RCVRY.JSP_TAB_MAIL_REMESA_486`, `INSERT` en `RCVRY.ADDRESS` y `RCVRY.JSP_VALIDADOR_TELEFONOS`, `UPDATE` en `RCVRY.RPT_LOG_CYBER_REG` y `EXECUTE` de `RCVRY.JSP_TELEFONOS_REMESA_486` y `RCVRY.JSP_CORREOS_486`. Sin ellos el arribo queda en `ERROR` con el mensaje de Oracle.
 
 ## Asignación (`ops.sp_asignacion_486`)
 
@@ -60,16 +60,16 @@ Para volver a correr todo a mano: `UPDATE cfg.PARAMETRO SET VALOR = '0' WHERE CL
 
 Los pasos de teléfonos, correos y gescar sin teléfono que siguen son **lo que hace el job solo** (ver arriba). Quedan documentados para entenderlos y para el arribo manual si se apaga `ARRIBO_AUTOMATICO`.
 
-**Teléfonos (solo en la asignación).** Con `TEL_DEPURACION = DIFERENCIA` (19/11) no se carga la remesa completa: el job baja la foto de `PHONE`, la compara con `ops.TELEFONO` (`ops.sp_tel_depura_calcular`) y solo sube los cambios (`I`, `A`, `N`) a `RCVRY.JSP_TAB_TEL_DEPURA_486`. A mano, con la bandera encendida (`cyber\TEL_ACTIVA_BANDERA.sql`): `EXEC ops.sp_tel_depura_calcular <ID>;`, volver a exportar, `cyber\TEL_BORRA.sql`, `cyber\TEL_DEPURA.sql`, revisar que la tabla tenga los renglones de `TEL_DEPURA.sql`, `cyber\TEL_ACTUALIZA.sql` (`EXECUTE RCVRY.JSP_TELEFONOS_DEPURA_486(416, <esperados>, <quejas>)`), `cyber\TEL_INACTIVA_BANDERA.sql` y subir el SCBTEL (solo nuevos). O simplemente `EXEC ops.sp_arribar_cyber <ID>, 'TELEFONOS';`.
+**Teléfonos (solo en la asignación).** Con `TEL_DEPURACION = DIFERENCIA` no se carga la remesa completa: el job baja la foto de `PHONE`, la compara con `ops.TELEFONO` (`ops.sp_tel_depura_calcular`) y solo sube los cambios (`I`, `A`, `N`) a `RCVRY.JSP_TAB_TEL_DEPURA_486`. A mano, con la bandera encendida (`cyber\TEL_ACTIVA_BANDERA.sql`): `EXEC ops.sp_tel_depura_calcular <ID>;`, volver a exportar, `cyber\TEL_BORRA.sql`, `cyber\TEL_DEPURA.sql`, revisar que la tabla tenga los renglones de `TEL_DEPURA.sql`, `cyber\TEL_ACTUALIZA.sql` (`EXECUTE RCVRY.JSP_TELEFONOS_DEPURA_486(416, <esperados>, <quejas>)`), `cyber\TEL_INACTIVA_BANDERA.sql` y subir el SCBTEL (solo nuevos). O simplemente `EXEC ops.sp_arribar_cyber <ID>, 'TELEFONOS';`.
 
-Con `ACTUAL` se mandan todos los del DAT; CYBER purga y agrega. El orden (17/11) es el del equipo:
+Con `ACTUAL` se mandan todos los del DAT; CYBER purga y agrega. El orden es el del equipo:
 1. Que ya hayan subido los saldos (SCBSDOS).
 2. `cyber\TEL_ACTIVA_BANDERA.sql` y `cyber\TEL_BORRA.sql` (vacía la remesa).
 3. Cargar `sub_mst.TXT` en `RCVRY.JSP_TAB_TEL_REMESA_486` con `LOAD_TEL_REMESA.CTL` (sqlldr, igual que hoy) y revisar que la tabla tenga **los mismos renglones que `sub_mst.TXT`**. Si no, no seguir.
 4. Ejecutar `cyber\TEL_ACTUALIZA.sql` (`EXECUTE RCVRY.JSP_TELEFONOS_REMESA_486`) y `cyber\TEL_INACTIVA_BANDERA.sql`.
-5. Subir `SCBTEL.TXT`: activa nuestros teléfonos, también los nuevos (confirmado por el equipo el 17/11). Después, los correos.
+5. Subir `SCBTEL.TXT`: activa nuestros teléfonos, también los nuevos. Después, los correos.
 
-Qué hace el procedimiento de CYBER (revisado 02/11, versión del 27/12/2025; la versión optimizada para instalar está en `cyber/486/oracle/JSP_TELEFONOS_REMESA_486.sql`):
+Qué hace el procedimiento de CYBER (la versión optimizada para instalar está en `cyber/486/oracle/JSP_TELEFONOS_REMESA_486.sql`):
 - Inserta en `PHONE` los teléfonos de la remesa que están en `PHONE_G1` y no en `PHONE`, solo de cuentas activas del 486 (`dmstatus` nulo).
 - **Inactiva** (`HIAS`) los teléfonos activos del 486 que no vienen en la remesa, salvo los marcados con gestor de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`).
 - **Activa** (`HAAS`) los teléfonos de la remesa que estaban inactivos, salvo esos mismos gestores de queja: aunque Banbaj mandara un teléfono con queja, CYBER no lo reactiva.
@@ -81,13 +81,13 @@ Qué hace el procedimiento de CYBER (revisado 02/11, versión del 27/12/2025; la
 2. Correr `cyber\MAIL_INSERTA_NUEVOS.sql` (INSERT en `RCVRY.ADDRESS` de los nuevos).
 3. Depuración: `cyber\MAIL_ACTIVA_BANDERA.sql` → `cyber\MAIL_BORRA.sql` → cargar `sub_mail.TXT` con `LOAD_MAIL_REMESA.CTL` → revisar la tabla → `cyber\MAIL_ACTUALIZA.sql` (`JSP_CORREOS_486` purga lo que ya no llega) → `cyber\MAIL_INACTIVA_BANDERA.sql`.
 
-Qué hace `JSP_CORREOS_486` (revisado 02/11): inactiva (`HIAS`) lo que está en `ADDRESS` de cuentas activas del 486 y no viene en la remesa, y activa (`HAAS`) lo de la remesa que estaba inactivo, salvo gestores `HOMS` y `HPHPI`. **Ojo:** la versión actual (`cyber/486/oracle/JSP_CORREOS_486_actual.sql`) toma desde el 24/07/2026 `adtype` 3 **y 1**; como la remesa solo trae correos, inactiva todos los domicilios del 486 en cada corrida. La regla acordada (02/11) es que solo quede activo el domicilio que llegó en la última base maestra. **Antes de la primera corrida hay que instalar en CYBER `cyber/486/oracle/JSP_CORREOS_486.sql`**: trata los correos igual que hoy y deja activo solo el domicilio vigente de cada cuenta (el de `DELQMST.DMADDR1`, que sube con el SCBSDOS).
+Qué hace `JSP_CORREOS_486`: inactiva (`HIAS`) lo que está en `ADDRESS` de cuentas activas del 486 y no viene en la remesa, y activa (`HAAS`) lo de la remesa que estaba inactivo, salvo gestores `HOMS` y `HPHPI`. Solo queda activo el domicilio de la última base maestra: el de `DELQMST.DMADDR1`, que sube con el SCBSDOS. **Antes de la primera corrida hay que instalar en CYBER `cyber/486/oracle/JSP_CORREOS_486.sql`.**
 
-**Gescar de cuentas sin teléfono.** Desde el 19/11 sale de nuestro archivo de teléfonos (las nuevas y reasignadas sin renglón en `ops.TELEFONO`), así que no hay que esperar al SCBTEL: se genera con la asignación y el job lo escribe junto con los gescar de nuevas y reasignadas al subir los saldos. A mano: `EXEC ops.sp_arribo_gescar_sintel <ID>;` (lo vuelve a generar, lo escribe y avisa).
+**Gescar de cuentas sin teléfono.** Sale de nuestro archivo de teléfonos (las nuevas y reasignadas sin renglón en `ops.TELEFONO`), así que no hay que esperar al SCBTEL: se genera con la asignación y el job lo escribe junto con los gescar de nuevas y reasignadas al subir los saldos. A mano: `EXEC ops.sp_arribo_gescar_sintel <ID>;` (lo vuelve a generar, lo escribe y avisa).
 
-**Después de arribar:** `EXEC ops.sp_avisar <corrida>, 'CONFIRMACION_ASIG_486'` (sale solo al terminar las depuraciones, `CONFIRMACION_AUTOMATICA`; el correo Express se retiró el 30/10).
+**Después de arribar:** `EXEC ops.sp_avisar <corrida>, 'CONFIRMACION_ASIG_486'` (sale solo al terminar las depuraciones, `CONFIRMACION_AUTOMATICA`).
 
-**Blanqueo de status (día 1 al 10).** Automático después de la depuración de correos (`BLANQUEO_AUTOMATICO`): baja los status, ejecuta el blanqueo en CYBER y deja `BLANQUEA_486_<fecha>.csv` en la carpeta de la corrida. A mano: `EXEC ops.sp_blanqueo_automatico <ID>, @forzar = 1;`. Como antes: `EXEC ops.sp_bajar_cyber 'STATUS', @id_corrida = <ID>;`, volver a exportar, revisar el CSV y correr `cyber\BLANQUEO_STATUS.sql`. 
+**Blanqueo de status (día 1 al 10).** Automático después de la depuración de correos (`BLANQUEO_AUTOMATICO`): baja los status, ejecuta el blanqueo en CYBER y deja `BLANQUEA_486_<fecha>.csv` en la carpeta de la corrida. A mano: `EXEC ops.sp_blanqueo_automatico <ID>, @forzar = 1;`. Paso a paso: `EXEC ops.sp_bajar_cyber 'STATUS', @id_corrida = <ID>;`, volver a exportar, revisar el CSV y correr `cyber\BLANQUEO_STATUS.sql`. 
 
 **DAT para MIS.** En cada proceso sale `DAT486_<fecha>.csv` (CUENTA = 486-folio, CUENTA3 = crédito), con encabezado.
 
@@ -99,7 +99,7 @@ Qué hace `JSP_CORREOS_486` (revisado 02/11): inactiva (`HIAS`) lo que está en 
 | `cyber\ACT_SALDOS.sql`, `ACT_VENCIDO.sql`, `ACT_PAGMIN.sql` | Saldos y etiqueta (SEG), vencido y pago mínimo |
 | `cyber\ACT_PVS_REE.sql` | Días de mora (PVS → U1ARCOD1) y REE (→ U1ARCOD3) de todas las cuentas del DAT |
 
-Ya no se genera ni se arriba SCBSDOS en la actualización (decisión 30/10): lo que sólo subía por el SCBSDOS (PVS y REE) va en `ACT_PVS_REE.sql`.
+La actualización no genera ni arriba SCBSDOS: lo que sólo subía por el SCBSDOS (PVS y REE) va en `ACT_PVS_REE.sql`.
 
 Los cuatro scripts los ejecuta el job en CYBER al terminar la actualización (`ops.sp_act_cyber`, `ACT_CYBER_AUTOMATICO`); a mano: `EXEC ops.sp_act_cyber <corrida>;` o los `.sql` en Oracle. El operador sube `SCBPAG.TXT`. El cuadre de pagos sí es automático: en cada vuelta compara contra `RCVRY.pmtfil` y, si a las 17:00 falta alguno, lo manda en el correo de hallazgos. `ops.sp_act_cyber` solo repite lo pendiente.
 
@@ -109,7 +109,7 @@ Los pagos negativos no salen en `SCBPAG.TXT`: quedan en `ops.RECHAZO` (origen `P
 
 ## Retiro (`ops.sp_retiro`, también desde `ops.sp_retiro_solicitud`)
 
-**Automático desde el 02/11** (`sql/77_sp_retiro_automatico.sql`, parámetro `RETIRO_AUTOMATICO = 1`):
+**Automático** (`sql/77_sp_retiro_automatico.sql`, parámetro `RETIRO_AUTOMATICO = 1`):
 - La asignación y la actualización aplican solas sus devoluciones, salvo que en algún segmento superen el 50 % de las cuentas que ese segmento tiene en el DAT (`RETIRO_TOPE_PCT_ASIG` y `RETIRO_TOPE_PCT_ACT`). En ese caso no se aplica nada, quedan en `ops.DEVOLUCION` y llega el correo de hallazgos al equipo de asignaciones con la tabla por segmento.
 - Después de aplicar, `ops.sp_retiro_cerrar` escribe los archivos de la corrida, arma el ZIP y manda el correo único de devolución. También ejecuta el retiro en CYBER (`cyber\RETIRO.sql`, `RETIRO_CYBER_AUTOMATICO`). La copia de `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` se hace a mano porque el servidor no tiene acceso (`RUTA_DEVOLUCION_CYBER` vacío).
 - El retiro por solicitud hace lo mismo al confirmarlo (`@confirmar = 1`).
@@ -120,7 +120,7 @@ Los pagos negativos no salen en `SCBPAG.TXT`: quedan en `ops.RECHAZO` (origen `P
 
 | Archivo | Qué es |
 | --- | --- |
-| `MX_G1MCT_DVBJIG_<AAAAMMDD>_<HHMMSS>` | Devolución para CYBER, una CUENTA2 por línea (antes se copiaba a `\\192.168.50.1\Cyber_00\dev`) |
+| `MX_G1MCT_DVBJIG_<AAAAMMDD>_<HHMMSS>` | Devolución para CYBER, una CUENTA2 por línea |
 | `SCBACTH_486.TXT` | Gescar de retiro, 119 posiciones (ges_retiro.prg) |
 | `RETIROS_486_<AAAAMMDD>.csv` | Folios retirados para operación |
 | `cyber\RETIRO.sql` | `dmstatus = 'R'` en `RCVRY.delqmst` |

@@ -16,7 +16,7 @@ Fuente: [`mmd/04_actualizacion.mmd`](mmd/04_actualizacion.mmd) · Código: `ops.
 | Pagos | `ops.sp_act_pagos` | `dat.PAGO_ARRIBADO` (lo que sube en el SCBPAG) |
 | Homologar | `ops.sp_homologar 'dat.DAT_486'` | REE por segmento, tramo y tipo |
 | Retiro | `ops.sp_retiro` | Solo si se decidió aplicarlo |
-| PVS/REE | `ops.sp_act_script_pvs_ree` | Script `ACT_PVS_REE` (sustituye al SCBSDOS de la actualización) |
+| PVS/REE | `ops.sp_act_script_pvs_ree` | Script `ACT_PVS_REE` |
 | Salidas | `ops.sp_generar_salidas 'ACT'` | SCBPAG |
 
 **Al terminar OK:**

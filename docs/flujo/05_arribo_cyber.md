@@ -4,9 +4,9 @@
 
 Fuente: [`mmd/05_arribo_cyber.mmd`](mmd/05_arribo_cyber.mmd) · Código: `sql/76_sp_arribo_cyber.sql`, `ops.sp_arribo_posterior` y `ops.sp_aviso_archivos` en `sql/78_sp_automatico.sql`, `ops.fn_archivos_diferidos` en `sql/10_funciones.sql`
 
-**Orden (decisiones 17/11 y 19/11).** Primero va la depuración de teléfonos y después se sube el SCBTEL: el SCBTEL da de alta activos los teléfonos que traiga, y la depuración decide qué queda activo. Los planos los sube una persona, y el job se da cuenta solo de cuándo ya están.
+**Orden.** Primero va la depuración de teléfonos y después se sube el SCBTEL: el SCBTEL da de alta activos los teléfonos que traiga, y la depuración decide qué queda activo. Los planos los sube una persona, y el job se da cuenta solo de cuándo ya están.
 
-**Depuración por diferencia (decisión 19/11, `TEL_DEPURACION = DIFERENCIA`).** En lugar de subir la remesa completa, Banbaj baja una foto de `PHONE` de las cuentas activas del 486 y la compara en SQL Server con nuestros teléfonos (`ops.sp_tel_depura_calcular`). A CYBER solo sube lo que cambia, a `RCVRY.JSP_TAB_TEL_DEPURA_486`:
+**Depuración por diferencia (`TEL_DEPURACION = DIFERENCIA`).** En lugar de subir la remesa completa, Banbaj baja una foto de `PHONE` de las cuentas activas del 486 y la compara en SQL Server con nuestros teléfonos (`ops.sp_tel_depura_calcular`). A CYBER solo sube lo que cambia, a `RCVRY.JSP_TAB_TEL_DEPURA_486`:
 
 | Acción | Qué es | Qué hace CYBER |
 |---|---|---|
@@ -20,10 +20,9 @@ Fuente: [`mmd/05_arribo_cyber.mmd`](mmd/05_arribo_cyber.mmd) · Código: `sql/76
 - **Bandera:** toda la depuración corre con la bandera de CYBER encendida (`CYBER_BANDERA_TELEFONOS`, 416, la misma de correos) en `RPT_LOG_CYBER_REG` y su bitácora `RPT_LOG_CYBER`. El store deja ahí cada etapa. Se apaga al terminar o si algo falla.
 - Si no hay cambios, no se sube nada ni se ejecuta el store. Si no hay nuevos, no sale SCBTEL.
 
-Mientras el DBA no instale la tabla y el store nuevos, `TEL_DEPURACION = ACTUAL` sube la remesa completa a `JSP_TAB_TEL_REMESA_486` y ejecuta `JSP_TELEFONOS_REMESA_486`, con el SCBTEL completo (también con la bandera). `NUEVOS` (18/11) se toma como `DIFERENCIA`.
+Mientras el DBA no instale la tabla y el store, `TEL_DEPURACION = ACTUAL` sube la remesa completa a `JSP_TAB_TEL_REMESA_486` y ejecuta `JSP_TELEFONOS_REMESA_486`, con el SCBTEL completo (también con la bandera). `NUEVOS` se toma como `DIFERENCIA`.
 
-**Gescar sin teléfono desde antes (19/11).** Después de la depuración, lo activo en CYBER es lo de `ops.TELEFONO`. Por eso `SCBACTH_SINTEL.TXT` sale de nuestros teléfonos: las cuentas nuevas y reasignadas sin renglón en `ops.TELEFONO`, incluidas las que solo tenían un teléfono de queja. Se genera con la asignación y se escribe y avisa junto con los gescar de nuevas y reasignadas cuando suben los saldos. Ya no se baja `PHONE` ni se espera al SCBTEL para esto.
-
+**Gescar sin teléfono.** Después de la depuración, lo activo en CYBER es lo de `ops.TELEFONO`. Por eso `SCBACTH_SINTEL.TXT` sale de nuestros teléfonos: las cuentas nuevas y reasignadas sin renglón en `ops.TELEFONO`, incluidas las que solo tenían un teléfono de queja. Se genera con la asignación y se escribe y avisa junto con los gescar de nuevas y reasignadas cuando suben los saldos.
 | # | Paso del job | Cuándo | Bitácora |
 |---|---|---|---|
 | 0 | Al terminar la asignación se escribe el SCBSDOS y se avisa (`ARCHIVOS_LISTOS_486`). El SCBTEL y los gescar todavía no (`ops.fn_archivos_diferidos`) | Corrida OK | `EXPORTAR AUTOMATICO` |

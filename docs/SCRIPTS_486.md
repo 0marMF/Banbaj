@@ -8,7 +8,7 @@ En el repo hay varios scripts con el mismo nombre porque cada programa los busca
 | --- | --- | --- | --- |
 | `borra.sql` | `O:\PRG\GPO1\486\` | `ges486.prg` | `delete from rcvry.BANA` (antes de cargar las cuentas del día) |
 | `borra (2).sql` | `O:\PRG\MEXGPO1\ASI486\ACT_MAIL\` | `act_mail.prg` | `TRUNCATE TABLE RCVRY.JSP_TAB_MAIL_REMESA_486` |
-| — (no está) | `O:\PRG\MEXGPO1\ASI486\ACT_PHONE\` | `act_phone.prg` | Vacía `RCVRY.JSP_TAB_TEL_REMESA_486` para volver a insertar (confirmado): `cyber/TEL_BORRA.sql` |
+| — (no está) | `O:\PRG\MEXGPO1\ASI486\ACT_PHONE\` | `act_phone.prg` | Vacía `RCVRY.JSP_TAB_TEL_REMESA_486` para volver a insertar: `cyber/TEL_BORRA.sql` |
 | `LOAD_ORACLE.CTL` | `O:\PRG\GPO1\486\` | `ges486.prg` | `sub_mst.TXT` (CUENTA2@@1@) → `rcvry.bana` |
 | `LOAD_ORACLE (2).CTL` | `O:\PRG\MEXGPO1\ASI486\ACT_PHONE\` | `act_phone.prg` | `sub_mst.TXT` (CUENTA\|AREA\|TELEFONO\|TIPOTEL) → `RCVRY.JSP_TAB_TEL_REMESA_486` |
 | `LOAD_ORACLE (3).CTL` | `O:\PRG\GPO1\486\PAGOS\` | `pagos.prg` | `PAGOS\sub_mst.TXT` → `rcvry.Amex` (créditos sin folio) |
@@ -51,7 +51,7 @@ En el repo hay varios scripts con el mismo nombre porque cada programa los busca
 | `eti486.prg` | Etiquetado del DAT desde archivo de Operación | `ops.sp_etiquetar_campo` (un campo por archivo FOLIO,ETIQUETA) |
 | `devfianey.prg` | Aviso de devolución a AEM | `AVISO_DEVOLUCION_486` con `ops.sp_avisar` |
 | `ASIG_486.xlsm` | Macro que pasaba las maestras a CSV | **Se elimina**: la maestra se guarda directo como CSV |
-| `moraeti.prg` | Mora (tabla eti486) | **Ya no se usa**: DMPHONE es la ETIQUETA1 recibida |
+| `moraeti.prg` | Mora (tabla eti486) | **No se usa**: DMPHONE es la ETIQUETA1 recibida |
 | `blacklist_486.prg` | Lista negra de teléfonos con requerimiento | `cfg.sp_exclusion_cargar` (solo 10 dígitos) |
 | `respaldo2.prg` | Copia del DAT antes de cada proceso | `ops.sp_respaldo` (por corrida) |
 | `resdat.PRG` | Copia el DAT a `Q:\MIS` y `B:\asignaciones\dats` con CUENTA = 486-folio | `DAT486_<fecha>.csv` (vista `ops.v_DAT_486_MIS`) |

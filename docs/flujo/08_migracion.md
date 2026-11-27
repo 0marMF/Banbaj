@@ -6,7 +6,7 @@ Fuente: [`mmd/08_migracion.mmd`](mmd/08_migracion.mmd) · Código: `cyber/486/EX
 
 1. **FoxPro** exporta 12 DBF a `C:\MIGRA486\` solo con los campos que se usan. Antes de escribir cada CSV cambia las comillas dobles por sencillas y los saltos de línea por espacios, porque FoxPro no los escapa y SQL Server rechaza el archivo.
 2. **`ops.sp_migrar_486 @carpeta`** lee cada CSV con `ops.sp_mig_leer` (`BULK INSERT FORMAT = 'CSV'` a `stg.MIG_<fuente>`, todas las columnas texto) y regresa archivos leídos, destinos y avisos, sin escribir.
-3. **Con `@confirmar = 1`** carga todo en una transacción: DAT; histórico (activas del DAT y periodos anteriores de historia.dbf, con NVA/REA por orden de FE_ASIG y los datos en `DATOS_BAJA`; sus fechas de asignación, reasignación y retiro quedan vacías desde el 03/11); consecutivo de folios; pagos; etiquetas y exclusiones. `@reemplazar = 1` sobrescribe; `@solo` carga una parte.
+3. **Con `@confirmar = 1`** carga todo en una transacción: DAT; histórico (activas del DAT y periodos anteriores de historia.dbf, con NVA/REA por orden de FE_ASIG y los datos en `DATOS_BAJA`; sus fechas de asignación, reasignación y retiro quedan vacías); consecutivo de folios; pagos; etiquetas y exclusiones. `@reemplazar = 1` sobrescribe; `@solo` carga una parte.
 
 PURGA, DEVOL, TELBAJ, PNC y LADA no se migran.
 

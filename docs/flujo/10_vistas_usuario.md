@@ -4,10 +4,9 @@
 
 Fuente: [`mmd/10_vistas_usuario.mmd`](mmd/10_vistas_usuario.mmd) · Código: `sql/79_sp_vistas_usuario.sql`, el guardado de la base maestra por cuenta en `ops.sp_cargar_archivo` (`sql/20_sp_comunes.sql`, paso 8b)
 
-Desde el 18/11, algunos equipos fuera de asignaciones consultan directo en SQL Server los datos que les tocan, cada uno con su login. Hoy son dos:
+Algunos equipos fuera de asignaciones consultan directo en SQL Server los datos que les tocan, cada uno con su login. Hoy son dos:
 
-- **AEM:** su mapeo (`MAPEO_USUARIOS.xlsx`) y las cuentas retiradas del día. Esto sustituye al archivo `MX_G1MCT_DVBJIG_*` que no se pudo dejar en `\\192.168.50.1\Cyber_00\dev\`.
-- **MIS:** usa columnas de las bases maestras que no están en el DAT. Sus columnas las agrega el equipo de asignaciones.
+- **AEM:** su mapeo (`MAPEO_USUARIOS.xlsx`) y las cuentas retiradas del día.- **MIS:** usa columnas de las bases maestras que no están en el DAT. Sus columnas las agrega el equipo de asignaciones.
 
 ## Qué ve cada usuario
 
@@ -26,12 +25,12 @@ Cada usuario tiene **su propio esquema** (el nombre de la vista en minúsculas: 
 
 | ORIGEN | CAMPO es | Ejemplo |
 |---|---|---|
-| `DAT` | Columna de `dat.DAT_486` | `CUENTA` ← `CUENTA2`; `ETIQUETA03` ← `TIPO`; `ETIQUETA06` ← `ETIQUETA6` (el REE, 26/11) |
+| `DAT` | Columna de `dat.DAT_486` | `CUENTA` ← `CUENTA2`; `ETIQUETA03` ← `TIPO`; `ETIQUETA06` ← `ETIQUETA6` (el REE) |
 | `CYBER` | Un campo de `cfg.CYBER_CAMPO`: columna de `DELQMST` (d), `UDA1` (u) o la tabla de abandono (r: `CYBER_TABLA_ABANDONO`, de fábrica `RPT_DAT_486_1`) | `ESTATUS_CYBER` ← `ESTATUS` (`d.DMACRC2`); `ABANDONO_SR` ← `ABAN_SR` (`r.ABAN_SR`) |
 | `MAESTRA` | Encabezado de la base maestra, tal como lo manda el banco | Cualquier columna de la base de TDC, Consumo o Hipotecario |
 | `CONSTANTE` | Valor fijo (si es un número, va como número) | `GRUPO` ← `1` |
 
-- **CYBER:** desde el 19/11 se lee directo de las tablas, **sin ejecutar ningún store**: ESTATUS de `DELQMST` (la misma tabla donde se validan los saldos) y ABAN_SR de `RPT_DAT_486_1`, tal como la dejó la última corrida de `PROC_DAT_486` en CYBER (decisión del 19/11). Es una sola consulta y solo trae los campos que pide alguna vista activa. Los campos disponibles están en `cfg.CYBER_CAMPO` y los mantiene sistemas.
+- **CYBER:** se lee directo de las tablas, **sin ejecutar ningún store**: ESTATUS de `DELQMST` (la misma tabla donde se validan los saldos) y ABAN_SR de `RPT_DAT_486_1`, tal como la deja la última corrida de `PROC_DAT_486` en CYBER. Es una sola consulta y solo trae los campos que pide alguna vista activa. Los campos disponibles están en `cfg.CYBER_CAMPO` y los mantiene sistemas.
 - **MAESTRA:** cada asignación guarda el último renglón de la base maestra de cada cuenta en `dat.BASE_MAESTRA_CUENTA`. La llave es `cfg.ARCHIVO.LLAVE_DAT`: `RIESGO` en TDC y `DES_PROD` en Consumo e Hipotecario. A cada cuenta del DAT le toca la base de su `SEGMENTO2`. Si la corrida se revierte, regresa el renglón anterior.
 
 **Agregar o cambiar una columna** (equipo de asignaciones):
@@ -88,8 +87,7 @@ UPDATE cfg.CYBER_CAMPO SET EXPRESION = 'r.ABAN_SR'  WHERE CAMPO = 'ABAN_SR';    
 EXEC ops.sp_dat_cyber_bajar @id_corrida = <última corrida OK>, @solo_mostrar = 1;                               -- ver la consulta que se manda a Oracle
 ```
 
-**Permisos en Oracle** del usuario de `CYBER_ORACLE`: `SELECT` en `RCVRY.DELQMST`, `RCVRY.RPT_DAT_486_1` y, si algún campo la usa, `RCVRY.UDA1`. Ya no necesita `EXECUTE` en `PROC_DAT_486`.
-
+**Permisos en Oracle** del usuario de `CYBER_ORACLE`: `SELECT` en `RCVRY.DELQMST`, `RCVRY.RPT_DAT_486_1` y, si algún campo la usa, `RCVRY.UDA1`.
 **Errores:** 50830-50839.
 
 **Para cambiar:** la bajada, en `ops.sp_dat_cyber_bajar`; cómo se arma cada columna, en `ops.sp_vistas_usuario_armar`; las columnas de fábrica de AEM, en `VISTAS` de `tools/generar_sql_486.py`. Pruebas: `VISTAS: …` en `tests/pruebas.sql`.

@@ -18,7 +18,7 @@ Para instalar en el servidor, migrar desde FoxPro y operar día a día, sigue el
 | `20_sp_comunes.sql` | Corrida, bitácora, carga dinámica de archivos, homologación, validación |
 | `25_sp_correo.sql` | Envío de correo dinámico y alta / baja de destinatarios |
 | `18_sp_lectura_csv.sql` | Lectura de CSV a tablas de paso (`ops.sp_mig_leer`, `ops.sp_mig_diagnostico`): la usan la migración y las cargas de exclusiones |
-| `27_sp_etiquetas.sql` | Carga de etiquetas externas (TOP: folio + etiqueta de Operación) y blanqueo de ETIQUETA6 por tramo (`ops.sp_etiqueta6_blanqueo`, 26/11) |
+| `27_sp_etiquetas.sql` | Carga de etiquetas externas (TOP: folio + etiqueta de Operación) y blanqueo de ETIQUETA6 por tramo (`ops.sp_etiqueta6_blanqueo`) |
 | `30_sp_asignacion.sql` | Unión de bases (llave = riesgo; repetido entre segmentos detiene), avisos de llave, devolución, existentes, folios y alta, retiro |
 | `32_sp_retiro_solicitud.sql` | Retiro por solicitud con folio o riesgo (`ops.sp_retiro_solicitud`) |
 | `35_sp_respaldo.sql` | Respaldo del DAT por corrida y retroceso (`ops.sp_revertir_corrida`) |
@@ -28,7 +28,7 @@ Para instalar en el servidor, migrar desde FoxPro y operar día a día, sigue el
 | `50_sp_salidas.sql` | Archivos planos de `cfg.SALIDA_ARCHIVO` + `cfg.SALIDA` (ancho fijo o delimitados) |
 | `60_sp_orquestadores.sql` | `ops.sp_asignacion_486` y `ops.sp_actualizacion_486` |
 | `70_sp_procesos_manuales.sql` | Etiquetado del DAT, SCBSDOS fuera de proceso, blanqueo de status, exclusiones, avisos a Operación |
-| `80_sp_migracion.sql` | Migración desde FoxPro (`ops.sp_migrar_486`) y cambio de llave por riesgo (`ops.sp_llave_riesgo_migrar`, 20/11). Con `MIGRACION_LIMPIA = 1` no crea nada |
+| `80_sp_migracion.sql` | Migración desde FoxPro (`ops.sp_migrar_486`) y cambio de llave por riesgo (`ops.sp_llave_riesgo_migrar`). Con `MIGRACION_LIMPIA = 1` no crea nada |
 | `85_sp_pruebas_entorno.sql` | Pruebas de entorno: modo prueba, CYBER, correo, archivos, lectura y asignación de prueba (los llaman los scripts de `pruebas_entorno/`). Con `PRUEBAS_LIMPIAS = 1` no crea nada |
 | `90_semilla_486.sql` | Configuración del 486 (generada con `tools/generar_sql_486.py`) |
 
@@ -58,7 +58,7 @@ EXEC ops.sp_retiro @id;
 -- Actualización de saldos y pagos (los pagos negativos se excluyen y se avisa a Operación)
 EXEC ops.sp_actualizacion_486 @id_corrida = @id OUTPUT;
 
--- Después de arribar a CYBER: avisos a Operación (antes MAIL, correo_486, correo, correo_486noti)
+-- Después de arribar a CYBER: avisos a Operación
 EXEC ops.sp_avisar @id, 'CONFIRMACION_ASIG_486';     -- fin de asignación (el inicio sale solo)
 -- Correo único de devolución (Operación con el ZIP, AEM en copia oculta sin él)
 EXEC ops.sp_exportar_salidas @id_corrida = @id, @zip = 'RETIROS', @enviar_zip = 1;
@@ -82,13 +82,13 @@ EXEC ops.sp_etiquetar_campo @campo = 'MORA', @archivo = N'D:\Banbaj\486\etiqueta
 -- TOP (ETIQUETA6) no es columna del DAT:
 EXEC cfg.sp_etiqueta_cargar '486', 'TOP', N'D:\Banbaj\486\etiquetas\top.csv', 'AGREGAR';
 
--- Horas del arribo a CYBER (antes bitac/bitact): solicitud, autorización y fin
+-- Horas del arribo a CYBER: solicitud, autorización y fin
 EXEC ops.sp_marcar_arribo @id_corrida = 130, @evento = 'SOLICITUD';
 EXEC ops.sp_marcar_arribo @id_corrida = 130, @evento = 'AUTORIZACION';
 EXEC ops.sp_marcar_arribo @id_corrida = 130, @evento = 'FIN';
 SELECT * FROM ops.v_TIEMPOS_CORRIDA ORDER BY ID_CORRIDA DESC;
 
--- Cuadre de pagos después de arribar SCBPAG (antes BAJ.sql + C:\NO_SUBIERON486)
+-- Cuadre de pagos después de arribar SCBPAG
 EXEC ops.sp_bajar_cyber 'PAGOS', @id_corrida = 130;
 
 -- Retiros por actualización: ZIP con contraseña y correo con el adjunto
@@ -126,7 +126,7 @@ Requiere `Ole Automation Procedures` activado (y `xp_cmdshell` solo para el ZIP 
 | Asignación | `SCBSDOS.TXT`, `SCBTEL.TXT`, `sub_mst.TXT`, `sub_mail.TXT`, `SCBACTH_486NU.TXT`, `SCBACTH_486REA.TXT`, `cyber/TEL_ACTUALIZA.sql`, `cyber/MAIL_BORRA.sql`, `cyber/MAIL_ACTUALIZA.sql` |
 | Blanqueo de status | `BLANQUEA_486_<fecha>.csv`, `cyber/BLANQUEO_STATUS.sql` |
 | Etiquetado / mora | `SCBSDOS.TXT` |
-| Actualización | `SCBPAG.TXT`, `cyber/ACT_SALDOS.sql`, `ACT_VENCIDO.sql`, `ACT_PAGMIN.sql`, `ACT_PVS_REE.sql` (PVS y REE; ya no se arriba SCBSDOS) |
+| Actualización | `SCBPAG.TXT`, `cyber/ACT_SALDOS.sql`, `ACT_VENCIDO.sql`, `ACT_PAGMIN.sql`, `ACT_PVS_REE.sql` (PVS y REE) |
 | Retiro | `MX_G1MCT_DVBJIG_<fecha>_<hora>`, `SCBACTH_486.TXT`, `RETIROS_486_<fecha>.csv`, `cyber/RETIRO.sql` |
 
 Un archivo nuevo o un cambio de layout se configura en `cfg.SALIDA_ARCHIVO` (origen, nombre, separador) y `cfg.SALIDA` (campos), sin tocar los procedimientos. Alternativa con bcp:

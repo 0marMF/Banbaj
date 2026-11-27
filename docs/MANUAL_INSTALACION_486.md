@@ -1,6 +1,6 @@
 # Manual de migración e instalación Banbaj 486
 
-Versión del 01/11/2026
+Versión actual de `main`
 
 ## Qué es Banbaj 486
 
@@ -114,7 +114,7 @@ Todo lo que lee o escribe archivos (`BULK INSERT`, OLE, 7-Zip) lo hace la **cuen
 | --- | --- | --- |
 | `\\192.168.50.13\q\CYBER\C_486\` | Lectura | Archivos del banco |
 | `\\192.168.50.13\q\MIS\SERTEC98\CLIENTES\486\` | Modificar | Copia del DAT para MIS |
-| `\\192.168.50.1\Cyber_00\dev\` | — | **Sin acceso (03/11):** la devolución `MX_G1MCT_DVBJIG_*` se copia a mano desde la carpeta de la corrida |
+| `\\192.168.50.1\Cyber_00\dev\` | — | **Sin acceso:** la devolución `MX_G1MCT_DVBJIG_*` se copia a mano desde la carpeta de la corrida |
 | `RUTA_SALIDA` y `CARPETA_ZIP` (de fábrica `C:\`) | Modificar | Archivos planos, scripts y ZIP |
 
 1. Ver qué cuenta usa el servicio:
@@ -184,7 +184,7 @@ SELECT SISTEMA, USUARIO, CLAVE, FE_ACT FROM cfg.CAPTURA_CREDENCIAL;   -- la clav
 | TEL\_GESTORES\_QUEJA | HOMS,HPHPI,BLACK,ZZZTE | Con `DIFERENCIA`, sus teléfonos no se inactivan ni se activan |
 | TEL\_DEPURA\_MAX\_INACTIVAR\_PCT | 30 | Con `DIFERENCIA`, si se inactivaría más de este % de los activos, no se toca CYBER y llega un hallazgo |
 | VISTAS\_USUARIO | 1 | Al terminar la actualización y la asignación, y cuando suben los saldos: baja de CYBER los campos de las vistas (ESTATUS de `DELQMST`, ABAN_SR de `RPT_DAT_486_1`; sin ejecutar ningún store) y arma la tabla de cada usuario (AEM, MIS). 0 = no se actualizan |
-| — | — | Desde el 19/11 los campos de CYBER de las vistas están en `cfg.CYBER_CAMPO` (columna de `DELQMST`, `UDA1` o `RPT_DAT_486_1`); `DAT_CYBER_STORE`, `DAT_CYBER_TABLA` y `DAT_CYBER_LLAVE` ya no se usan |
+| — | — | Los campos de CYBER de las vistas están en `cfg.CYBER_CAMPO` (columna de `DELQMST`, `UDA1` o `RPT_DAT_486_1`) |
 | CYBER\_HOSTUP\_EXPR | to\_char(DMHOSTUP, 'YYYYMMDD') | Validación de saldos del equipo: fecha de `DMHOSTUP` con la que se cuentan las cuentas activas del 486. Si `DMHOSTUP` no es DATE, ajustarla; vacío = se detecta por lo pendiente |
 | ARRIBO\_SDOS\_MIN\_PCT | 100 | % de las cuentas del SCBSDOS que deben tener `DMHOSTUP` del día (100 = que el número coincida) |
 | ARRIBO\_MIN\_PCT | 95 | Porcentaje de lo pendiente al terminar la asignación que ya debe estar en CYBER para dar por subido el SCBSDOS o el SCBTEL |
@@ -217,7 +217,7 @@ Si el servidor vinculado o la tabla no están disponibles, deja un aviso en la b
 
 ### Teléfonos: ladas válidas (PHNVAL)
 
-Desde el 19/11 solo van a CYBER los teléfonos cuya lada (`AREA`) y longitud están en `cfg.PHNVAL`, la copia estática de la tabla `PHNVAL` de CYBER (las ladas que admite el cargador). La semilla la llena la primera vez. Después la renueva el job **Banbaj 486 ladas** (`sql/instalacion/02_crear_job_486.sql`), el día 1 de cada mes a las 06:00, con dos reintentos.
+Solo van a CYBER los teléfonos cuya lada (`AREA`) y longitud están en `cfg.PHNVAL`, la copia estática de la tabla `PHNVAL` de CYBER (las ladas que admite el cargador). La semilla la llena la primera vez. Después la renueva el job **Banbaj 486 ladas** (`sql/instalacion/02_crear_job_486.sql`), el día 1 de cada mes a las 06:00, con dos reintentos.
 
 ```sql
 USE [BNABAJ_486];
@@ -228,9 +228,9 @@ SELECT * FROM cfg.PHNVAL WHERE VTARECOD = '0155';                -- una lada
 
 El usuario de `CYBER_ORACLE` necesita `SELECT` en la tabla del parámetro `CYBER_TABLA_LADAS` (de fábrica `RCVRY.PHNVAL`; si la tabla está en otro esquema, cámbialo). Si CYBER falla o la tabla llega con menos de `LADAS_MIN_FILAS` renglones, la copia no se toca, el paso del job falla y llega `HALLAZGO_486`.
 
-Reglas desde el 01/11:
+Reglas:
 
-- El teléfono que no está en ningún rango del plan se descarta (antes salía como fijo).
+- El teléfono que no está en ningún rango del plan se descarta.
 - Además de 1000000000, 9999999999 y 0999999999, nunca se mandan 1111111111, 4444444444, 5555555555 ni 5000000000.
 
 | Parámetro | Valor de fábrica |
@@ -341,19 +341,19 @@ Se hace **una sola vez**, justo antes de la primera corrida en SQL Server. El de
 | CSV (DBF de origen) | Campos que se usan | Destino en SQL Server |
 | --- | --- | --- |
 | DAT | todos los que existen en `dat.DAT_486` (los demás se ignoran) | `dat.DAT_486` y el periodo vigente en `dat.HISTORIA_FOLIO` |
-| HISTORIA | CUENTA, FOLIO, CUENTA2, RIESGO, SEGMENTO, STATUS, TRAMO, ETIQUETA, FE\_ASIG, SDO\_ACT, CAPITAL, TEL1-TEL16, DIRECC1-DIRECC5, ESTADO, EDO | `dat.HISTORIA_FOLIO`: cada asignación anterior como baja (la primera de la cuenta NVA, las siguientes REA); los datos van en `DATOS_BAJA` (JSON). Las fechas de asignación, reasignación y retiro de esos periodos quedan **vacías** (decisión 03/11) y se llenan con las corridas de Banbaj; FE\_ASIG solo sirve para ordenar NVA/REA. historia.dbf no trae correos |
-| PURGA | — | **No se usa** (03/11): no trae fecha de retiro |
+| HISTORIA | CUENTA, FOLIO, CUENTA2, RIESGO, SEGMENTO, STATUS, TRAMO, ETIQUETA, FE\_ASIG, SDO\_ACT, CAPITAL, TEL1-TEL16, DIRECC1-DIRECC5, ESTADO, EDO | `dat.HISTORIA_FOLIO`: cada asignación anterior como baja (la primera de la cuenta NVA, las siguientes REA); los datos van en `DATOS_BAJA` (JSON). Las fechas de asignación, reasignación y retiro de esos periodos quedan **vacías** y se llenan con las corridas de Banbaj; FE\_ASIG solo sirve para ordenar NVA/REA. historia.dbf no trae correos |
+| PURGA | — | **No se usa**: no trae fecha de retiro |
 | TAB7 | FOLIO | consecutivo de folios |
 | PAGTOT | CUENTA, MONT, FE\_PAG, FE\_REG | `dat.PAGO_ARRIBADO` (origen PAGTOT) |
 | ETI, DM1 | CUENTA, ETIQUETA | etiquetas (DMP2, DMP1 del SCBSDOS) |
-| TOP | CUENTA2, ETIQUETA | **Ya no se usa** (19/11): U1EXT2 sale de ETIQUETA6 de la base maestra |
+| TOP | CUENTA2, ETIQUETA | **No se usa**: U1EXT2 sale de ETIQUETA6 de la base maestra |
 | STATUS | CUENTA, ESTATUS | etiqueta U1USO4 |
 | EXC486 | CUENTA | exclusión de cuentas |
 | DIRMAL | CUENTA, DIRECC1 | direcciones malas |
 | EMAILMALO | EMAIL, CUENTA | correos malos |
 | BLACKLIST | TEL, FE\_AGRE, OS, SOLICITUD | lista negra: OS = requerimiento, FE\_AGRE = fecha, SOLICITUD = quién lo pidió. STATUS X excluye y vacío no; el DBF no trae STATUS, así que todo cuenta como X |
 
-Ya no se migran: **TELBAJ** y **PNC** (se leen de CYBER en cada asignación), **LADA** (ningún proceso la usa) y DEVOL. PURGA tampoco se usa. El programa de FoxPro exporta solo los campos de esta tabla; si alguno no existe en el DBF lo avisa al final.
+No se migran: **TELBAJ** y **PNC** (se leen de CYBER en cada asignación), **LADA** (ningún proceso la usa) y DEVOL. PURGA tampoco se usa. El programa de FoxPro exporta solo los campos de esta tabla; si alguno no existe en el DBF lo avisa al final.
 
 ### Paso 1. Exportar desde FoxPro
 
@@ -384,7 +384,7 @@ EXEC ops.sp_migrar_486 @carpeta = N'C:\MIGRA486\', @confirmar = 1;
 - Si un destino ya tiene datos (por ejemplo, una prueba anterior), se detiene con un error 50910–50914. Para sobrescribir, agregar `@reemplazar = 1`.
 - Para cargar solo una parte: `@solo = N'DAT,HISTORIA'` (destinos: DAT, HISTORIA, CONSECUTIVO, PAGOS, ETIQUETAS, EXCLUSIONES, LADA, PNC).
 - Las tablas temporales `stg.MIG_*` se borran al terminar, salga bien o mal.
-- Al final pasa lo cargado a la **llave por riesgo** (20/11; `ops.sp_llave_riesgo_migrar`): en TDC la llave deja de ser la cuenta armada (últimos 4 dígitos de PRIME+4DIG + RFC) y pasa a ser el ACC_NUM; la armada queda en `CTA_BANCO`, que es lo que sigue yendo a CYBER. Muestra cuántas cuentas cambiaron y cuántas se quedaron con la llave de antes (TDC sin RIESGO, con RIESGO de más de 20 caracteres o repetido). Esas no se van a reconocer en la siguiente base: revísalas.
+- Al final pasa lo cargado a la **llave por riesgo** (`ops.sp_llave_riesgo_migrar`): en TDC la llave deja de ser la cuenta armada (últimos 4 dígitos de PRIME+4DIG + RFC) y pasa a ser el ACC_NUM; la armada queda en `CTA_BANCO`, que es lo que sigue yendo a CYBER. Muestra cuántas cuentas cambiaron y cuántas se quedaron con la llave de antes (TDC sin RIESGO, con RIESGO de más de 20 caracteres o repetido). Esas no se van a reconocer en la siguiente base: revísalas.
 
 La ETIQUETA6 (REE) no viene de FoxPro: al cargar se toma de CYBER (`U1EXT2`) con `ops.sp_etiqueta6_desde_cyber`. Si el servidor vinculado todavía no está, sale un aviso; córrelo a mano antes de la primera asignación (`EXEC ops.sp_etiqueta6_desde_cyber @confirmar = 1;`).
 
@@ -409,7 +409,7 @@ EXEC ops.sp_llave_riesgo_migrar;        -- después de migrar: todo en "SIN CAMB
 
 Borrar `C:\MIGRA486\` en la PC de FoxPro y en el servidor, y vaciar la papelera. Los CSV traen datos de clientes.
 
-Cuando ya no se vaya a migrar otra vez (ya en producción), borra también los stores y tablas de la migración con `sql/instalacion/05_limpiar_migracion.sql`: primero con `@confirmar = 0` para ver qué borra y después con `1`. Deja `ops.sp_mig_leer` y `ops.sp_mig_diagnostico`, que siguen usando las cargas de exclusiones.
+Cuando no se vaya a migrar (ya en producción), borra también los stores y tablas de la migración con `sql/instalacion/05_limpiar_migracion.sql`: primero con `@confirmar = 0` para ver qué borra y después con `1`. Deja `ops.sp_mig_leer` y `ops.sp_mig_diagnostico`, que siguen usando las cargas de exclusiones.
 
 ## Operación diaria
 
@@ -420,7 +420,7 @@ Cada 30 minutos el job llama `ops.sp_diario_486`. Esto es lo que hace:
 1. **Fin de semana:** no hace nada.
 2. **Actualización (ACT):** si ya están los archivos de saldos del día, corre `ops.sp_actualizacion_486`. Genera:
    - el plano SCBPAG
-   - los scripts de CYBER ACT\_SALDOS, ACT\_VENCIDO, ACT\_PAGMIN y ACT\_PVS\_REE (este último marca PVS/REE en `RCVRY.uda1` y sustituye al SCBSDOS de la actualización), que el job **ejecuta solo en CYBER** al terminar (`ops.sp_act_cyber`)
+   - los scripts de CYBER ACT\_SALDOS, ACT\_VENCIDO, ACT\_PAGMIN y ACT\_PVS\_REE (este último marca PVS/REE en `RCVRY.uda1`), que el job **ejecuta solo en CYBER** al terminar (`ops.sp_act_cyber`)
    - escribe los archivos de la corrida en su carpeta (`ops.sp_exportar_auto`)
    - en cada vuelta posterior cuadra los pagos del SCBPAG contra CYBER (`ops.sp_cuadre_automatico`); si a las 17:00 (`CUADRE_PAGOS_HORA_LIMITE`) falta alguno, manda la lista en el correo de hallazgos
 3. **Asignación (ASIG):** solo después de una ACT en OK y si llegó la base. Corre `ops.sp_asignacion_486`:
@@ -430,7 +430,7 @@ Cada 30 minutos el job llama `ops.sp_diario_486`. Esto es lo que hace:
    - Genera SCBSDOS, SCBTEL, sub\_mst, sub\_mail, gescar y la copia del DAT para MIS.
    - Si hay validaciones, manda sus avisos: saldo ≤0 en Consumo, pagos negativos (al equipo de asignaciones) o números cortados por Excel en la base maestra.
    - Con más de 100 cuentas nuevas avisa con ALERTA\_NUEVAS\_486.
-4. Si llega la base de un segmento que ese día no se asignó (por ejemplo Consumo después de TDC), corre otra asignación solo con ese segmento (20/11). Si la ACT y las ASIG del día ya están hechas, contesta "DIA COMPLETO" y no repite nada. En ese momento revisa el **arribo automático a CYBER** (`ops.sp_arribo_automatico`, `ARRIBO_AUTOMATICO = 1`):
+4. Si llega la base de un segmento que ese día no se asignó (por ejemplo Consumo después de TDC), corre otra asignación solo con ese segmento. Si la ACT y las ASIG del día ya están hechas, contesta "DIA COMPLETO" y no repite nada. En ese momento revisa el **arribo automático a CYBER** (`ops.sp_arribo_automatico`, `ARRIBO_AUTOMATICO = 1`):
    - **Saldos:** en cuanto detecta que el operador ya subió el SCBSDOS (cuentas con `DMHOSTUP` del día = cuentas del SCBSDOS), escribe y avisa los gescar de nuevas, reasignadas y sin teléfono (este último sale de nuestro archivo de teléfonos).
    - **Teléfonos:** enseguida enciende la bandera 416. Con `TEL_DEPURACION = DIFERENCIA` baja la foto de `PHONE`, la compara con nuestro archivo y sube solo los cambios; si quedaron completos en CYBER, ejecuta `JSP_TELEFONOS_DEPURA_486` (con `ACTUAL`: remesa completa y `JSP_TELEFONOS_REMESA_486`). Apaga la bandera, escribe y avisa el SCBTEL. Si no cuadra (50776) o se inactivaría demasiado (50779), no se toca CYBER, no sale el SCBTEL, se apaga la bandera y llega un hallazgo.
    - **Correos:** con los teléfonos OK, inserta los correos nuevos en `ADDRESS`, enciende la bandera 416, carga la remesa, ejecuta `JSP_CORREOS_486` y apaga la bandera.
@@ -640,9 +640,9 @@ Los procesos que generan archivos los escriben solos al terminar (también el et
 
 ## Usuarios externos (AEM, MIS)
 
-Desde el 18/11, AEM y MIS consultan en SQL Server lo que les toca, cada uno con su login de SQL Server y solo en su esquema:
+AEM y MIS consultan en SQL Server lo que les toca, cada uno con su login de SQL Server y solo en su esquema:
 
-- `aem.DAT_486` y `aem.RETIROS_HOY`: las cuentas retiradas hoy, en lugar del archivo `MX_G1MCT_DVBJIG_*`.
+- `aem.DAT_486` y `aem.RETIROS_HOY`: las cuentas retiradas hoy.
 - `mis.DAT_486`.
 
 El equipo de asignaciones decide qué columnas ve cada uno en `cfg.VISTA_COLUMNA`: del DAT, de CYBER (los campos de `cfg.CYBER_CAMPO`: ESTATUS de `DELQMST`, ABAN_SR de `RPT_DAT_486_1`, sin ejecutar ningún store), de la base maestra o un valor fijo. Se actualizan solas en la actualización, en la asignación y cuando suben los saldos.
@@ -762,7 +762,7 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
    - folios nuevos
 5. Las diferencias esperadas son las que se decidieron, no errores:
    - saldos negativos como cero
-   - sin SCBSDOS en la actualización (lo sustituye ACT\_PVS\_REE)
+   - sin SCBSDOS en la actualización (PVS y REE van en ACT\_PVS\_REE)
    - sin COVID ni Reestructura
    - lista negra solo de 10 dígitos
 6. Cuando los archivos coinciden varios días seguidos, migrar de nuevo con `@reemplazar = 1` justo antes del corte, para tomar el DAT final de FoxPro.
@@ -825,7 +825,7 @@ Antes de apagar FoxPro, correr **al menos una semana** los dos sistemas sobre lo
 | Correo de hallazgos: blanqueo o escritura de archivos con error | Falló bajar status, ejecutar el blanqueo o escribir en `RUTA_SALIDA` | Corregir y `EXEC ops.sp_blanqueo_automatico <id>, @forzar = 1;` o `EXEC ops.sp_exportar_salidas <id>;` |
 | Correo de hallazgos: retiro con pasos pendientes | Falló escribir archivos/ZIP/correo, el retiro en CYBER o la copia de la devolución | Corregir lo que dice la tabla y `EXEC ops.sp_retiro_cerrar <id>;` |
 | ORA-12504 (el listener no recibió el SERVICE\_NAME) o 50811 | `CYBER_ORACLE_ORIGEN` trae solo la IP | Ponerlo como `IP:1521/NOMBRE_SERVICIO` (el servicio está en el `tnsnames.ora` de la PC que hoy corre sqlldr, o lo da el DBA con `lsnrctl status`) y volver a correr `EXEC cfg.sp_cyber_conectar;` |
-| `Bulk load failed due to invalid column value in CSV data file …HISTORIA.csv` | Un campo de texto del DBF (`C` o `V`) trae comillas dobles o un carácter de control: nulo, tabulador o salto de línea (FoxPro no los escapa) | Volver a exportar con la versión actual de `EXPORTAR_MIGRACION.prg`, que los limpia, y copiar otra vez los CSV al servidor. Desde el 17/11 sale el error 50905 con la fecha del archivo que lee el servidor, los renglones con comillas de más y los caracteres raros; `EXEC ops.sp_mig_diagnostico N'C:\MIGRA486\HISTORIA.csv', <renglón>;` muestra el renglón enmascarado |
+| `Bulk load failed due to invalid column value in CSV data file …HISTORIA.csv` | Un campo de texto del DBF (`C` o `V`) trae comillas dobles o un carácter de control: nulo, tabulador o salto de línea (FoxPro no los escapa) | Volver a exportar con la versión actual de `EXPORTAR_MIGRACION.prg`, que los limpia, y copiar otra vez los CSV al servidor. Sale el error 50905 con la fecha del archivo que lee el servidor, los renglones con comillas de más y los caracteres raros; `EXEC ops.sp_mig_diagnostico N'C:\MIGRA486\HISTORIA.csv', <renglón>;` muestra el renglón enmascarado |
 | Error de proveedor OraOLEDB | Sin *Allow inprocess* o sin cliente de Oracle | Ver *Proveedor de Oracle* en la configuración |
 | No llegan correos | Falla de Database Mail | `SELECT * FROM msdb.dbo.sysmail_event_log ORDER BY log_date DESC;` y `sysmail_faileditems` |
 

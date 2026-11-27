@@ -4,7 +4,7 @@
 
 Fuente: [`mmd/09_validacion_entrada.mmd`](mmd/09_validacion_entrada.mmd) · Código: `ops.sp_cargar_archivo` y `ops.sp_cargar_proceso` en `sql/20_sp_comunes.sql`, `sql/22_sp_validacion_entrada.sql`, `cfg.fn_catalogo` en `sql/10_funciones.sql`
 
-Desde el 17/11 la actualización y la asignación revisan cada archivo **antes de tocar el DAT**. Si algo no cuadra, la corrida se detiene, se avisa al equipo de asignaciones y el equipo la vuelve a correr a mano cuando lo corrige.
+La actualización y la asignación revisan cada archivo **antes de tocar el DAT**. Si algo no cuadra, la corrida se detiene, se avisa al equipo de asignaciones y el equipo la vuelve a correr a mano cuando lo corrige.
 
 ## Layout: qué columnas toma el proceso
 
@@ -44,24 +44,24 @@ Reglas en `cfg.VALIDACION_DATO` (una por archivo, campo y tipo), revisadas sobre
 | `TELEFONO` | Teléfono con letras o con menos de 10 o más de 12 dígitos (`0` y `-` cuentan como vacío) | 2 % |
 | `CORREO` | Correo sin forma de correo: sin @, con espacios o sin dominio ("solo texto") | 2 % |
 | `CATALOGO` | Segmento, estatus, tramo, cartera o tipo de crédito que **no está en el catálogo** | 0 % |
-| `LLAVE_UNICA` | Cuenta repetida en el archivo. 20/11: también en los saldos (ACC_NUM en TDC, crédito CYBER en Consumo) | 0 % |
-| `DIGITOS` | La llave única (ACC_NUM en TDC, crédito en Consumo) con letras o de más de 20 dígitos (20/11) | 0 % |
-| `ARCHIVO_IGUAL` | El archivo es idéntico al último archivo bueno de otro día: el banco reenvió el anterior (20/11; bases maestras y saldos) | 0 % |
-| `CRUCE_DAT` | Renglones de los saldos cuya llave no está en el DAT (`VALOR` = columna del DAT): archivo de otro segmento o de otro cliente (20/11) | 30 % |
+| `LLAVE_UNICA` | Cuenta repetida en el archivo, también en los saldos (ACC_NUM en TDC, crédito CYBER en Consumo) | 0 % |
+| `DIGITOS` | La llave única (ACC_NUM en TDC, crédito en Consumo) con letras o de más de 20 dígitos | 0 % |
+| `ARCHIVO_IGUAL` | El archivo es idéntico al último archivo bueno de otro día: el banco reenvió el anterior (bases maestras y saldos) | 0 % |
+| `CRUCE_DAT` | Renglones de los saldos cuya llave no está en el DAT (`VALOR` = columna del DAT): archivo de otro segmento o de otro cliente | 30 % |
 | `NO_VACIO` | La columna viene vacía: se corrió o cambió | 1 a 5 % |
 | `VOLUMEN` | El archivo trae menos del 30 % o más del 300 % de los renglones de la última carga buena (archivo cortado o duplicado) | rango en `VALOR` |
 
-- Las tolerancias se calibraron con las bases reales del 11 y 13/11: teléfonos de 10 dígitos sin letras, menos de 0.2 % de correos mal formados, saldos de hasta 1.2 millones y sin cuentas repetidas.
+- Las tolerancias se calibraron con bases reales del banco: teléfonos de 10 dígitos sin letras, menos de 0.2 % de correos mal formados, saldos de hasta 1.2 millones y sin cuentas repetidas.
 - `PCT_MAX` es el % de anomalías tolerado sobre los valores revisados. Si una regla lo supera, detiene; si tiene anomalías dentro de la tolerancia, solo aparece como aviso en la bitácora y en el correo.
 - En la actualización un saldo negativo o cero no se valida aquí: es criterio de retiro (`cfg.REGLA RETIRO_*`). Los pagos negativos se siguen excluyendo y avisando (`PAGOS_NEGATIVOS_486`).
 - El equipo ajusta `VALOR`, `PCT_MAX` y `ACTIVO`; la semilla solo agrega las reglas que falten.
-- **Riesgo repetido entre segmentos (20/11):** si el mismo riesgo llega en la base de TDC y en la de Consumo de la misma asignación, `ops.sp_asig_unir_layout` detiene la corrida y avisa igual (`VALIDACION_ENTRADA_486`, archivo `LAYOUT_486`). Repetido dentro de una base lo decide `LLAVE_UNICA`.
-- **Avisos que no detienen (20/11):** mismo riesgo con otro RFC que el del DAT y cuentas que cambian de segmento (`ops.sp_asig_avisos_llave`); pagos repetidos en el archivo (mismo crédito, importe y fecha). Llegan en el correo de hallazgos con los valores enmascarados.
-- `PRIME4DIG` ya no es llave (20/11): su regla de repetidos queda apagada.
+- **Riesgo repetido entre segmentos:** si el mismo riesgo llega en la base de TDC y en la de Consumo de la misma asignación, `ops.sp_asig_unir_layout` detiene la corrida y avisa igual (`VALIDACION_ENTRADA_486`, archivo `LAYOUT_486`). Repetido dentro de una base lo decide `LLAVE_UNICA`.
+- **Avisos que no detienen:** mismo riesgo con otro RFC que el del DAT y cuentas que cambian de segmento (`ops.sp_asig_avisos_llave`); pagos repetidos en el archivo (mismo crédito, importe y fecha). Llegan en el correo de hallazgos con los valores enmascarados.
+- `PRIME4DIG` no es llave: su regla de repetidos queda apagada.
 
 ## Catálogos estáticos de etiquetado
 
-Lo que antes estaba escrito en la homologación ahora es la tabla `cfg.CATALOGO`: el equipo cambia o agrega un valor y la siguiente corrida lo usa. `cfg.fn_catalogo` compara sin acentos ni mayúsculas; el valor exacto gana sobre los patrones (`%`, `[0-9]`) y entre patrones gana el `ORDEN` menor.
+Los valores de la homologación están en la tabla `cfg.CATALOGO`: el equipo cambia o agrega un valor y la siguiente corrida lo usa. `cfg.fn_catalogo` compara sin acentos ni mayúsculas; el valor exacto gana sobre los patrones (`%`, `[0-9]`) y entre patrones gana el `ORDEN` menor.
 
 | Catálogo | Valor del banco | Llena |
 |---|---|---|

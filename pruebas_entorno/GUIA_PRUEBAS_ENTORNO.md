@@ -218,7 +218,7 @@ EXEC ops.sp_prueba_revertir @confirmar = 0;
 -- EXEC ops.sp_prueba_revertir @confirmar = 1;
 ```
 
-**Validación (26/11):** con el modo de prueba encendido, cada actualización o asignación queda anotada desde que empieza. Al final del paso 6 sale la lista de corridas del día con la columna `ANOTADA_PARA_REVERTIR`. La lista del paso 7 trae también las que arrancaron con el modo encendido aunque no estén anotadas (columna `ORIGEN`). Antes de confirmar, revisa que estén todas las del paso 6. Si falta una, agrégala con `@anotar_corrida = <corrida>`. Si una quedó `EN_PROCESO` porque el paso 6 se cortó, ciérrala primero:
+**Validación:** con el modo de prueba encendido, cada actualización o asignación queda anotada desde que empieza. Al final del paso 6 sale la lista de corridas del día con la columna `ANOTADA_PARA_REVERTIR`. La lista del paso 7 trae también las que arrancaron con el modo encendido aunque no estén anotadas (columna `ORIGEN`). Antes de confirmar, revisa que estén todas las del paso 6. Si falta una, agrégala con `@anotar_corrida = <corrida>`. Si una quedó `EN_PROCESO` porque el paso 6 se cortó, ciérrala primero:
 
 ```sql
 EXEC ops.sp_corrida_finalizar <corrida>, 'ERROR', N'Se cortó en la prueba de entorno';
@@ -246,6 +246,6 @@ Cuando las pruebas salgan bien y ya no se vayan a repetir, sistemas borra lo que
 1. Córrelo como viene (`@confirmar = 0`): solo muestra lo que borraría.
 2. Cambia `@confirmar` a `1` y córrelo otra vez.
 
-No borra nada si el modo de prueba sigue encendido (falta el paso 8) o si quedó una asignación de prueba sin revertir (falta el paso 7). Después ya no se instalan otra vez al actualizar el servidor. Para volver a probar, borra el parámetro `PRUEBAS_LIMPIAS` y corre `sql/85_sp_pruebas_entorno.sql`.
+No borra nada si el modo de prueba sigue encendido (falta el paso 8) o si quedó una asignación de prueba sin revertir (falta el paso 7). Después no se vuelven a instalar al actualizar el servidor. Para volver a probar, borra el parámetro `PRUEBAS_LIMPIAS` y corre `sql/85_sp_pruebas_entorno.sql`.
 
 Lo de la migración desde FoxPro se limpia igual con `sql/instalacion/05_limpiar_migracion.sql`.

@@ -17,9 +17,9 @@ Sirven para probar en el servidor real antes de prender el job. Usan los archivo
 | 7 | `07_revertir_prueba.sql` | `ops.sp_prueba_revertir` | El DAT como antes del paso 6 |
 | 8 | `08_modo_prueba_apagar.sql` | `ops.sp_prueba_modo @activar = 0` | Parámetros y jobs como antes |
 
-## Validación: que el paso 7 encuentre todas las corridas del paso 6 (26/11)
+## Validación: que el paso 7 encuentre todas las corridas del paso 6
 
-En la primera prueba real (26/11), el paso 6 se cortó con *A severe error occurred* justo después de terminar la actualización. Como la corrida se anotaba en `ops.PRUEBA_CORRIDA` hasta que regresaba el store, el paso 7 no la iba a revertir. Ahora hay dos candados:
+Aunque el paso 6 se corte a la mitad, el paso 7 encuentra sus corridas. Hay dos candados:
 
 1. **Al empezar:** `ops.sp_corrida_iniciar` anota la actualización o la asignación en `ops.PRUEBA_CORRIDA` en cuanto arranca, si el modo de prueba está encendido. Aunque el script se corte, la corrida ya está anotada.
 2. **Al revertir:** `ops.sp_prueba_revertir` lista también las actualizaciones y asignaciones que arrancaron después de encender el modo de prueba (fecha de `ops.PRUEBA_PARAM`) aunque no estén anotadas. Con `@anotar_corrida = <id>` se agrega a mano una que haya quedado fuera (por ejemplo, si ya se apagó el modo de prueba). La columna `ORIGEN` dice por qué entra cada una.

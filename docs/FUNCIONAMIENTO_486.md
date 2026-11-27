@@ -8,7 +8,7 @@ date: "Noviembre 2026"
 
 Banbaj sustituye los programas de Visual FoxPro del cliente 486 (Banco Bajío). Recibe los archivos del banco, mantiene el DAT y el histórico de folios, y genera los archivos planos y los scripts que se arriban a CYBER. También manda los correos del proceso.
 
-**Proceso autónomo (07/11).** El job corre la actualización y la asignación, escribe los archivos, avisa a asignaciones y, en cuanto detecta que se subieron los planos, corre solo las depuraciones en CYBER. A mano quedan subir los planos de ancho fijo y copiar la devolución a `Cyber_00`; ver *Qué hace solo y qué se hace a mano*. Los diagramas de cada flujo están en *Flujo y diagramas Banbaj 486* (`docs/flujo/`).
+**Proceso autónomo.** El job corre la actualización y la asignación, escribe los archivos, avisa a asignaciones y, en cuanto detecta que se subieron los planos, corre solo las depuraciones en CYBER. A mano quedan subir los planos de ancho fijo y copiar la devolución a `Cyber_00`; ver *Qué hace solo y qué se hace a mano*. Los diagramas de cada flujo están en *Flujo y diagramas Banbaj 486* (`docs/flujo/`).
 
 En producción todo corre dentro de SQL Server: la carga de archivos, las reglas, la escritura de archivos, el ZIP de retiros, los correos y las consultas a CYBER. No hay Python ni otro lenguaje en la operación.
 
@@ -27,9 +27,9 @@ Este documento explica cómo funciona por dentro. La instalación, la migración
 | Quejas de teléfonos y plan de numeración | CYBER (SQL Server) | En cada asignación |
 | Status, correos, teléfonos y pagos de CYBER | CYBER (Oracle) | A mano |
 
-Decisión 15/11: la actualización toma sus archivos solo en `.txt` y la asignación las bases maestras solo en `.csv` (el patrón de cada uno está en `cfg.ARCHIVO.PATRON_NOMBRE`). Los `.txt` del banco vienen separados por comas, con comillas opcionales, y se leen igual que un CSV.
+La actualización toma sus archivos solo en `.txt` y la asignación las bases maestras solo en `.csv` (el patrón de cada uno está en `cfg.ARCHIVO.PATRON_NOMBRE`). Los `.txt` del banco vienen separados por comas, con comillas opcionales, y se leen igual que un CSV.
 
-Cada columna de las bases maestras se busca por su **encabezado** (`cfg.ARCHIVO_COLUMNA.PATRON_ENCABEZADO`), no por su posición: si el banco las cambia de lugar no hay que hacer nada. El número de columnas se cuenta en el encabezado del archivo, así que tampoco hay que tocar `NUM_COLUMNAS`. Si el banco le cambia el nombre a una columna que usamos, el equipo de asignaciones actualiza la matriz con `cfg.sp_layout_cambiar` (ver *Validación de la entrada*). Layout vigente desde el 11/11/2026: TDC con 100 columnas y Consumo con 115. `SALDO2` se lee de `MONTO A CUBRIR PLAZOS PAGO LIQUIDACION` (TDC) y `MONTO A PAGO LIQUIDACION PLAZOS` (Consumo), que antes traían la leyenda `<= 6`. En TDC, el saldo actualizado viene vacío en VEN2 y VEN3: ya no se rechaza el renglón y se toma el saldo PRIME.
+Cada columna de las bases maestras se busca por su **encabezado** (`cfg.ARCHIVO_COLUMNA.PATRON_ENCABEZADO`), no por su posición: si el banco las cambia de lugar no hay que hacer nada. El número de columnas se cuenta en el encabezado del archivo, así que tampoco hay que tocar `NUM_COLUMNAS`. Si el banco le cambia el nombre a una columna que usamos, el equipo de asignaciones actualiza la matriz con `cfg.sp_layout_cambiar` (ver *Validación de la entrada*). Layout: TDC con 100 columnas y Consumo con 115. `SALDO2` se lee de `MONTO A CUBRIR PLAZOS PAGO LIQUIDACION` (TDC) y `MONTO A PAGO LIQUIDACION PLAZOS` (Consumo), sin la leyenda `<= 6`. En TDC, el saldo actualizado viene vacío en VEN2 y VEN3: se toma el saldo PRIME.
 
 `Q:` es `\\192.168.50.13\q`.
 
@@ -76,12 +76,12 @@ El job llama `ops.sp_diario_486` cada 30 minutos. El procedimiento decide qué h
 2. Si todavía no corre la **actualización** del día y ya están sus archivos, la corre.
 3. Si la actualización no terminó bien, se detiene. La asignación nunca corre sin la actualización OK del mismo día.
 4. Si todavía no corre la **asignación** y ya llegaron bases maestras, la corre con lo que haya llegado.
-5. Si ya corrió una asignación y llega la base de otro segmento (por ejemplo Consumo después de TDC), corre **otra asignación solo con ese segmento** (20/11). Cada una tiene sus archivos, su retiro y su arribo a CYBER.
+5. Si ya corrió una asignación y llega la base de otro segmento (por ejemplo Consumo después de TDC), corre **otra asignación solo con ese segmento**. Cada una tiene sus archivos, su retiro y su arribo a CYBER.
 6. Si ya corrió todo, contesta "DIA COMPLETO" y no repite nada.
 
 Cada proceso es una **corrida** (`ops.CORRIDA`) con número, tipo (ACT, ASIG, RET, ETI), fecha, estatus y mensaje. Cada paso deja un renglón en `ops.BITACORA`.
 
-## Qué hace solo y qué se hace a mano (proceso autónomo, 07/11)
+## Qué hace solo y qué se hace a mano
 
 ![Vista general](flujo/img/01_vista_general.png)
 
@@ -95,7 +95,7 @@ Cada proceso es una **corrida** (`ops.CORRIDA`) con número, tipo (ACT, ASIG, RE
 | Scripts de la actualización en CYBER (`ACT_SALDOS`, `ACT_VENCIDO`, `ACT_PAGMIN`, `ACT_PVS_REE`) | **Job** | `ops.sp_act_cyber` (`ACT_CYBER_AUTOMATICO`) |
 | Subir a CYBER los planos de ancho fijo (SCBSDOS, SCBTEL, SCBPAG, gescar), cada uno cuando llega su aviso | Asignaciones | Cargador de CYBER |
 | Gescar de nuevas, reasignadas y sin teléfono en cuanto subieron los saldos (SCBSDOS) | **Job** | `ops.sp_arribo_automatico` (`ARRIBO_AUTOMATICO`) |
-| Depuración de teléfonos con la bandera 416 encendida y SCBTEL en cuanto subieron los saldos. Con `TEL_DEPURACION = DIFERENCIA` (19/11) se compara una foto de `PHONE` con nuestro archivo y a CYBER solo sube lo que cambia (`JSP_TELEFONOS_DEPURA_486`); el SCBTEL lleva solo los nuevos y, si no hay, no sale. Con `ACTUAL`, remesa completa y `JSP_TELEFONOS_REMESA_486` | **Job** | `ops.sp_arribo_automatico` |
+| Depuración de teléfonos con la bandera 416 encendida y SCBTEL en cuanto subieron los saldos. Con `TEL_DEPURACION = DIFERENCIA` se compara una foto de `PHONE` con nuestro archivo y a CYBER solo sube lo que cambia (`JSP_TELEFONOS_DEPURA_486`); el SCBTEL lleva solo los nuevos y, si no hay, no sale. Con `ACTUAL`, remesa completa y `JSP_TELEFONOS_REMESA_486` | **Job** | `ops.sp_arribo_automatico` |
 | Depuración de correos (`JSP_CORREOS_486`) después de la de teléfonos | **Job** | `ops.sp_arribo_automatico` |
 | Blanqueo de status (días 1 a 10) | **Job** | `ops.sp_blanqueo_automatico` (`BLANQUEO_AUTOMATICO`) |
 | Fin del arribo y correo CONFIRMACION\_ASIG\_486 | **Job** | `ops.sp_confirmar_asignacion` (`CONFIRMACION_AUTOMATICA`) |
@@ -103,7 +103,7 @@ Cada proceso es una **corrida** (`ops.CORRIDA`) con número, tipo (ACT, ASIG, RE
 | Copiar `MX_G1MCT_DVBJIG_*` a `\\192.168.50.1\Cyber_00\dev\` | Asignaciones | A mano: el servidor no tiene acceso a esa carpeta (`RUTA_DEVOLUCION_CYBER` vacío). El correo de archivos listos lo recuerda |
 | Atender el correo de hallazgos | Asignaciones | Trae qué pasó y el comando para resolverlo |
 
-En un día normal (orden del 17/11 y 19/11): llega ARCHIVOS\_LISTOS\_486 con el SCBSDOS → asignaciones lo sube → el job detecta los saldos y escribe los gescar de nuevas, reasignadas y sin teléfono (aviso), corre la depuración de teléfonos y, si cuadra, escribe el SCBTEL (aviso) y corre la de correos → asignaciones sube los gescar y el SCBTEL → el job detecta el SCBTEL y manda la confirmación. El SCBTEL va después de la depuración porque la depuración decide qué queda activo y el SCBTEL da de alta lo nuevo. El gescar sin teléfono sale de nuestro archivo de teléfonos: después de la depuración, lo activo en CYBER es eso.
+En un día normal: llega ARCHIVOS\_LISTOS\_486 con el SCBSDOS → asignaciones lo sube → el job detecta los saldos y escribe los gescar de nuevas, reasignadas y sin teléfono (aviso), corre la depuración de teléfonos y, si cuadra, escribe el SCBTEL (aviso) y corre la de correos → asignaciones sube los gescar y el SCBTEL → el job detecta el SCBTEL y manda la confirmación. El SCBTEL va después de la depuración porque la depuración decide qué queda activo y el SCBTEL da de alta lo nuevo. El gescar sin teléfono sale de nuestro archivo de teléfonos: después de la depuración, lo activo en CYBER es eso.
 
 Todo paso automático corre una vez por corrida, deja su paso en la bitácora y, si falla, avisa con el correo de hallazgos; no se reintenta solo. Cada uno se puede correr a mano con el número de corrida (`ops.sp_arribar_cyber`, `ops.sp_act_cyber`, `ops.sp_retiro_cerrar`, `ops.sp_blanqueo_automatico`) y cada uno se apaga con su parámetro. Para volver a dejar solo la generación de archivos:
 
@@ -128,7 +128,7 @@ Lo pendiente sale de una foto que se toma al terminar la asignación, antes de q
 
 Si una corrida falla, se revierte sola (ver *Respaldo y retroceso*) y el job no la vuelve a intentar ese día. Para reintentar se corre a mano.
 
-# Validación de la entrada (desde el 17/11)
+# Validación de la entrada
 
 Antes de tocar el DAT, la actualización y la asignación revisan cada archivo. Detalle y diagrama: *Flujo y diagramas*, sección 09.
 
@@ -151,7 +151,7 @@ La semilla (`90_semilla_486.sql`) conserva todos esos cambios al reinstalar: en 
 
 ![Actualización (ACT)](flujo/img/04_actualizacion.png)
 
-Sustituye a `saldos.prg`, `pagos.prg` y `estructura.prg`. Llegan de lunes a viernes los archivos de saldos y pagos.
+Llegan de lunes a viernes los archivos de saldos y pagos.
 
 | Paso | Procedimiento | Qué hace |
 |---|---|---|
@@ -164,7 +164,7 @@ Sustituye a `saldos.prg`, `pagos.prg` y `estructura.prg`. Llegan de lunes a vier
 | 7 | `sp_act_aplicar` | Actualiza saldos en el DAT |
 | 8 | `sp_act_pagos` | Arma el SCBPAG con los pagos nuevos (quita los que ya se arribaron) y los guarda en `dat.PAGO_ARRIBADO` |
 | 9 | `sp_homologar` sobre el DAT | REE por segmento, tramo y tipo (`estructura.prg`) |
-| 10 | `sp_act_script_pvs_ree` | Script `ACT_PVS_REE` que sube PVS y REE a `RCVRY.uda1` (sustituye al SCBSDOS de la actualización) |
+| 10 | `sp_act_script_pvs_ree` | Script `ACT_PVS_REE` que sube PVS y REE a `RCVRY.uda1` |
 | 11 | `sp_generar_salidas 'ACT'` | Genera SCBPAG y la copia del DAT para MIS |
 
 **Saldos negativos:** suben a CYBER como cero (`NEGATIVO_MODO = CERO`). Una cuenta con saldo menor o igual a cero se va a retiro, así que antes de retirarse CYBER recibe 0 y no un negativo.
@@ -175,7 +175,7 @@ Sustituye a `saldos.prg`, `pagos.prg` y `estructura.prg`. Llegan de lunes a vier
 
 ![Asignación (ASIG)](flujo/img/03_asignacion.png)
 
-Sustituye a `paso.prg`, `asig_bases.prg`, `asi486.prg`, `telbnx.prg`, `email.PRG` y los programas de gescar. Se trabaja siempre con la **base maestra completa** de cada segmento que llegó.
+Se trabaja siempre con la **base maestra completa** de cada segmento que llegó.
 
 | Paso | Procedimiento | Qué hace |
 |---|---|---|
@@ -209,9 +209,9 @@ Sustituye a `paso.prg`, `asig_bases.prg`, `asi486.prg`, `telbnx.prg`, `email.PRG
 
 El retiro por solicitud del banco entra con `ops.sp_retiro_solicitud` (lista de cuentas, folios o créditos en CSV).
 
-## Retiro automático (desde el 02/11)
+## Retiro automático
 
-![Retiro automático (desde el 02/11)](flujo/img/06_retiro.png)
+![Retiro automático](flujo/img/06_retiro.png)
 
 Con `RETIRO_AUTOMATICO = 1`:
 
@@ -241,7 +241,7 @@ Al exportar con `@zip = 'RETIROS'` los archivos van en `C:\RETIROS_PAG_486_<fech
 
 # Teléfonos
 
-Reglas de `telbnx.prg` con los ajustes del 01/11, que siguen el procedimiento `G4_025_TELEFONOS`:
+Reglas de `telbnx.prg`, que siguen el procedimiento `G4_025_TELEFONOS`:
 
 1. De TEL1 a TEL16 de cada cuenta se quitan espacios y símbolos y se toman los últimos 10 dígitos.
 2. Se descartan: menos de 10 dígitos, con letras, los que empiezan con 0 y los números basura (`TEL_INVALIDOS`: 1000000000, 9999999999, 0999999999, 1111111111, 4444444444, 5555555555, 5000000000).
@@ -252,9 +252,9 @@ Reglas de `telbnx.prg` con los ajustes del 01/11, que siguen el procedimiento `G
    - **Celular:** área 044 si la lada es 55 o 56, 045 en las demás; 10 dígitos; tipo 5.
    - **Fijo:** área 01 + lada; 8 o 7 dígitos; tipo 1 (TEL1), 2 (TEL2) o 4 (resto).
    - **No está en el plan:** se descarta (`TEL_EXIGIR_PNM = 1`).
-7. **Lada válida (19/11):** el área y la longitud del número deben estar en `cfg.PHNVAL`, la copia estática de la tabla `PHNVAL` de CYBER con las ladas que admite el cargador. Lo que no está ahí no va al SCBTEL ni a la remesa, y queda contado en la bitácora (`TELEFONOS`: "lada no válida (PHNVAL)"). La copia la renueva el job **Banbaj 486 ladas** el día 1 de cada mes (`ops.sp_phnval_actualizar`). Si la tabla de CYBER llega vacía o cortada (menos de `LADAS_MIN_FILAS` renglones), la copia no se toca y llega un hallazgo. Parámetro `TEL_VALIDAR_LADA`.
+7. **Lada válida:** el área y la longitud del número deben estar en `cfg.PHNVAL`, la copia estática de la tabla `PHNVAL` de CYBER con las ladas que admite el cargador. Lo que no está ahí no va al SCBTEL ni a la remesa, y queda contado en la bitácora (`TELEFONOS`: "lada no válida (PHNVAL)"). La copia la renueva el job **Banbaj 486 ladas** el día 1 de cada mes (`ops.sp_phnval_actualizar`). Si la tabla de CYBER llega vacía o cortada (menos de `LADAS_MIN_FILAS` renglones), la copia no se toca y llega un hallazgo. Parámetro `TEL_VALIDAR_LADA`.
 
-Salen en SCBTEL (ancho fijo) y en sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL). En CYBER, `RCVRY.JSP_TELEFONOS_REMESA_486` inserta los teléfonos nuevos (los que dejó el arribo del SCBTEL en `PHONE_G1`), inactiva los activos que no vienen en la remesa y activa los de la remesa que estaban inactivos. Respeta los gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`): esos no se tocan. Desde el 17/11 el orden es el del equipo: primero la depuración (la remesa debe tener los mismos renglones que nuestro archivo de teléfonos) y después se sube el SCBTEL, que deja activos nuestros teléfonos, también los nuevos (confirmado por el equipo el 17/11). Ver el diagrama 05. El script `TEL_BORRA` también inserta el renglón del día en `RCVRY.JSP_VALIDADOR_TELEFONOS` con el total enviado, y el procedimiento lo completa (diferencia contra lo cargado, activados, inactivados y nuevos).
+Salen en SCBTEL (ancho fijo) y en sub_mst (CUENTA|AREA|TELEFONO|TIPOTEL). En CYBER, `RCVRY.JSP_TELEFONOS_REMESA_486` inserta los teléfonos nuevos (los que dejó el arribo del SCBTEL en `PHONE_G1`), inactiva los activos que no vienen en la remesa y activa los de la remesa que estaban inactivos. Respeta los gestores de queja (`HOMS`, `HPHPI`, `BLACK`, `ZZZTE`): esos no se tocan. El orden es el del equipo: primero la depuración (la remesa debe tener los mismos renglones que nuestro archivo de teléfonos) y después se sube el SCBTEL, que deja activos nuestros teléfonos, también los nuevos. Ver el diagrama 05. El script `TEL_BORRA` también inserta el renglón del día en `RCVRY.JSP_VALIDADOR_TELEFONOS` con el total enviado, y el procedimiento lo completa (diferencia contra lo cargado, activados, inactivados y nuevos).
 
 # Exclusiones
 
@@ -274,21 +274,21 @@ Todas viven en `cfg.EXCLUSION`, con tipo, valor, requerimiento (OS), fecha, si e
 
 - **Etiquetado del DAT:** `ops.sp_etiquetar_campo` cambia cualquier campo de etiqueta del DAT con un CSV FOLIO,ETIQUETA (o por cuenta). Acepta el nombre de columna de Operación. Genera su propio SCBSDOS.
 - **Etiquetas por cuenta** (`cfg.ETIQUETA`): ETI, DM1 y STATUS, que salen en campos del SCBSDOS (DMP2, DMP1, U1USO4).
-- **ETIQUETA6 (19/11):** sale de la base maestra y va en U1EXT2 del SCBSDOS. Vale `REE` si en TDC `ENFOQUE_PLAN DE PAGOS` dice "APLICA PLAN DE PAGOS" (catálogo `ETIQUETA6_TDC`) o si en Consumo `ENFOQUE_REESTRUCTURA` dice "APLICA RESTRUCTURA" (catálogo `ETIQUETA6_CONSUMO`); si no, queda vacía. Se recalcula en cada asignación, también en las cuentas que ya estaban. Sustituye a la lista TOP, que ya no se usa. Hipotecario no tiene regla todavía.
-- **Blanqueo de ETIQUETA6 (26/11, correo del 23/11):** el REE se quita si la cuenta llega en la base maestra sin la leyenda (tipo `BASE`) o si el tramo de los saldos (`SEG`, la ETIQUETA3 de Operación) ya no es elegible (tipo `TRAMO`; catálogos `ETIQUETA6_SEG_TDC`: VEN2 y VEN3, y `ETIQUETA6_SEG_CONSUMO`: 1-29 a 90+). Lo hace `ops.sp_etiqueta6_blanqueo` en la actualización (sube a CYBER en `ACT_PVS_REE`) y en la asignación (va en el SCBSDOS); el registro queda en `ops.ETIQUETA6_BLANQUEO`. Parámetro `ETIQUETA6_BLANQUEO`.
+- **ETIQUETA6:** sale de la base maestra y va en U1EXT2 del SCBSDOS. Vale `REE` si en TDC `ENFOQUE_PLAN DE PAGOS` dice "APLICA PLAN DE PAGOS" (catálogo `ETIQUETA6_TDC`) o si en Consumo `ENFOQUE_REESTRUCTURA` dice "APLICA RESTRUCTURA" (catálogo `ETIQUETA6_CONSUMO`); si no, queda vacía. Se recalcula en cada asignación, también en las cuentas que ya estaban. Hipotecario no tiene regla todavía.
+- **Blanqueo de ETIQUETA6:** el REE se quita si la cuenta llega en la base maestra sin la leyenda (tipo `BASE`) o si el tramo de los saldos (`SEG`, la ETIQUETA3 de Operación) ya no es elegible (tipo `TRAMO`; catálogos `ETIQUETA6_SEG_TDC`: VEN2 y VEN3, y `ETIQUETA6_SEG_CONSUMO`: 1-29 a 90+). Lo hace `ops.sp_etiqueta6_blanqueo` en la actualización (sube a CYBER en `ACT_PVS_REE`) y en la asignación (va en el SCBSDOS); el registro queda en `ops.ETIQUETA6_BLANQUEO`. Parámetro `ETIQUETA6_BLANQUEO`.
 
-## Usuarios externos: AEM y MIS (18/11)
+## Usuarios externos: AEM y MIS
 
-AEM y MIS ya no reciben archivos: consultan directo su esquema en SQL Server, con su login.
+AEM y MIS no reciben archivos: consultan directo su esquema en SQL Server, con su login.
 
-- **Qué ven:** `aem.DAT_486` con el mapeo de AEM, más `aem.RETIROS_HOY` (las cuentas retiradas hoy en la actualización y en la asignación, que sustituye al archivo `MX_G1MCT_DVBJIG_*`), y `mis.DAT_486`.
+- **Qué ven:** `aem.DAT_486` con el mapeo de AEM, más `aem.RETIROS_HOY` (las cuentas retiradas hoy en la actualización y en la asignación), y `mis.DAT_486`.
 - **Quién decide las columnas:** el equipo de asignaciones, en `cfg.VISTA_COLUMNA`. Cada columna sale del DAT, de CYBER, de la base maestra o es un valor fijo. Los textos van recortados.
 - **Cuándo se actualiza:**
   - al terminar OK la actualización (después de los scripts de saldos en CYBER);
   - al terminar OK la asignación;
   - otra vez cuando suben los saldos, para que las cuentas nuevas traigan ESTATUS y ABAN_SR de CYBER.
 
-  Los datos de CYBER se leen directo de las tablas, sin ejecutar ningún store (19/11): ESTATUS de `DELQMST` y ABAN_SR de `RPT_DAT_486_1`, tal como la dejó la última corrida de `PROC_DAT_486` en CYBER.
+  Los datos de CYBER se leen directo de las tablas, sin ejecutar ningún store: ESTATUS de `DELQMST` y ABAN_SR de `RPT_DAT_486_1`, tal como la deja la última corrida de `PROC_DAT_486` en CYBER.
 - **Si algo falla:** la corrida no cambia de estatus; los usuarios se quedan con lo último y llega un hallazgo.
 
 Detalle: *Flujo y diagramas*, sección 10. Se apaga con `VISTAS_USUARIO = 0`.
@@ -498,7 +498,7 @@ Todos los que cambian datos tienen modo de revisión (`@confirmar = 0` o `@solo_
 | RETIRO\_AUTOMATICO | 1 | Aplicar solas las devoluciones en el DAT (dentro del tope) |
 | RETIRO\_TOPE\_PCT\_ASIG / \_ACT | 50 / 50 | Tope por segmento para aplicar el retiro solo |
 | EXPORTAR\_AUTOMATICO, AVISO\_ARCHIVOS, RETIRO\_AUTOMATICO, CUADRE\_AUTOMATICO | 1 | Archivos, aviso, retiro en el DAT y cuadre automáticos |
-| ARRIBO\_AUTOMATICO, ACT\_CYBER\_AUTOMATICO, RETIRO\_CYBER\_AUTOMATICO, BLANQUEO\_AUTOMATICO, CONFIRMACION\_AUTOMATICA | 1 | Depuraciones y escrituras en CYBER automáticas (07/11; 0 = a mano) |
+| ARRIBO\_AUTOMATICO, ACT\_CYBER\_AUTOMATICO, RETIRO\_CYBER\_AUTOMATICO, BLANQUEO\_AUTOMATICO, CONFIRMACION\_AUTOMATICA | 1 | Depuraciones y escrituras en CYBER automáticas (0 = a mano) |
 | RUTA\_DEVOLUCION\_CYBER | (vacío) | Sin acceso a `Cyber_00`: la devolución se copia a mano |
 | CUADRE\_PAGOS\_HORA\_LIMITE | 17:00 | Hora a la que el cuadre avisa lo que no subió |
 | RUTA\_DEVOLUCION\_CYBER | `\\192.168.50.1\Cyber_00\dev\` | Copia de la devolución para CYBER |

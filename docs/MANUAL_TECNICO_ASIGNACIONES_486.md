@@ -42,12 +42,12 @@ Este manual explica el proceso en ese orden. No hace falta saber programar: todo
 
 **Entra:** `SERTEC_Saldos_tdc*.txt`, `SERTEC_Saldos_Cons*.txt` y `SERTEC_Pagos*.txt`.
 
-1. **Validación de los archivos** (antes de tocar nada; ver la sección *Validación de la entrada*). Si un archivo no pasa, la corrida se cancela, no cambia nada y llega `VALIDACION_ENTRADA_486`. Desde el 20/11 también para si los saldos traen una cuenta repetida, si más del 30 % no está en el DAT (archivo de otro segmento) o si el archivo es idéntico al de un día anterior. Los pagos repetidos (mismo crédito, importe y fecha) solo se avisan.
+1. **Validación de los archivos** (antes de tocar nada; ver la sección *Validación de la entrada*). Si un archivo no pasa, la corrida se cancela, no cambia nada y llega `VALIDACION_ENTRADA_486`. También para si los saldos traen una cuenta repetida, si más del 30 % no está en el DAT (archivo de otro segmento) o si el archivo es idéntico al de un día anterior. Los pagos repetidos (mismo crédito, importe y fecha) solo se avisan.
 2. **Respaldo** del DAT: si algo falla después, se regresa solo a como estaba.
 3. **Saldos y pagos:** actualiza saldo actual, vencido, pago mínimo y PVS de cada cuenta. Los pagos negativos se excluyen y se avisan con `PAGOS_NEGATIVOS_486`.
 4. **Retiros:** las cuentas que cumplen un criterio de retiro (saldo cero o negativo, etc.) se retiran solas, salvo que en un segmento pasen del 50 % de sus cuentas. En ese caso llega un hallazgo y el retiro espera la revisión del equipo.
-5. **Blanqueo de ETIQUETA6 por tramo (26/11):** con el tramo nuevo de los saldos (`SEG`, la ETIQUETA3 de Operación) se quita el REE a las cuentas que ya no son elegibles: TDC fuera de `VEN2` y `VEN3` (por ejemplo `VEN4` o `CCAS`), Consumo en `CASTIGADA`. Queda en `ops.ETIQUETA6_BLANQUEO`.
-6. **CYBER:** ejecuta solo los scripts de saldos, vencido, pago mínimo y PVS/REE; este último lleva también el blanqueo de ETIQUETA6 (`u1ext2`). **Ya no se sube SCBSDOS en la actualización.**
+5. **Blanqueo de ETIQUETA6 por tramo:** con el tramo nuevo de los saldos (`SEG`, la ETIQUETA3 de Operación) se quita el REE a las cuentas que ya no son elegibles: TDC fuera de `VEN2` y `VEN3` (por ejemplo `VEN4` o `CCAS`), Consumo en `CASTIGADA`. Queda en `ops.ETIQUETA6_BLANQUEO`.
+6. **CYBER:** ejecuta solo los scripts de saldos, vencido, pago mínimo y PVS/REE; este último lleva también el blanqueo de ETIQUETA6 (`u1ext2`). **La actualización no sube SCBSDOS.**
 7. **SCBPAG:** se escribe en la carpeta de la corrida y llega `ARCHIVOS_LISTOS_486` para subirlo.
 8. **Usuarios AEM y MIS:** se bajan de CYBER sus datos (ESTATUS y ABAN_SR) y se actualizan sus tablas.
 9. **Cuadre de pagos:** en cada vuelta del job revisa que los pagos del SCBPAG ya estén en CYBER. A las 17:00 avisa los que falten.
@@ -56,16 +56,16 @@ Este manual explica el proceso en ese orden. No hace falta saber programar: todo
 
 **Entra:** `BASE MAESTRA_TARJETA*.csv`, `BASE MAESTRA_CONSUMO*.csv` y `BASE MAESTRA_HIPOTECARIO*.csv`. Solo corre si la actualización del día ya terminó OK.
 
-**Llave única: el riesgo** (20/11). En TDC es el ACC_NUM; en Consumo e Hipotecario, el crédito. Con él se reparten los folios nuevos, se reconocen las reasignadas (el riesgo ya tuvo folio) y se decide qué se devuelve (el riesgo ya no viene en su base). La cuenta que se armaba en TDC (últimos 4 dígitos de PRIME+4DIG + RFC) sigue yendo a CYBER como cuenta del banco (DMSSNUM, SCBPAG), pero ya no identifica la cuenta.
+**Llave única: el riesgo.** En TDC es el ACC_NUM; en Consumo e Hipotecario, el crédito. Con él se reparten los folios nuevos, se reconocen las reasignadas (el riesgo ya tuvo folio) y se decide qué se devuelve (el riesgo no viene en su base). La cuenta armada de TDC (últimos 4 dígitos de PRIME+4DIG + RFC) sigue yendo a CYBER como cuenta del banco (DMSSNUM, SCBPAG), pero no es la llave.
 
-**Un segmento a la vez** (20/11). Si llega TDC y Consumo llega más tarde, cada uno tiene su propia asignación, con sus archivos, sus avisos y su confirmación. Una base que ya se asignó ese día no se vuelve a tomar.
+**Un segmento a la vez.** Si llega TDC y Consumo llega más tarde, cada uno tiene su propia asignación, con sus archivos, sus avisos y su confirmación. Una base que ya se asignó ese día no se vuelve a tomar.
 
 1. **Aviso de inicio** a Operación (`INICIO_ASIG_486`).
-2. **Validación de las bases** (layout y datos). Si no pasan, la corrida se cancela y llega `VALIDACION_ENTRADA_486`. Desde el 20/11 también para si el riesgo viene repetido (en la base o entre TDC y Consumo), si trae letras o pasa de 20 dígitos, o si la base es idéntica a la de un día anterior. Avisa, sin parar, si un riesgo llega con otro RFC o cambia de segmento.
-3. **Homologación:** etiqueta cada cuenta (segmento, estatus, tramo, tipo…) con los **catálogos** que mantiene el equipo. La **ETIQUETA6** vale `REE` cuando la base dice "APLICA PLAN DE PAGOS" (TDC) o "APLICA RESTRUCTURA" (Consumo); sale en U1EXT2 del SCBSDOS y sustituye a la lista TOP, que ya no se carga. Si una cuenta que ya tenía REE llega sin la leyenda, se blanquea (correo del 23/11). También se blanquea si su tramo de los saldos ya no es elegible (ver el paso 5 de la actualización).
+2. **Validación de las bases** (layout y datos). Si no pasan, la corrida se cancela y llega `VALIDACION_ENTRADA_486`. También para si el riesgo viene repetido (en la base o entre TDC y Consumo), si trae letras o pasa de 20 dígitos, o si la base es idéntica a la de un día anterior. Avisa, sin parar, si un riesgo llega con otro RFC o cambia de segmento.
+3. **Homologación:** etiqueta cada cuenta (segmento, estatus, tramo, tipo…) con los **catálogos** que mantiene el equipo. La **ETIQUETA6** vale `REE` cuando la base dice "APLICA PLAN DE PAGOS" (TDC) o "APLICA RESTRUCTURA" (Consumo); sale en U1EXT2 del SCBSDOS. Si una cuenta que ya tenía REE llega sin la leyenda, se blanquea. También se blanquea si su tramo de los saldos ya no es elegible (ver el paso 5 de la actualización).
 4. **Cuentas nuevas y reasignadas:** asigna folio (`486-<folio>`) y guarda el histórico. Con más de 100 nuevas avisa a AEM (`ALERTA_NUEVAS_486`).
 5. **Devoluciones:** las cuentas que ya no vienen se retiran solas, con el mismo tope de 50 % por segmento. Al cerrar el retiro sale el ZIP con el correo de devolución (Operación con el ZIP y AEM en copia oculta).
-6. **Teléfonos y correos:** arma los teléfonos y los correos que se van a mandar a CYBER. Quita los de queja, los inválidos y, desde el 19/11, los que tienen una lada o longitud que el cargador no admite (`cfg.PHNVAL`, la copia de PHNVAL de CYBER que se renueva sola el día 1 de cada mes).
+6. **Teléfonos y correos:** arma los teléfonos y los correos que se van a mandar a CYBER. Quita los de queja, los inválidos y los que tienen una lada o longitud que el cargador no admite (`cfg.PHNVAL`, la copia de PHNVAL de CYBER que se renueva sola el día 1 de cada mes).
 7. **Archivos:** escribe el SCBSDOS y avisa. El resto de los planos esperan su turno (ver el paso 3).
 8. **Usuarios AEM y MIS:** actualiza sus tablas. Las cuentas nuevas traen los datos de CYBER hasta que suben los saldos.
 
@@ -92,7 +92,7 @@ Cada plano llega en su propio correo `ARCHIVOS_LISTOS_486`, con la carpeta, el a
 
 ## 4. Usuarios AEM y MIS
 
-AEM y MIS ya no reciben archivos: consultan en SQL Server, con su usuario, una tabla con las columnas que el equipo les configure.
+AEM y MIS no reciben archivos: consultan en SQL Server, con su usuario, una tabla con las columnas que el equipo les configure.
 
 - **AEM:** `aem.DAT_486`, con su mapeo, y `aem.RETIROS_HOY`, las cuentas retiradas hoy en la actualización y en la asignación.
 - **MIS:** `mis.DAT_486`, que puede llevar columnas de las bases maestras que no están en el DAT.
@@ -194,7 +194,7 @@ Antes de tocar el DAT, cada archivo se revisa contra las reglas de `cfg.VALIDACI
 | `TELEFONO` | Teléfonos con letras o con menos de 10 o más de 12 dígitos |
 | `CORREO` | Correos sin @, con espacios o sin dominio |
 | `CATALOGO` | Valor que no está en el catálogo |
-| `LLAVE_UNICA` | Riesgo repetido en el archivo (bases maestras y, desde el 20/11, saldos) |
+| `LLAVE_UNICA` | Riesgo repetido en el archivo (bases maestras y saldos) |
 | `DIGITOS` | Riesgo con letras o de más de 20 dígitos |
 | `ARCHIVO_IGUAL` | El archivo es idéntico al de un día anterior (el banco reenvió el viejo) |
 | `CRUCE_DAT` | Más del 30 % de los renglones de los saldos no están en el DAT (archivo de otro segmento o cliente) |
