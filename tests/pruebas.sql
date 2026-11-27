@@ -1649,7 +1649,7 @@ DECLARE @idv INT = (SELECT MAX(ID_CORRIDA) FROM ops.CORRIDA WHERE CLIENTE = '486
 
 SET @rs = (SELECT STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY c.column_id) FROM sys.columns c WHERE c.object_id = OBJECT_ID('aem.DAT_486'));
 EXEC pru.sp_igual N'VISTAS: aem.DAT_486 con los encabezados del mapeo, en orden',
-     N'GRUPO,CUENTA,CLIENTE,FOLIO,NOMBRE1,PVS,SDO_ACT,ESTATUS_CYBER,FE_ASIG,ESTADO,ABANDONO_SR,ETIQUETA03,ETIQUETA01,ETIQUETA02,ETIQUETA50,ETIQUETA04,CAPITAL,SALDO01,SALDO02,SALDO03', @rs;
+     N'GRUPO,CUENTA,CLIENTE,FOLIO,NOMBRE1,PVS,SDO_ACT,ESTATUS_CYBER,FE_ASIG,ESTADO,ABANDONO_SR,ETIQUETA03,ETIQUETA01,ETIQUETA02,ETIQUETA50,ETIQUETA04,CAPITAL,SALDO01,SALDO02,SALDO03,ETIQUETA06', @rs;
 SET @rs = CONCAT(
     (SELECT COUNT(*) FROM aem.DAT_486), '|', (SELECT COUNT(*) FROM dat.DAT_486), '|',
     (SELECT COUNT(*) FROM aem.DAT_486 WHERE ESTATUS_CYBER = N'CD' AND ABANDONO_SR = N'7' AND GRUPO = 1), '|',
@@ -1771,7 +1771,7 @@ EXEC pru.sp_igual N'SEMILLA: conserva layout, carpeta, catálogos y tolerancias 
 SET @rs = CONCAT((SELECT CAST(ACTIVO AS INT) FROM cfg.VISTA_USUARIO WHERE CLIENTE = '486' AND VISTA = 'MIS'), '|',
                  (SELECT COUNT(*) FROM cfg.VISTA_COLUMNA WHERE CLIENTE = '486' AND VISTA = 'MIS'), '|',
                  (SELECT COUNT(*) FROM cfg.VISTA_COLUMNA WHERE CLIENTE = '486' AND VISTA = 'AEM'));
-EXEC pru.sp_igual N'SEMILLA: conserva las vistas de usuarios que cambió el equipo (MIS activa con sus columnas, AEM con 20)', N'1|3|20', @rs;
+EXEC pru.sp_igual N'SEMILLA: conserva las vistas de usuarios que cambió el equipo (MIS activa con sus columnas, AEM con 21)', N'1|3|21', @rs;
 GO
 
 /* ---------------------------------------------------------------------
